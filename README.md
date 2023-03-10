@@ -17,7 +17,7 @@ void-pi is a Void Linux installer similar to [void-installer](https://docs.voidl
 
 It extends void-installer in several ways:
 - provides predefined templates for [BTRFS](https://en.wikipedia.org/wiki/Btrfs) and [LVM](https://en.wikipedia.org/wiki/Logical_volume_management)
-- supports the [rEFInd](https://rodsbooks.com/refind/) boot manager
+- supports [rEFInd](https://rodsbooks.com/refind/) and [Limine](https://limine-bootloader.org/) boot managers
 
 void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 
@@ -26,14 +26,24 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - completely emulates void-installer.
 - install from Void ISO or network.
 - predefined templates for BTRFS and LVM.
-- uses GRUB or rEFIind as a bootloader.
+- uses GRUB, rEFIind, or Limine as a bootloader.
 - TUI dynamically changes depending on selected template.
 - uses `/mnt` for chroot by default.
 - all settings can be saved in a file and loaded on startup.
 - passwords are never saved in files even temporarily.
 - GRUB supports btrfs, ext2, ext3, ext4, and xfs file systems.
-- rEFIind supports btrfs, ext2, ext3, ext4 file systems.
+- rEFIind supports btrfs, ext2, ext3, and ext4 file systems.
 - rEFIind is configured to use kernel auto detection.
+- Limine supports ext2, ext3, and ext4 file systems.
+
+### Default settings
+
+- installation source: local
+- host name: voidpp
+- user name: void
+- keymap: us
+- locale: en_US.UTF-8
+- timezone: America/New_York
 
 ### Filesystem
 
@@ -71,6 +81,7 @@ Subvolume name    | Mounting point    | Mount options
 
 ### Run precompiled executable.
 ```sh
+sudo xbps-install -Suy xbps
 wget https://github.com/sdbtools/void-pi/releases/latest/download/void-pi.x86_64.tgz
 tar -xzf void-pi.x86_64.tgz
 ./void-pi

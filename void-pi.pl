@@ -977,15 +977,33 @@ set_bootloader(rEFInd, BD, RD) :-
 	% CL2 = [chroot, RD, mkrlconf, '2>&1'],
 	% os_shell2(CL2),
 	!.
-set_bootloader(limine, _BD, RD) :-
+set_bootloader(limine, BD, RD) :-
+	( inst_setting(partition, part(BD, _P1, ROOT_PD, _PT1, _FS1, _Label1, '/', _CK1, _SZ1))
+	; tui_msgbox('root partition was not found', []),
+	  fail
+	), !,
+
 	os_mkdir_p(RD + '/boot/efi/EFI/BOOT'),
 	os_call2([cp, '-f', RD + '/usr/share/limine/BOOTX64.EFI', RD + '/boot/efi/EFI/BOOT/BOOTX64.EFI']),
 
-	% os_mkdir_p(RD + '/boot/limine'),
-	% atom_concat(RD + '/boot/limine/limine.cfg', CF),
+	atom_concat(RD, '/boot/vmlinuz-', P0),
+	atom_concat(P0, '*', P1),
+	os_shell2_line([ls, P1], A0),
+	atom_concat(P0, V, A0),
 
-	atom_concat(RD, '/boot/efi/EFI/BOOT/limine.cfg', CF),
+	lx_get_dev_uuid(ROOT_PD, RPID),
+
+	os_mkdir_p(RD + '/boot/limine'),
+	atom_concat(RD, '/boot/limine/limine.cfg', CF),
 	open(CF, write, S),
+	write(S, 'INTERFACE_BRANDING=Void Linux'), nl(S),
+	write(S, 'TIMEOUT=5'), nl(S), nl(S),
+	write(S, ':Boot with standard options'), nl(S),
+	write(S, '    PROTOCOL=linux'), nl(S),
+	write(S, '    KERNEL_PATH=boot:///boot/vmlinuz-'), write(S, V), nl(S),
+	write(S, '    CMDLINE=root=UUID='), write(S, RPID),
+	write_limine_cmd(S), nl(S),
+	write(S, '    MODULE_PATH=boot:///boot/initramfs-'), write(S, V), write(S, '.img'), nl(S),
 	close(S),
 	!.
 
@@ -993,6 +1011,13 @@ write_refind_btrfs(S) :-
 	inst_setting(keymap, KB),
 	inst_setting(locale, LC),
 	write(S, ' rw rootflags=subvol=@ initrd=@\\boot\\initramfs-%v.img rd.luks=0 rd.md=0 rd.dm=0 loglevel=4 gpt add_efi_memmap vconsole.unicode=1'),
+	format(S, ' vconsole.keymap=~w locale.LANG=~w rd.live.overlay.overlayfs=1', [KB, LC]),
+	true.
+
+write_limine_cmd(S) :-
+	inst_setting(keymap, KB),
+	inst_setting(locale, LC),
+	write(S, ' init=/sbin/init rw rd.luks=0 rd.md=0 rd.dm=0 loglevel=4 gpt add_efi_memmap vconsole.unicode=1'),
 	format(S, ' vconsole.keymap=~w locale.LANG=~w rd.live.overlay.overlayfs=1', [KB, LC]),
 	true.
 
@@ -1382,7 +1407,7 @@ menu_bootloader :-
 	B = [
 		  grub2
 		, rEFInd
-		% , limine
+		, limine
 		% , zfsBootMenu
 	],
 	dialog_msg(radiolist, RADIOLABEL),
@@ -2312,7 +2337,7 @@ load_config(F) :-
 	true.
 
 version :-
-	writenl('version 0.1').
+	writenl('version 0.2').
 
 usage :-
 	cmd_arg_usage_short(SAL),
