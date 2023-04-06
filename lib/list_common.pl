@@ -14,6 +14,14 @@ join_atoms([H|T], A2) :-
 	atom_concat(H, A1, A2).
 join_atoms([], '').
 
+% SEP - separator.
+write_atoms([H1,H2|T], SEP, S) :- !,
+	write(S, H1), write(S, SEP),
+	write_atoms([H2|T], SEP, S).
+write_atoms([H], _, S) :- !,
+	write(S, H).
+write_atoms([], _, _).
+
 % Split list, no empty elements.
 split_list_ne(I, SL, L) :-
 	split_list_ne_(I, SL, H, T),
@@ -63,4 +71,15 @@ split_atom_codes(I, L) :-
 % No empty atoms.
 split_atom_codes_ne(I, L) :-
 	split_list_ne(I, " \t\n", L).
+
+% SL - split list.
+split_atom(SL, IL, OL) :-
+	split_list(IL, SL, LL),
+	maplist(codes_atom, LL, OL).
+
+% No empty atoms.
+% SL - split list.
+split_atom_ne(SL, IL, OL) :-
+	split_list_ne(IL, SL, LL),
+	maplist(codes_atom, LL, OL).
 

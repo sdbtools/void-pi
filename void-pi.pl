@@ -9,17 +9,24 @@
 :- include('lib/os_common.pl').
 :- include('lib/unix_common.pl').
 :- include('lib/linux_common.pl').
+:- include('lib/linux_luks.pl').
 :- include('lib/tui_common.pl').
 :- include('lib/tui_dialog.pl').
 :- include('lib/cli_common.pl').
 :- include('lib/zfs_common.pl').
 :- include('lib/lvm_common.pl').
+:- include('lib/os_grub.pl').
+:- include('lib/os_dracut.pl').
 :- include('void_info.pl').
 
 :- dynamic([inst_setting/2, inst_setting_tmp/2]).
 
 % https://wiki.archlinux.org/title/Btrfs
 % Installing Void on a ZFS Root - https://docs.voidlinux.org/installation/guides/zfs.html
+% https://wiki.archlinux.org/title/Dm-crypt
+% https://wiki.archlinux.org/title/Dm-crypt/Encrypting_an_entire_system
+% https://wiki.archlinux.org/title/Dm-crypt/System_configuration
+% Automatic LUKS unlock using keyfile on boot partition: https://unix.stackexchange.com/questions/666770/automatic-luks-unlock-using-keyfile-on-boot-partition
 
 def_settings :-
 	setup_conf,
@@ -36,6 +43,8 @@ def_settings :-
 	assertz(inst_setting(source, local)),
 	assertz(inst_setting(hostname, voidpp)),
 	assertz(inst_setting(lvm, lv(void, void, ''))),
+	assertz(inst_setting(luks, luks(cryptroot))),
+	assertz(inst_setting(config_file, 'settings.pl')),
 
 	on_enable(template(manual), B),
 
@@ -43,7 +52,7 @@ def_settings :-
 
 action_info(common_settings, 'Common Attrs', 'Common settings').
 action_info(template, 'Template', 'Predefined configuration').
-action_info(show, 'Show', 'Show current settings').
+action_info(review, 'Review', 'Show current settings').
 action_info(filesystem, 'Filesystem', 'Configure filesystems and mount points').
 action_info(part_manually, 'Partition', 'Manually partition disk(s)').
 action_info(part_select, 'Select Part', 'Select partition(s) to use').
@@ -52,6 +61,7 @@ action_info(locale, 'Locale', 'Set system locale').
 action_info(timezone, 'Timezone', 'Set system time zone').
 action_info(useraccount, 'User Account', 'Set primary user name and password').
 action_info(lvm_info, 'LVM Info', 'Set LVM info').
+action_info(luks_info, 'LUKS Mapping Name', 'Set LUKS Mapping Name').
 action_info(bootloader_dev, 'Bootloader Dev', 'Set disk to install bootloader').
 action_info(bootloader, 'Bootloader', 'Set bootloader application').
 action_info(network, 'Network', 'Set up the network').
@@ -62,6 +72,7 @@ action_info(install, 'Install', 'Start installation').
 action_info(exit, cancel, 'Exit installation').
 action_info(root_passwd, 'Root Password', 'Set system root password').
 action_info(user_passwd, 'User Password', 'Set user password').
+action_info(luks_passwd, 'LUKS Password', 'Set LUKS password').
 action_info(btrfs_opt, 'Btrfs', 'Btrfs as root options').
 action_info(partition, 'Partitions', 'Partitions to use during installation').
 action_info(root_fs, 'Root FS', 'Root File System').
@@ -102,6 +113,7 @@ source_dep(Distro, D) :-
 
 source_dep_module('void-live', filesystem(zfs), [zfs]).
 source_dep_module('void-live', template(_), [gptfdisk]).
+source_dep_module('void-live', template(gpt_luks1), [lz4]).
 source_dep_module('void-live', inst_method(rootfs), [xz]).
 
 inst_method_tag(1, local, 'Local', 'Packages from live ISO image').
@@ -127,15 +139,15 @@ select_pkg_inst_method :-
 
 install_deps(_, []) :- !.
 install_deps(Pref, D) :-
-	% tui_progressbox([Pref, 'xbps-install', '-Suy', xbps, '2>&1'], '', [title(' Update xbps '), sz([12, 80])]),
-	% tui_progressbox([Pref, 'xbps-install', '-S', '2>&1'], '', [title(' Synchronize remote repository index files '), sz([6, 80])]),
-	% tui_progressbox([Pref, 'xbps-install', '-y', D, '2>&1'], '', [title(' Install dependencies '), sz(max)]).
-	tui_progressbox([Pref, 'xbps-install', '-SyU', D, '2>&1'], '', [title(' Install dependencies '), sz(max)]).
+	% tui_progressbox_safe([Pref, 'xbps-install', '-Suy', xbps, '2>&1'], '', [title(' Update xbps '), sz([12, 80])]),
+	% % needed by old versions of xbps-install.
+	% tui_progressbox_safe([Pref, 'xbps-install', '-S', '2>&1'], '', [title(' Synchronize remote repository index files '), sz([6, 80])]),
+	tui_progressbox_safe([Pref, 'xbps-install', '-SyU', D, '2>&1'], '', [title(' Install dependencies '), sz(max)]).
 
 install_deps_chroot(_, [], _) :- !.
 install_deps_chroot(Pref, D, RD) :-
-	% tui_programbox([Pref, 'xbps-install', o(r, RD), '-SyU', D, '2>&1'], '', [title(' Installing base system packages... '), sz(max)]).
-	tui_progressbox([Pref, 'xbps-install', o(r, RD), '-SyU', D, '2>&1'], '', [title(' Installing base system packages... '), sz(max)]).
+	% tui_programbox_safe([Pref, 'xbps-install', o(r, RD), '-SyU', D, '2>&1'], '', [title(' Installing base system packages... '), sz(max)]).
+	tui_progressbox_safe([Pref, 'xbps-install', o(r, RD), '-SyU', D, '2>&1'], '', [title(' Installing base system packages... '), sz(max)]).
 
 setup_tui :-
 	retractall(tui_def_args_all(_)),
@@ -225,7 +237,7 @@ part_sgdisk_pl(D, PL) :-
 	% tui_msgbox2([part_sgdisk_pl, PL], []),
 	make_sgdisk_par(PL, 1, SGPL),
 	format_to_atom(MA, ' Partitioning ~w ', [D]),
-	tui_progressbox([sgdisk, '--zap-all', '--clear', '--mbrtogpt', SGPL, D], '', [title(MA), sz([6, 60])]),
+	tui_progressbox_safe([sgdisk, '--zap-all', '--clear', '--mbrtogpt', SGPL, D], '', [title(MA), sz([6, 60])]),
 	true.
 
 % PL - partition list.
@@ -239,26 +251,6 @@ part_lvm_lv_(PD) :-
 	lvm_lvcreate_unsafe(void, Label, SZ),
 	true.
 
-% DO NOT delete ...
-% PL - partition list.
-% make_par(D, PL) :-
-% 	inst_setting(vol_mgr, lvm),
-% 	split_pl(PL, SGL, LVML),
-% 	LVML = [PV|_], !,
-% 	% LVML is not empty.
-% 	append(SGL, [PV], SGL1),
-% 	part_sgdisk_pl(D, SGL1),
-% 	% Create one PV instead of a bunch of partitions.
-% 	( lvm_pvcreate_unsafe(PV), !
-% 	; tui_msgbox('lvm_pvcreate has failed', []),
-% 	  fail
-% 	),
-% 	( lvm_vgcreate(void, [PV]), !
-% 	; tui_msgbox('lvm_vgcreate has failed', []),
-% 	  fail
-% 	),
-% 	part_lvm_lv(LVML),
-% 	true.
 make_par(D, PL) :-
 	part_sgdisk_pl(D, PL),
 	true.
@@ -292,9 +284,8 @@ mkfs(RD) :-
 	% tui_msgbox('mkfs', []),
 	% part(Dev, Part, PartDev, PartType, FileSystem, Label, MountPoint, create/keep, size)
 	inst_setting(partition, part(_, P, PD, _, FS, Label, _MP, create, _SZ)),
-	% tui_msgbox2([partition, FS, P, PD, Label], []),
 	% modprobe
-	( FS = swap; FS = lvm ->
+	( FS = swap; FS = lvm; FS = luks1 ->
 	  true
 	; ( os_call2([modprobe, FS]) ->
 	    true
@@ -303,20 +294,18 @@ mkfs(RD) :-
 	  ),
 	  true
 	),
-	% wipe_disk(PD), % Doesn't seem to be needed anymore.
 	mkfs(FS, P, PD, Label, RD),
 	fail.
 mkfs(_).
 
 mkfs(zfs, P, _PD, Label, RD) :- !,
-	% tui_msgbox2([mkfs, zfs, P, Label], []),
 	add_dquote(Label, _LQ),
 	% lx_get_dev_disk_partuuid(PD, PID),
 	lx_get_dev_id(P, PID),
 
 	% Create a ZFS pool
-	% tui_programbox([
-	tui_progressbox([
+	% tui_programbox_safe([
+	tui_progressbox_safe([
 		zpool,
 		create,
 		'-f',
@@ -362,32 +351,46 @@ mkfs(lvm, _P, PD, Label, RD) :- !,
 	format_to_atom(LVM_PD, '/dev/~w/~w', [VG, LV]),
 	mkfs(FS, _P, LVM_PD, Label, RD),
 	!.
+mkfs(luks1, _P, PD, Label, RD) :- !,
+	Type = luks1,
+	inst_setting_tmp(passwd('$_luks_$'), RPWD),
+	tui_infobox('Creating crypto-device.', [sz([4, 40])]),
+	lx_luks_format(Type, PD, RPWD),
+
+	inst_setting(luks, luks(Name)),
+	tui_infobox('Opening crypto-device.', [sz([4, 40])]),
+	lx_luks_open(Type, Name, PD, RPWD),
+
+	inst_setting(root_fs, FS),
+	atom_concat('/dev/mapper/', Name, LUKS_PD),
+	mkfs(FS, _P, LUKS_PD, Label, RD),
+	!.
 mkfs(btrfs, _P, PD, Label, RD) :- !,
 	add_dquote(Label, LQ),
-	tui_progressbox(['mkfs.btrfs', '-f', '-L', LQ, PD, '2>&1'], 'Creating filesystem btrfs', [sz([12, 80])]),
-	% tui_programbox(['mkfs.btrfs', '-f', '-L', LQ, PD, '2>&1'], 'Creating filesystem btrfs', [sz([12, 80])]),
+	tui_progressbox_safe(['mkfs.btrfs', '-f', '-L', LQ, PD, '2>&1'], 'Creating filesystem btrfs', [sz([12, 80])]),
+	% tui_programbox_safe(['mkfs.btrfs', '-f', '-L', LQ, PD, '2>&1'], 'Creating filesystem btrfs', [sz([12, 80])]),
 	create_btrfs_subv(PD, RD).
 mkfs(ext2, _P, PD, _Label, _RD) :- !,
-	tui_progressbox(['mke2fs', '-F', PD, '2>&1'], 'Creating filesystem ext2', [sz([12, 80])]),
+	tui_progressbox_safe(['mke2fs', '-F', PD, '2>&1'], 'Creating filesystem ext2', [sz([12, 80])]),
 	true.
 mkfs(ext3, _P, PD, _Label, _RD) :- !,
-	tui_progressbox(['mke2fs', '-F', '-j', PD, '2>&1'], 'Creating filesystem ext3', [sz([12, 80])]),
+	tui_progressbox_safe(['mke2fs', '-F', '-j', PD, '2>&1'], 'Creating filesystem ext3', [sz([12, 80])]),
 	true.
 mkfs(ext4, _P, PD, _Label, _RD) :- !,
-	tui_progressbox(['mke2fs', '-F', '-t', 'ext4', PD, '2>&1'], 'Creating filesystem ext4', [sz([12, 80])]),
-	% tui_programbox(['mke2fs', '-F', '-t', 'ext4', PD, '2>&1'], 'Creating filesystem ext4', [sz([24, 80])]),
+	tui_progressbox_safe(['mke2fs', '-F', '-t', 'ext4', PD, '2>&1'], 'Creating filesystem ext4', [sz([12, 80])]),
+	% tui_programbox_safe(['mke2fs', '-F', '-t', 'ext4', PD, '2>&1'], 'Creating filesystem ext4', [sz([24, 80])]),
 	true.
 mkfs(f2fs, _P, PD, _Label, _RD) :- !,
-	tui_progressbox(['mkfs.f2fs', '-f', PD, '2>&1'], 'Creating filesystem f2fs', [sz([12, 80])]),
+	tui_progressbox_safe(['mkfs.f2fs', '-f', PD, '2>&1'], 'Creating filesystem f2fs', [sz([12, 80])]),
 	true.
 mkfs(vfat, _P, PD, Label, _RD) :- !,
 	upper(Label, UL),
 	add_dquote(UL, LQ),
-	tui_progressbox(['mkfs.vfat', '-F', '32', '-n', LQ, PD, '2>&1'], 'Creating filesystem vfat', [sz([12, 80])]),
-	% tui_programbox(['mkfs.vfat', '-F', '32', '-n', LQ, PD, '2>&1'], 'Creating filesystem vfat', [sz([12, 80])]),
+	tui_progressbox_safe(['mkfs.vfat', '-F', '32', '-n', LQ, PD, '2>&1'], 'Creating filesystem vfat', [sz([12, 80])]),
+	% tui_programbox_safe(['mkfs.vfat', '-F', '32', '-n', LQ, PD, '2>&1'], 'Creating filesystem vfat', [sz([12, 80])]),
 	true.
 mkfs(xfs, _P, PD, _Label, _RD) :- !,
-	tui_progressbox(['mkfs.xfs', '-f', '-i', 'sparse=0', PD, '2>&1'], 'Creating filesystem xfs', [sz([12, 80])]),
+	tui_progressbox_safe(['mkfs.xfs', '-f', '-i', 'sparse=0', PD, '2>&1'], 'Creating filesystem xfs', [sz([12, 80])]),
 	true.
 mkfs(swap, _P, PD, _Label, _RD) :- !,
 	os_shell2_rc([swapoff, PD, '>/dev/null', '2>&1'], _),
@@ -405,6 +408,11 @@ mkfs(swap, _P, PD, _Label, _RD) :- !,
 mkfs(FS, _P, _, _, _, _RD) :- !,
 	tui_msgbox2(['Unknown filesystem', FS], []),
 	fail.
+
+luks_dev_name(LUKS_PD) :-
+	inst_setting(luks, luks(Name)),
+	lx_luks_dev_name(Name, LUKS_PD),
+	true.
 
 create_btrfs_subv(RD) :-
 	inst_setting(btrfs, subv(S, _, _, _)),
@@ -447,9 +455,7 @@ create_zfs_dataset :-
 	% dataset(Mountpoint, dataset name, attrs)
 	inst_setting(zfs, dataset(DS, MP, AL)),
 	make_zfs_pool_cmd(MP, DS, AL, CMD),
-	% writenl(CMD),
 	os_shell2(CMD),
-	% tui_msgbox2(CMD, []),
 	fail.
 create_zfs_dataset :-
 	true.
@@ -510,7 +516,7 @@ mount_fs(zfs, _D, _MP, _RD) :-
 	% tui_msgbox2([before, zfs, mount, 'zroot/ROOT/void'], []),
 	% % Mount the ZFS hierarchy
 	% % os_shell2([zfs, mount, 'zroot/ROOT/void']),
-	% tui_programbox([zfs, mount, 'zroot/ROOT/void', '2>&1'], '', [title(' zfs mount zroot/ROOT/void '), sz([12, 80])]),
+	% tui_programbox_safe([zfs, mount, 'zroot/ROOT/void', '2>&1'], '', [title(' zfs mount zroot/ROOT/void '), sz([12, 80])]),
 	% tui_msgbox2([after, zfs, mount, 'zroot/ROOT/void'], []),
 	% os_shell2([zfs, mount, '-a']),
 	% tui_msgbox2([after, zfs, mount, '-a'], []),
@@ -521,43 +527,21 @@ mount_fs(lvm, _D, MP, RD) :-
 	format_to_atom(LVM_PD, '/dev/~w/~w', [VG, LV]),
 	mount_fs(FS, LVM_PD, MP, RD),
 	!.
+mount_fs(luks1, _D, MP, RD) :-
+	inst_setting(root_fs, FS),
+	luks_dev_name(LUKS_PD),
+	mount_fs(FS, LUKS_PD, MP, RD),
+	!.
 mount_fs(FS, D, MP, RD) :-
 	memberchk(FS, [vfat, ext2, ext3, ext4, f2fs, xfs]),
 	atom_concat(RD, MP, MP1),
 	os_mkdir_p(MP1),
-	% tui_msgbox2([after, FS, mkdir, '-p', MP1], [sz([6, 40])]),
 	os_shell2([mount, '-t', FS, '-o', 'rw,noatime', D, MP1, '2>&1']),
-	% tui_msgbox2([after, FS, mount, '-t', FS, '-o', 'rw,noatime', D, MP1], [sz([6, 40])]),
 	!.
 mount_fs(FS, D, MP, _RD) :-
 	tui_msgbox2(['mount_fs has failed.', [FS, D, MP]], [sz([6, 40])]),
 	fail.
 
-% DO NOT delete
-% post_setup_fs :-
-% 	get_mp_list(MPL),
-% 	maplist(setup_mp, MPL),
-% 	true.
-
-% setup_mp(MP) :-
-% 	inst_setting(partition, part(_, _RP, D, _, FS, _, MP, _, _SZ)),
-% 	setup_mp(FS, D, MP),
-% 	true.
-
-% setup_mp(btrfs, _D, '/') :- !,
-% 	( inst_setting(fs(btrfs, '/'), snap_dir(SD)) ->
-% 	  os_shell2([mkdir, '-p', SD, '2>&1'])
-% 	; true
-% 	),
-% 	true.
-% setup_mp(zfs, _D, _MP) :- !,Device major number
-% 	% zfs requires hostid.
-% 	% os_shell2([cp, '/etc/hostid', '/mnt/etc/hostid']),
-% 	tui_programbox([cp, '/etc/hostid', '/mnt/etc/hostid'], '', [title(' copy hostid '), sz([12, 80])]),
-% 	% record the current pool configuration in a cache file that Void will use to avoid walking the entire device hierarchy to identify importable pools.
-% 	os_shell2([mkdir, '-p', '/mnt/etc/zfs']),
-% 	os_shell2([zpool, set, 'cachefile=/mnt/etc/zfs/zpool.cache', zroot]),
-% 	true.
 setup_mp(_FS, _D, _MP).
 
 clean_mnt(RD) :-
@@ -565,7 +549,7 @@ clean_mnt(RD) :-
 	fail.
 clean_mnt(_RD) :-
 	% LVM
-	inst_setting(bootloader_dev, D),
+	inst_setting(bootloader_dev, dev(D, _, _)),
 	lvm_pvs(PVL),
 	findall(pv(PV,VG), (member(pv(PV,VG), PVL), atom_concat(D, _, PV)), VGL),
 	maplist(clean_mnt_lvm_, VGL),
@@ -574,10 +558,8 @@ clean_mnt(RD) :-
 	% uses_zfs,
 	zpool_list(L),
 	memberchk(zp(PN,_A2,_A3,_A4,_A5,_A6,_A7,_A8,_A9,_A10,RD), L),
-	tui_progressbox([zpool, destroy, '-f', PN, '2>&1'], '', [title(' zpool destroy '), sz([6, 40])]),
+	tui_progressbox_safe([zpool, destroy, '-f', PN, '2>&1'], '', [title(' zpool destroy '), sz([6, 40])]),
 	fail.
-% lsblk -n -o KNAME,PKNAME /dev/sda1
-% lsblk -J -o NAME,TYPE
 clean_mnt(_).
 
 clean_mnt_lvm_(pv(PV,VG)) :-
@@ -676,19 +658,104 @@ uses_zfs :-
 	inst_setting(partition, part(_D, _P, _PD, _PT, zfs, _Label, _MP, _CK, _SZ)),
 	!.
 
+uses_luks :-
+	inst_setting(template, gpt_luks1),
+	!.
+
 source_local :-
 	inst_setting(source, local),
 	!.
 
-dracut_zfs(RD) :-
-	atom_concat(RD, '/etc/dracut.conf.d', DCD),
-	os_mkdir_p(DCD),
-	atom_concat(DCD, '/zol.conf', ZCF),
-	open(ZCF, write, S),
-	write(S, 'nofsck="yes"'), nl(S),
-	write(S, 'add_dracutmodules+=" zfs "'), nl(S),
-	write(S, 'omit_dracutmodules+=" btrfs resume "'), nl(S),
-	close(S),
+dracut_conf(RD) :-
+	uses_zfs,
+	dracut_conf(fs(zfs), RD),
+	fail.
+dracut_conf(RD) :-
+	uses_luks,
+	dracut_conf(luks, RD),
+	fail.
+dracut_conf(RD) :-
+	dracut_conf(common, RD).
+
+dracut_conf(common, RD) :- !,
+	VL = [
+		  v(add_dracutmodules, [dm, 'kernel-modules'])
+		, v(add_drivers, [ahci, i915])
+		, v(omit_dracutmodules, ['dracut-systemd', plymouth, systemd, 'systemd-initrd', usrmount])
+		, v(persistent_policy, 'by-uuid')
+		, v(tmpdir, '/tmp')
+	],
+	dracut_conf(VL, common, RD),
+	true.
+dracut_conf(luks, RD) :- !,
+	setup_crypt(RD),
+	VL = [
+		  v(add_dracutmodules, [crypt])
+		, v(add_drivers, [lz4, lz4hc, xxhash_generic])
+		, v(compress, lz4)
+		, v(hostonly, yes)
+		, v(install_items, ['/boot/volume.key', '/etc/crypttab'])
+		% , v(kernel_cmdline, ['rd.lvm=0', 'rd.md=0', 'rd.dm=0'])
+	],
+	dracut_conf(VL, luks, RD),
+	true.
+dracut_conf(lvm, RD) :- !,
+	VL = [
+		  v(add_dracutmodules, [lvm])
+		, v(add_drivers, [lvm])
+	],
+	dracut_conf(VL, lvm, RD),
+	true.
+dracut_conf(mdraid, RD) :- !,
+	VL = [
+		  v(add_dracutmodules, [mdraid])
+		, v(add_drivers, [mdraid])
+	],
+	dracut_conf(VL, mdraid, RD),
+	true.
+dracut_conf(fs(zfs), RD) :- !,
+	VL = [
+		  v(nofsck, yes)
+		, v(add_dracutmodules, [zfs])
+		, v(omit_dracutmodules, [btrfs, resume])
+	],
+	dracut_conf(VL, zfs, RD),
+	true.
+dracut_conf(fs(btrfs), RD) :- !,
+	VL = [
+		  v(add_dracutmodules, [btrfs])
+		, v(add_drivers, [btrfs])
+	],
+	dracut_conf(VL, btrfs, RD),
+	true.
+dracut_conf(fs(cifs), RD) :- !,
+	VL = [
+		  v(add_dracutmodules, [cifs])
+		, v(add_drivers, [cifs])
+	],
+	dracut_conf(VL, cifs, RD),
+	true.
+dracut_conf(fs(nfs), RD) :- !,
+	VL = [
+		  v(add_dracutmodules, [nfs])
+		, v(add_drivers, [nfs])
+	],
+	dracut_conf(VL, nfs, RD),
+	true.
+dracut_conf(fs(_), _RD) :- !,
+	true.
+
+setup_crypt(RD) :-
+	inst_setting(bootloader_dev, dev(BD, _, _)),
+	( inst_setting(partition, part(BD, _P1, ROOT_PD, _PT1, _FS1, _Label1, '/', _CK1, _SZ1))
+	; tui_msgbox('root partition was not found', []),
+	  fail
+	), !,
+	lx_get_dev_uuid(ROOT_PD, PUUID),
+	% Create the keyfile
+	create_keyfile(ROOT_PD, RD),
+	% Setup crypttab
+	setup_cryptab(PUUID, RD),
 	true.
 
 make_chroot_inst_pref(ARCH, P) :-
@@ -705,7 +772,7 @@ install_pkg(rootfs, RD) :-
 	% N = 'void-x86_64-ROOTFS-20221001.tar.xz',
 	working_directory(PWD),
 	tui_fselect(PWD, [sz(max)], N),
-    decompose_file_name(N, _Dir, NPref, NSuf),
+	decompose_file_name(N, _Dir, NPref, NSuf),
 	atom_concat(NPref, NSuf, FN),
 	parse_rootfs_name(FN, ARCH),
 
@@ -713,24 +780,23 @@ install_pkg(rootfs, RD) :-
 	assertz(inst_setting(system(arch), ARCH)),
 
 	% os_call2([tar, 'xvf', N, o('C', RD)]),
-	tui_progressbox([tar, xvf, N, o('C', RD)], '', [title(' Extracting rootfs '), sz(max)]),
+	tui_progressbox_safe([tar, xvf, N, o('C', RD)], '', [title(' Extracting rootfs '), sz(max)]),
 
 	% mount required fs
 	mount_chroot_filesystems(RD),
 	% Copy the DNS configuration into the new root so that XBPS can still download new packages inside the chroot.
 	os_mkdir_p(RD + '/etc'), os_call2([cp, '-L', '/etc/resolv.conf', RD + '/etc/']),
 
-	( uses_zfs ->
-	  dracut_zfs(RD)
-	; true
-	),
+	% dracut stuff.
+	dracut_conf(RD),
 
 	install_target_dep(RD),
 
-	tui_progressbox(['xbps-remove', o(r, RD), '-y', 'base-voidstrap', '2>&1'], '', [title(' Remove base-voidstrap '), sz(max)]),
+	% Remove stuff
+	tui_progressbox_safe(['xbps-remove', o(r, RD), '-y', 'base-voidstrap', '2>&1'], '', [title(' Remove base-voidstrap '), sz(max)]),
 
-	tui_progressbox(['xbps-reconfigure', o(r, RD), '-f', 'base-files', '2>&1'], '', [title(' Reconfigure base-files '), sz(max)]),
-	tui_progressbox([chroot, RD, 'xbps-reconfigure', '-a', '2>&1'], '', [title(' Reconfigure all '), sz(max)]),
+	tui_progressbox_safe(['xbps-reconfigure', o(r, RD), '-f', 'base-files', '2>&1'], '', [title(' Reconfigure base-files '), sz(max)]),
+	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-a', '2>&1'], '', [title(' Reconfigure all '), sz(max)]),
 	true.
 
 install_pkg(net, RD) :-
@@ -746,15 +812,13 @@ install_pkg(net, RD) :-
 	; true
 	),
 
-	( uses_zfs ->
-	  dracut_zfs(RD)
-	; true
-	),
+	% dracut stuff.
+	dracut_conf(RD),
 
 	install_target_dep(RD),
 
-	tui_progressbox(['xbps-reconfigure', o(r, RD), '-f', 'base-files', '2>&1'], '', [title(' Reconfigure base-files '), sz(max)]),
-	tui_progressbox([chroot, RD, 'xbps-reconfigure', '-a', '2>&1'], '', [title(' Reconfigure all '), sz(max)]),
+	tui_progressbox_safe(['xbps-reconfigure', o(r, RD), '-f', 'base-files', '2>&1'], '', [title(' Reconfigure base-files '), sz(max)]),
+	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-a', '2>&1'], '', [title(' Reconfigure all '), sz(max)]),
 
 	true.
 
@@ -772,25 +836,23 @@ install_pkg(local, RD) :-
 	  os_rm_f(RD + '/etc/issue'),
 	  os_rm_f(RD + '/usr/sbin/void-installer'),
 	  % Remove live user.
-	  tui_progressbox([userdel, o('R', RD), '-r', anon, '2>&1'], '', [title(' Remove user anon '), sz([6, 60])])
+	  tui_progressbox_safe([userdel, o('R', RD), '-r', anon, '2>&1'], '', [title(' Remove user anon '), sz([6, 60])])
 	; true
 	),
 
 	% mount required fs
 	mount_chroot_filesystems(RD),
 
-	( uses_zfs ->
-	  dracut_zfs(RD)
-	; true
-	),
-
-	DL = [chroot, RD, dracut, '--no-hostonly', '--add-drivers', '"ahci"', '--force', '2>&1'],
-	tui_progressbox(DL, '', [title(' Rebuilding initramfs for target '), sz(max)]),
+	% dracut stuff.
+	dracut_conf(RD),
+	% DL = [chroot, RD, dracut, '--no-hostonly', '--force', '2>&1'],
+	DL = [chroot, RD, dracut, '--regenerate-all', '--hostonly', '--force', '2>&1'],
+	tui_progressbox_safe(DL, '', [title(' Rebuilding initramfs for target '), sz(max)]),
 
 	install_target_dep(RD),
 
-	( HN = hrmpf ->
-	  true
+	% Remove stuff
+	( HN = hrmpf
 	; % Remove temporary packages from target
 	  RL0 = [dialog, 'xtools-minimal'],
 	  % Remove grub if we are using different bootloader.
@@ -798,7 +860,7 @@ install_pkg(local, RD) :-
 	    RL1 = RL0
 	  ; RL1 = ['grub-i386-efi', 'grub-x86_64-efi', grub| RL0]
 	  ),
-	  tui_progressbox(['xbps-remove', o(r, RD), '-Ry', RL1, '2>&1'], '', [title(' xbps-remove '), sz([12, 80])])
+	  tui_progressbox_safe(['xbps-remove', o(r, RD), '-Ry', RL1, '2>&1'], '', [title(' xbps-remove '), sz([12, 80])])
 	),
 	true.
 
@@ -828,11 +890,6 @@ target_dep_bootloader(grub2, GRUB) :-
 	\+ inst_setting(source, local),
 	inst_setting(system(arch), ARCH),
 	arch2grub(ARCH, GRUB), !.
-
-% enable text console for grub if chosen
-set_grub_text_console(RD) :-
-	os_call2([sed, '-i', RD + '/etc/default/grub', '-e', 's|#\\(GRUB_TERMINAL_INPUT\\).*|\\1=console|', '-e', 's|#\\(GRUB_TERMINAL_OUTPUT\\).*|\\1=console|']),
-	true.
 
 set_keymap(RD) :-
 	inst_setting(keymap, KM),
@@ -905,14 +962,26 @@ set_useraccount(_RD) :-
 copy_rootfs(RD) :-
 	TA = [tar, '--create', '--one-file-system', '--xattrs'],
 	TAE = [TA, '-f', '-', '/', '2>/dev/null', '|', 
-		tar, '--extract', '--xattrs', '--xattrs-include=\'*\'', '--preserve-permissions', '-v', '-f', '-', '-C', RD, '2>&1'
+		tar, '--extract', '--xattrs', '--xattrs-include="*"', '--preserve-permissions', '-v', '-f', '-', '-C', RD, '2>&1'
 	],
+	% TAN = [TA, '-v', '-f', '/dev/null', '/', '2>/dev/null', '|', 'wc', '-l'],
+	% os_shell2_number(TAN, N),
 	% os_shell2(TAE),
-	tui_progressbox(TAE, '', [title(' Copying live image to target rootfs '), sz(max)]),
+	tui_progressbox_unsafe(TAE, '', [title(' Copying live image to target rootfs '), sz(max)]),
+	% tui_programbox_unsafe(TAE, '', [title(' Copying live image to target rootfs '), sz(max)]),
 	true.
 
+set_bootloader_dev(D) :-
+	% We are trying to set the same value.
+	inst_setting(bootloader_dev, dev(D, _, _)), !.
+set_bootloader_dev(D) :-
+	lx_list_dev_part(D, PL),
+	lx_dev_part_tree(D, PL, TL),
+	retractall(inst_setting(bootloader_dev, _)),
+	assertz(inst_setting(bootloader_dev, dev(D, PL, TL))).
+
 set_bootloader(RD) :-
-	inst_setting(bootloader_dev, BD),
+	inst_setting(bootloader_dev, dev(BD, _, _)),
 	inst_setting(bootloader, B),
 	set_bootloader(B, BD, RD), !.
 set_bootloader(_RD) :-
@@ -921,24 +990,10 @@ set_bootloader(_RD) :-
 
 % set_bootloader(bootloader, bootloader_dev, root_dir)
 set_bootloader(_, none, _RD) :- !.
-set_bootloader(grub2, BD, RD) :-
-	( inst_setting(system(efi), EFI_TARGET) ->
-	  O = [oo(target, EFI_TARGET), '--efi-directory=/boot/efi', '--bootloader-id=void_grub', '--recheck']
-	; O = []
-	),
-	( uses_zfs ->
-	  ENV = ['ZPOOL_VDEV_NAME_PATH=1']
-	; ENV = []
-	),
-	CL1 = [chroot, RD, ENV, 'grub-install', O, BD, '2>&1'],
-	% os_shell2(CL1),
-	tui_progressbox(CL1, '', [title(' Installing bootloader '), sz([6, 60])]),
-	CL2 = [chroot, RD, 'grub-mkconfig', '-o', '/boot/grub/grub.cfg', '2>&1'],
-	% os_shell2(CL2),
-	tui_progressbox(CL2, '', [title(' Generating grub configuration file '), sz([10, 60])]),
-	% SL = [sync],
-	% os_call2(SL), os_call2(SL), os_call2(SL),
-	os_call2([udevadm, settle]),
+set_bootloader(grub2, BD, RD) :- !,
+	grub_configure(BD, RD),
+	grub_install(BD, RD),
+	grub_mkconfig(RD),
 	!.
 set_bootloader(rEFInd, BD, RD) :-
 	% BD is the disk (not a partition)
@@ -952,7 +1007,7 @@ set_bootloader(rEFInd, BD, RD) :-
 	  fail
 	), !,
 	CL1 = [chroot, RD, 'refind-install', oo(usedefault), EFI_PD, '2>&1'],
-	tui_progressbox(CL1, '', [title(' Installing bootloader '), sz([6, 60])]),
+	tui_progressbox_safe(CL1, '', [title(' Installing bootloader '), sz([6, 60])]),
 	% os_shell2(CL1),
 	( inst_setting(root_fs, btrfs) ->
 	  % This is not needed.
@@ -978,13 +1033,115 @@ set_bootloader(rEFInd, BD, RD) :-
 	% os_shell2(CL2),
 	!.
 set_bootloader(limine, BD, RD) :-
+	os_mkdir_p(RD + '/boot/limine'),
+
+	( inst_setting(system(efi), _) ->
+	  os_mkdir_p(RD + '/boot/efi/EFI/BOOT'),
+	  os_call2([cp, '-f', RD + '/usr/share/limine/BOOTX64.EFI', RD + '/boot/efi/EFI/BOOT/BOOTX64.EFI'])
+	; tui_progressbox_safe([chroot, RD, 'limine-deploy', BD, '2>&1'], '', [title(' Deploying Limine '), sz([6, 60])]),
+	  os_call2([cp, '-f', RD + '/usr/share/limine/limine.sys', RD + '/boot/limine/limine.sys'])
+	), !,
+
+	configure_limine(BD, RD),
+	!.
+
+grub_install(BD, RD) :-
+	% BD is the disk (not a partition)
+	% Install grub.
+	grub_install_opt(O),
+	grub_install_env(ENV),
+	CL1 = [chroot, RD, ENV, 'grub-install', O, BD, '2>&1'],
+	% os_shell2(CL1),
+	tui_progressbox_safe(CL1, '', [title(' Installing bootloader '), sz([6, 60])]),
+	true.
+
+grub_install_opt([oo(target, EFI_TARGET), '--efi-directory=/boot/efi', '--bootloader-id=void_grub', '--recheck']) :-
+	inst_setting(system(efi), EFI_TARGET), !,
+	true.
+grub_install_opt([]) :-
+	true.
+
+grub_install_env(['ZPOOL_VDEV_NAME_PATH=1']) :-
+	uses_zfs, !,
+	true.
+grub_install_env([]) :-
+	true.
+
+grub_configure(BD, RD) :-
+	% Configure grub.
+	GVL0 = [
+		  v('GRUB_DEFAULT', 0, '')
+		, v('GRUB_TIMEOUT', 5, '')
+		, v('GRUB_DISTRIBUTOR', 'Void', '')
+	],
+	( uses_luks ->
+	  ( inst_setting(partition, part(BD, _P1, ROOT_PD, _PT1, _FS1, _Label1, '/', _CK1, _SZ1))
+	  ; tui_msgbox('root partition was not found', []),
+	    fail
+	  ), !,
+	  lx_get_dev_uuid(ROOT_PD, PUUID),
+	  luks_dev_name(LUKS_PD),
+	  os_scmdl(['rd.luks'=1 , 'rd.luks.name'=v(PUUID, LUKS_PD), loglevel=6, slub_debug='FZ', slab_nomerge=1, pti=on, mce=0, 'printk.time'=1], V),
+	  GVL = [
+		  v('GRUB_ENABLE_CRYPTODISK', y, '')
+		, v('GRUB_CMDLINE_LINUX_DEFAULT', V, 'Generic settings')
+		, v('GRUB_DISABLE_OS_PROBER', true, '')
+		% , v('GRUB_DISABLE_RECOVERY', true, '')
+		% , v('GRUB_TERMINAL_INPUT', console, '')
+		% , v('GRUB_TERMINAL_OUTPUT', console, '')
+		% , v('', '', '')
+		| GVL0
+	  ]
+	; GVL = [
+		  v('GRUB_CMDLINE_LINUX_DEFAULT', 'loglevel=4', '')
+		| GVL0
+	  ]
+	),
+
+	% Generate /etc/default/grub.
+	grub_sconf(GVL, RD),
+	true.
+
+grub_mkconfig(RD) :-
+	CL2 = [chroot, RD, 'grub-mkconfig', o(o, '/boot/grub/grub.cfg'), '2>&1'],
+	% os_shell2(CL2),
+	tui_progressbox_safe(CL2, '', [title(' Generating grub configuration file '), sz([10, 60])]),
+	os_call2([udevadm, settle]),
+	true.
+
+create_keyfile(ROOT_PD, RD) :-
+	VK = '/boot/volume.key',
+	atom_concat(RD, VK, KF),
+	os_shell2([dd, v(bs, 512), v(count, 4), v(if, '/dev/urandom'), v(of, KF)]),
+	% os_shell2([dd, v(bs, 1), v(count, 64), v(if, '/dev/urandom'), v(of, KF)]),
+
+	inst_setting_tmp(passwd('$_luks_$'), RPWD),
+	lx_get_dev_disk_uuid(ROOT_PD, DISK_PUUID),
+	tui_infobox('Adding crypto-key.', [sz([4, 40])]),
+	lx_luks_add_keyfile(DISK_PUUID, KF, RPWD),
+
+	% os_shell2([chmod, '000', KF]),
+	os_shell2([chroot, RD, chmod, '000', VK]),
+	os_shell2([chroot, RD, chmod, '-R', 'g-rwx,o-rwx', '/boot']),
+	true.
+
+setup_cryptab(PUUID, RD) :-
+	atom_concat(RD, '/etc/crypttab', KF),
+	inst_setting(luks, luks(Name)),
+	open(KF, write, S),
+	write(S, Name),
+	write(S, ' UUID='),
+	write(S, PUUID),
+	write(S, ' /boot/volume.key luks'),
+	nl(S),
+	close(S),
+	true.
+
+configure_limine(BD, RD) :-
 	( inst_setting(partition, part(BD, _P1, ROOT_PD, _PT1, _FS1, _Label1, '/', _CK1, _SZ1))
 	; tui_msgbox('root partition was not found', []),
 	  fail
 	), !,
-
-	os_mkdir_p(RD + '/boot/efi/EFI/BOOT'),
-	os_call2([cp, '-f', RD + '/usr/share/limine/BOOTX64.EFI', RD + '/boot/efi/EFI/BOOT/BOOTX64.EFI']),
 
 	atom_concat(RD, '/boot/vmlinuz-', P0),
 	atom_concat(P0, '*', P1),
@@ -993,19 +1150,21 @@ set_bootloader(limine, BD, RD) :-
 
 	lx_get_dev_uuid(ROOT_PD, RPID),
 
-	os_mkdir_p(RD + '/boot/limine'),
 	atom_concat(RD, '/boot/limine/limine.cfg', CF),
 	open(CF, write, S),
+	write_limine_cfg(RPID, V, S),
+	close(S),
+	true.
+
+write_limine_cfg(RPID, V, S) :-
 	write(S, 'INTERFACE_BRANDING=Void Linux'), nl(S),
 	write(S, 'TIMEOUT=5'), nl(S), nl(S),
 	write(S, ':Boot with standard options'), nl(S),
 	write(S, '    PROTOCOL=linux'), nl(S),
 	write(S, '    KERNEL_PATH=boot:///boot/vmlinuz-'), write(S, V), nl(S),
-	write(S, '    CMDLINE=root=UUID='), write(S, RPID),
-	write_limine_cmd(S), nl(S),
+	write(S, '    CMDLINE=root=UUID='), write(S, RPID), write_limine_cmd(S), nl(S),
 	write(S, '    MODULE_PATH=boot:///boot/initramfs-'), write(S, V), write(S, '.img'), nl(S),
-	close(S),
-	!.
+	true.
 
 write_refind_btrfs(S) :-
 	inst_setting(keymap, KB),
@@ -1087,7 +1246,7 @@ umount_filesystems(RD) :-
 umount_filesystems(RD) :-
 	zpool_list(L),
 	memberchk(zp(PN,_A2,_A3,_A4,_A5,_A6,_A7,_A8,_A9,_A10,RD), L),
-	tui_progressbox([zpool, export, '-f', PN, '2>&1'], '', [title(' export zpool '), sz([6, 40])]),
+	tui_progressbox_safe([zpool, export, '-f', PN, '2>&1'], '', [title(' export zpool '), sz([6, 40])]),
 	fail.
 umount_filesystems(_RD).
 
@@ -1166,6 +1325,11 @@ write_fstab(lvm, _D, MP, S) :- !,
 	format_to_atom(LVM_PD, '/dev/~w/~w', [VG, LV]),
 	write_fstab(FS, LVM_PD, MP, S),
 	true.
+write_fstab(luks1, _D, MP, S) :- !,
+	inst_setting(root_fs, FS),
+	luks_dev_name(LUKS_PD),
+	write_fstab(FS, LUKS_PD, MP, S),
+	true.
 write_fstab(btrfs, D, _MP, S) :- !,
 	lx_get_dev_uuid(D, U),
 	write_fstab_btrfs(D, U, S),
@@ -1222,24 +1386,12 @@ write_fstab_btrfs(D, U, S) :-
 	fail.
 write_fstab_btrfs(_, _, _).
 
-% write_fstab_btrfs_snap(U, S) :-
-% 	inst_setting(fs(btrfs, '/'), snap_dir(MP)), !,
-% 	format(S, '# ~w\n', [MP]),
-% 	O = ['subvolid=5', noatime],
-% 	join_atoms(O, ',', OA),
-% 	atom_concat('UUID=', U, UU),
-% 	L = [UU, MP, 'btrfs', OA, '0 0'],
-% 	join_atoms(L, '\t', LA),
-% 	write(S, LA), nl(S), nl(S),
-% 	!.
-% write_fstab_btrfs_snap(_, _).
-
 wipe_disk :-
 	inst_setting(template, manual),
 	!.
 wipe_disk :-
-	inst_setting(bootloader_dev, D),
-	( wipe_disk(D)
+	inst_setting(bootloader_dev, dev(D, PL, TL)),
+	( wipe_dev_tree_list(TL, PL)
 	; tui_msgbox2([wipe_disk, D, has, failed], []),
 	  fail
 	),
@@ -1247,12 +1399,36 @@ wipe_disk :-
 
 wipe_disk(D) :-
 	os_shell2_lines([wipefs, '--noheadings', D], L),
-	( L = [] ->
-	  true
+	( L = []
 	; os_shell2([wipefs, '-a', D, '2>&1', '1>/dev/null']),
 	  wipe_disk(D)
 	),
 	!.
+
+wipe_dev_tree_list(L, PL) :-
+	maplist(wipe_dev_tree(PL), L).
+
+wipe_dev_tree(PL, tree(NAME, L)) :-
+	wipe_dev_tree_list(L, PL),
+	% dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)
+	memberchk(dev_part(NAME,CN,ET,_SIZE), PL),
+	wipe_dev(ET, NAME, CN),
+	true.
+
+% wipe_dev(type, device, compound_name)
+wipe_dev(crypt(_UUID), _D, name(SNAME,_KNAME,_DL)) :- !,
+	lx_luks_close(SNAME),
+	true.
+wipe_dev(part(_PARTUUID,_UUID), D, _CN) :- !,
+	wipe_disk(D),
+	true.
+wipe_dev(disk, D, _CN) :- !,
+	wipe_disk(D),
+	true.
+wipe_dev(ET, D, _CN) :- !,
+	format_to_atom(A, 'Unknown type "~w" of ~w.', [ET, D]),
+	tui_msgbox(A, []),
+	fail.
 
 menu_part_soft(S) :-
 	SL = [[cfdisk, 'Easy to use'], [fdisk, 'More advanced']],
@@ -1265,14 +1441,14 @@ menu_part_manually :-
 	os_call2([S, D]),
 	true.
 
-part2checklist_tag_on_off(ON, part_info(_D, P, _PA, _FS, FSS), [P, FSS, I]) :-
+part2checklist_tag_on_off(ON, part_info(_D, P, _PA, _FS, FSS, _Type), [P, FSS, I]) :-
 	( member(P, ON) ->
 	  I = on
 	; I = off
 	),
 	true.
 
-part2taglist(part_info(_D, P, _PA, _FS, FSS), [P, FSS]).
+part2taglist(part_info(_D, P, _PA, _FS, FSS, _Type), [P, FSS]).
 
 update_part_info(ONL, PLO) :-
 	maplist(del_part_info(PLO), ONL),
@@ -1291,7 +1467,7 @@ del_part_info(L, P) :-
 ins_part_info(PIL, L, P) :-
 	( member(P, L) ->
 	  true
-	; memberchk(part_info(D, P, PA, FS, _FSS), PIL),
+	; memberchk(part_info(D, P, PA, FS, _FSS, _Type), PIL),
 	  assertz(inst_setting(partition, part(D, P, PA, linux, FS, '', '', keep, _SZ)))
 	),
 	true.
@@ -1357,7 +1533,7 @@ split_tz(TZ, A1, A2) :-
 	true.
 
 menu_timezone :-
-    AREAS = ['Africa', 'America', 'Antarctica', 'Arctic', 'Asia', 'Atlantic', 'Australia', 'Europe', 'Indian', 'Pacific'],
+	AREAS = ['Africa', 'America', 'Antarctica', 'Arctic', 'Asia', 'Atlantic', 'Australia', 'Europe', 'Indian', 'Pacific'],
 
 	dialog_msg(radiolist, RADIOLABEL),
 	( inst_setting(timezone, OTZ) ->
@@ -1379,25 +1555,23 @@ menu_timezone :-
 	retractall(inst_setting(timezone, _)),
 	assertz(inst_setting(timezone, ATZ)).
 
-menu_dev_list(dev(_D, DA, GB, DSSZ), [DA, DIA]) :-
-	format_to_atom(DIA, 'size:~2fGB;sector_size:~d', [GB, DSSZ]),
+menu_dev_(dev(_NAME,SNAME,disk,_RO,_RM,SIZE,SSZ), [SNAME, DIA]) :-
+	format_to_atom(DIA, 'size:~w; sector size:~d', [SIZE, SSZ]),
 	true.
 
 menu_dev(Title, D) :-
-	lx_list_dev(L),
-	maplist(menu_dev_list, L, DL),
+	lx_list_dev_disk(L),
+	maplist(menu_dev_, L, DL),
 	dialog_msg(menu, MENULABEL),
 	tui_menu_tag(DL, MENULABEL, [title(Title)], D).
 
-% If there is only one device select it automatically.
-menu_dev_light(Title, DA) :-
-	lx_list_dev(L),
-	( L = [dev(_D, DA, _GB, _DSSZ)] ->
-	  true
-	; maplist(menu_dev_list, L, DL),
+menu_dev_light(Title, NAME) :-
+	lx_list_dev_disk(L),
+	( L = [dev(NAME,_SNAME,_TYPE,_RO,_RM,_SIZE,_SSZ)]
+	; maplist(menu_dev_, L, DL),
 	  dialog_msg(menu, MENULABEL),
-	  tui_menu_tag(DL, MENULABEL, [title(Title)], DA)
-	).
+	  tui_menu_tag(DL, MENULABEL, [title(Title)], NAME)
+	), !.
 
 menu_btrfs :-
 	tui_msgbox2([not, implemented, yet], []),
@@ -1423,17 +1597,15 @@ menu_bootloader :-
 	!.
 
 menu_bootloader_dev :-
-	lx_list_dev(L),
-	maplist(menu_dev_list, L, DL),
+	lx_list_dev_disk(L),
+	maplist(menu_dev_, L, DL),
 	dialog_msg(radiolist, RADIOLABEL),
-	( inst_setting(bootloader_dev, OB) ->
-	  true
+	( inst_setting(bootloader_dev, dev(OB, _, _))
 	; OB = none
-	),
+	), !,
 	append(DL, [[none, 'Manage bootloader otherwise']], BL1),
 	tui_radiolist_tag2(BL1, OB, RADIOLABEL, [title(' Select the disk to install the bootloader ')], D), !,
-	retractall(inst_setting(bootloader_dev, _)),
-	assertz(inst_setting(bootloader_dev, D)).
+	set_bootloader_dev(D).
 
 split_grp(G, GL) :-
 	atom_chars(G, GC),
@@ -1452,7 +1624,7 @@ grp_ind2name(L, N, G) :-
 	nth(N, L, [G|_]).
 
 menu_usergroups(GL3) :-
-    G = [wheel, audio, video, floppy, cdrom, optical, kvm, xbuilder],
+	G = [wheel, audio, video, floppy, cdrom, optical, kvm, xbuilder],
 	os_shell_lines('cat /etc/group', GL),
 	maplist(split_grp, GL, GL1),
 	maplist(grp_on_off(G), GL1, GL2),
@@ -1480,13 +1652,23 @@ menu_lvm :-
 	tui_form_v(20, 100, [
 		item('Volume Group:', VG),
 		item('Logic Volume:', LV)
-		], FORMLABEL, [title(' LVM settings ')], [VG1, LV1|_]),
+	], FORMLABEL, [title(' LVM settings ')], [VG1, LV1|_]),
 	retractall(inst_setting(lvm, _)),
 	assertz(inst_setting(lvm, lv(VG1, LV1, SZ))),
 	true.
 
+menu_luks :-
+	inst_setting(luks, luks(Name)),
+	dialog_msg(form, FORMLABEL),
+	tui_form_v(20, 100, [
+		item('Name:', Name)
+	], FORMLABEL, [title(' LUKS settings ')], [NName|_]),
+	retractall(inst_setting(luks, _)),
+	assertz(inst_setting(luks, luks(NName))),
+	true.
+
 part2menu_tag(PIL, PA, [P, FSS]) :-
-	memberchk(part_info(_D, P, PA, _FS, FSS), PIL),
+	memberchk(part_info(_D, P, PA, _FS, FSS, _Type), PIL),
 	true.
 
 menu_filesystem :-
@@ -1513,7 +1695,8 @@ menu_fs_short(P) :-
 	make_tmp_part_rec(P),
 	repeat,
 	inst_setting_tmp(partition, part(_, P, _Dev, _, Type, Label, MP, F, _SZ)),
-	( F = create -> FV = yes
+	( F = create ->
+	  FV = yes
 	; FV = no
 	),
 	ML1 = [
@@ -1602,9 +1785,10 @@ bootloader_info(grub2, [
 		% , zfs
 	], [
 		  manual
-		, efi_basic
-		, efi_lvm
-		% , efi_zfsbootmenu
+		, gpt_basic
+		, gpt_lvm
+		, gpt_luks1
+		% , gpt_zfsbootmenu
 	]).
 bootloader_info(rEFInd, [
 		  btrfs
@@ -1614,7 +1798,7 @@ bootloader_info(rEFInd, [
 		, vfat
 	], [
 		  manual
-		, efi_basic
+		, gpt_basic
 	]).
 bootloader_info(limine, [
 		  ext2
@@ -1623,12 +1807,12 @@ bootloader_info(limine, [
 		, vfat
 	], [
 		  manual
-		, efi_basic
+		, gpt_basic
 	]).
 bootloader_info(zfsBootMenu, [
 		  zfs
 	], [
-		  efi_zfsbootmenu
+		  gpt_zfsbootmenu
 	]).
 
 % OFS - old file system
@@ -1669,19 +1853,6 @@ menu_root_fs(B, TN, NFS) :-
 	assertz(inst_setting(root_fs, NFS)),
 	true.
 
-% DO NOT delete
-% Use portray_clause.
-% setting_value(partition, V1) :- !,
-% 	findall(N, inst_setting(partition, part(_, N, _, _, _, _, _, _, _)), VL),
-% 	open_output_codes_stream(ST),
-% 	portray_clause(ST, VL),
-% 	close_output_atom_stream(ST, V1).
-% setting_value(S, V1) :-
-% 	inst_setting(S, V), !,
-% 	open_output_codes_stream(ST),
-% 	portray_clause(ST, V),
-% 	close_output_atom_stream(ST, V1).
-
 setting_value(partition, V1) :- !,
 	findall(N, inst_setting(partition, part(_, N, _, _, _, _, _, _, _)), VL),
 	write_to_atom(V1, VL).
@@ -1690,9 +1861,15 @@ setting_value(root_passwd, '********') :-
 setting_value(user_passwd, '********') :-
 	inst_setting(useraccount, user(UN, _, _)),
 	inst_setting_tmp(passwd(UN), _), !.
+setting_value(luks_passwd, '********') :-
+	inst_setting_tmp(passwd('$_luks_$'), _), !.
 setting_value(lvm_info, V1) :- !,
 	inst_setting(lvm, lv(VG, LV, _SZ)),
 	format_to_atom(V1, 'VG: ~w, LV: ~w', [VG, LV]).
+setting_value(luks_info, N) :- !,
+	inst_setting(luks, luks(N)).
+setting_value(bootloader_dev, D) :- !,
+	inst_setting(bootloader_dev, dev(D, _, _)).
 setting_value(S, V1) :-
 	inst_setting(S, V), !,
 	write_to_atom(V1, V).
@@ -1705,10 +1882,14 @@ setting_value_str(S, V) :-
 setting_value_list(S, [S, V]) :-
 	setting_value(S, V).
 
-menu_show :-
-	( inst_setting(template, efi_lvm) ->
+menu_review :-
+	( inst_setting(template, gpt_lvm) ->
 	  S0 = [lvm_info]
 	; S0 = []
+	),
+	( inst_setting(template, gpt_luks1) ->
+	  S1 = [luks_info, luks_passwd|S0]
+	; S1 = S0
 	),
 	S = [
 		  partition
@@ -1724,7 +1905,7 @@ menu_show :-
 		, root_passwd
 		, useraccount
 		, user_passwd
-		| S0
+		| S1
 	],
 	% maplist(setting_value_list, S, SL),
 	maplist(menu_tag_v, S, SL),
@@ -1741,17 +1922,18 @@ switch_template(OT, NT, B) :-
 on_enable(template(manual), _B) :- !,
 	assertz(inst_setting(template, manual)),
 	% dev-time settings.
-	% assertz(inst_setting(bootloader_dev, '/dev/sda')),
+	% set_bootloader_dev('/dev/sda'),
 	% assertz(inst_setting(partition, part('/dev/sda', sda1, '/dev/sda1', efi_system, vfat, efi, '/boot/efi', create, _))),
 	% assertz(inst_setting(partition, part('/dev/sda', sda2, '/dev/sda2', swap, swap, swap, '', create, _))),
 	% assertz(inst_setting(partition, part('/dev/sda', sda3, '/dev/sda3', linux, ext4, void, '/', create, _))),
 	true.
-on_enable(template(efi_basic), B) :- !,
-	assertz(inst_setting(template, efi_basic)),
+on_enable(template(gpt_basic), B) :- !,
+	TT = gpt_basic,
+	assertz(inst_setting(template, TT)),
 	menu_dev_light(' Select the disk to partition ', D),
-	assertz(inst_setting(bootloader_dev, D)),
+	set_bootloader_dev(D),
 
-	menu_root_fs(B, efi_basic, FS),
+	menu_root_fs(B, TT, FS),
 
 	% pi(PartType, FileSystem, Label, MountPoint, create/keep, size)
 	( FS = zfs ->
@@ -1801,12 +1983,13 @@ on_enable(template(efi_basic), B) :- !,
 	% os_shell2([zfs, create, '-o', 'mountpoint=/var/tmp', 'zroot/var-tmp']),
 
 	true.
-on_enable(template(efi_lvm), B) :- !,
-	assertz(inst_setting(template, efi_lvm)),
+on_enable(template(gpt_lvm), B) :- !,
+	TT = gpt_lvm,
+	assertz(inst_setting(template, TT)),
 	menu_dev_light(' Select the disk to partition ', D),
-	assertz(inst_setting(bootloader_dev, D)),
+	set_bootloader_dev(D),
 
-	menu_root_fs(B, efi_lvm, _FS),
+	menu_root_fs(B, TT, _FS),
 
 	% pi(PartType, FileSystem, Label, MountPoint, create/keep, size)
 	BPL1 = [pi(efi_system, vfat, efi, '/boot/efi', create, '550M'), pi(linux, lvm, void, '/', create, '')],
@@ -1817,8 +2000,25 @@ on_enable(template(efi_lvm), B) :- !,
 	part_template(D, BPL2),
 
 	true.
-on_enable(template(efi_zfsbootmenu), _B) :- !,
-	assertz(inst_setting(template, efi_zfsbootmenu)),
+on_enable(template(gpt_luks1), B) :- !,
+	TT = gpt_luks1,
+	assertz(inst_setting(template, TT)),
+	menu_dev_light(' Select the disk to partition ', D),
+	set_bootloader_dev(D),
+
+	menu_root_fs(B, TT, _FS),
+
+	% pi(PartType, FileSystem, Label, MountPoint, create/keep, size)
+	BPL1 = [pi(efi_system, vfat, efi, '/boot/efi', create, '550M'), pi(linux, luks1, void, '/', create, '')],
+	( inst_setting(system(efi), _) ->
+	  BPL2 = BPL1
+	; BPL2 = [pi(bios_boot, '', 'BIOS boot', '', keep, '2M')|BPL1]
+	),
+	part_template(D, BPL2),
+
+	true.
+on_enable(template(gpt_zfsbootmenu), _B) :- !,
+	assertz(inst_setting(template, gpt_zfsbootmenu)),
 	tui_msgbox2([not, implemented, yet], []),
 	true.
 on_enable(template(TMPL), _B) :- !,
@@ -1831,20 +2031,25 @@ on_disable(template(manual)) :- !,
 	% There is no need to delete these settings.
 	retractall(inst_setting(bootloader_dev, _)),
 	true.
-on_disable(template(efi_basic)) :- !,
-	retractall(inst_setting(template, efi_basic)),
+on_disable(template(gpt_basic)) :- !,
+	retractall(inst_setting(template, gpt_basic)),
 	retractall(inst_setting(partition, _)),
 	retractall(inst_setting(btrfs, _)),
 	retractall(inst_setting(zfs, _)),
 	retractall(inst_setting(bootloader_dev, _)),
 	true.
-on_disable(template(efi_lvm)) :- !,
-	retractall(inst_setting(template, efi_lvm)),
+on_disable(template(gpt_lvm)) :- !,
+	retractall(inst_setting(template, gpt_lvm)),
 	retractall(inst_setting(partition, _)),
 	retractall(inst_setting(bootloader_dev, _)),
 	true.
-on_disable(template(efi_zfsbootmenu)) :- !,
-	retractall(inst_setting(template, efi_zfsbootmenu)),
+on_disable(template(gpt_luks1)) :- !,
+	retractall(inst_setting(template, gpt_luks1)),
+	retractall(inst_setting(partition, _)),
+	retractall(inst_setting(bootloader_dev, _)),
+	true.
+on_disable(template(gpt_zfsbootmenu)) :- !,
+	retractall(inst_setting(template, gpt_zfsbootmenu)),
 	true.
 on_disable(template(_)) :- !,
 	true.
@@ -1867,9 +2072,10 @@ part_template_([], _, _, _, _).
 
 % template_info(name, descr, except_fs).
 template_info(manual, 'Manual configuration of everything', []).
-template_info(efi_basic, 'EFI. One device', [swap, vfat]).
-template_info(efi_lvm, 'EFI. LVM. One device', [swap, btrfs, vfat]).
-template_info(efi_zfsbootmenu, 'EFI. ZFS. One device', []).
+template_info(gpt_basic, 'GPT. One device', [swap, vfat]).
+template_info(gpt_lvm, 'GPT. LVM. One device', [swap, btrfs, vfat]).
+template_info(gpt_luks1, 'GPT. LUKS1. One device', [swap, btrfs, vfat]).
+template_info(gpt_zfsbootmenu, 'GPT. ZFS. One device', []).
 
 template_to_menu(T, [T, Descr]) :-
 	template_info(T, Descr, _),
@@ -1917,7 +2123,7 @@ test_network(_) :-
 	os_rm_f(otime),
 	os_shell('xbps-uhelper fetch https://repo-default.voidlinux.org/current/otime 1>/dev/null 2>&1'),
 	% os_shell('xbps-uhelper fetch https://repo-default.voidlinux.org/current/otime 2>&1'),
-	% tui_progressbox(['xbps-uhelper', fetch, 'https://repo-default.voidlinux.org/current/otime', '2>&1'], '', [title(' Test Network Connection '), sz([6, 80])]),
+	% tui_progressbox_safe(['xbps-uhelper', fetch, 'https://repo-default.voidlinux.org/current/otime', '2>&1'], '', [title(' Test Network Connection '), sz([6, 80])]),
 	tui_msgbox('Network is working properly!', [sz([6, 40])]),
 	!.
 test_network(nm) :-
@@ -2094,6 +2300,12 @@ ensure_passwd :-
 	\+ inst_setting_tmp(passwd(U), _),
 	menu_password(U),
 	fail.
+ensure_passwd :-
+	inst_setting(template, gpt_luks1),
+	U = '$_luks_$',
+	\+ inst_setting_tmp(passwd(U), _),
+	menu_password(U),
+	fail.
 ensure_passwd.
 
 ensure_setting(passwd) :- !,
@@ -2104,7 +2316,7 @@ ensure_setting(S) :-
 	cmd_menu(S).
 
 menu_common :-
-	( inst_setting(template, efi_lvm) ->
+	( inst_setting(template, gpt_lvm) ->
 	  M0 = [lvm_info]
 	; M0 = []
 	),
@@ -2112,6 +2324,10 @@ menu_common :-
 	  % M1 = [btrfs_opt|M0]
 	  M1 = M0
 	; M1 = M0
+	),
+	( inst_setting(template, gpt_luks1) ->
+	  M2 = [luks_info, luks_passwd|M1]
+	; M2 = M1
 	),
 	M = [
 		  keymap
@@ -2123,7 +2339,7 @@ menu_common :-
 		, root_passwd
 		, useraccount
 		, user_passwd
-		| M1
+		| M2
 	],
 	dialog_msg(menu, MENULABEL),
 	repeat,
@@ -2133,12 +2349,11 @@ menu_common :-
 	menu_action(A),
 	!.
 
-menu :-
+menu_main :-
 	dialog_msg(menu, MENULABEL),
 	repeat,
 	M = [
-		  show
-		, bootloader
+		  bootloader
 		, template
 		, root_fs
 		, bootloader_dev
@@ -2146,6 +2361,7 @@ menu :-
 		, part_select
 		, filesystem
 		, common_settings
+		, review
 		, install
 	],
 	( inst_setting(template, manual) ->
@@ -2196,11 +2412,17 @@ cmd_menu(user_passwd) :- !,
 	inst_setting(useraccount, user(UL, _UN, _UGL)),
 	menu_password(UL),
 	true.
+cmd_menu(luks_passwd) :- !,
+	menu_password('$_luks_$'),
+	true.
 cmd_menu(useraccount) :- !,
 	menu_useraccount,
 	true.
 cmd_menu(lvm_info) :- !,
 	menu_lvm,
+	true.
+cmd_menu(luks_info) :- !,
+	menu_luks,
 	true.
 cmd_menu(bootloader) :- !,
 	menu_bootloader,
@@ -2217,8 +2439,8 @@ cmd_menu(part_select) :- !,
 cmd_menu(filesystem) :- !,
 	menu_filesystem,
 	true.
-cmd_menu(show) :- !,
-	menu_show,
+cmd_menu(review) :- !,
+	menu_review,
 	true.
 cmd_menu(save) :- !,
 	menu_save,
@@ -2262,7 +2484,7 @@ run_install :-
 	make_fstab(RD),
 
 	% tui_msgbox('set_keymap', []),
-    % set up keymap, locale, timezone, hostname, root passwd and user account.
+	% set up keymap, locale, timezone, hostname, root passwd and user account.
 	set_keymap(RD),
 
 	% tui_msgbox('set_locale', []),
@@ -2281,34 +2503,31 @@ run_install :-
 	set_useraccount(RD),
 
 	% tui_msgbox('cp /mnt/etc/skel/.[bix]* /mnt/root', []),
-    % Copy /etc/skel files for root.
+	% Copy /etc/skel files for root.
 	os_shell2([cp, RD + '/etc/skel/.[bix]*', RD + '/root']),
 
 	% tui_msgbox('set_network', []),
-    % set network
-    set_network(RD),
+	% set network
+	set_network(RD),
 
 	% tui_msgbox('set_sudoers', []),
-    % set sudoers
+	% set sudoers
 	set_sudoers,
 
-    % clean up polkit rule - it's only useful in live systems
+	% clean up polkit rule - it's only useful in live systems
 	( IM = local ->
 	  % tui_msgbox('rm -f /mnt/etc/polkit-1/rules.d/void-live.rules', []),
 	  os_rm_f(RD + '/etc/polkit-1/rules.d/void-live.rules')
 	; true
 	),
 
-    % enable text console for grub if chosen
-    % set_grub_text_console(RD),
-
 	% tui_msgbox('set_bootloader', []),
-    % install bootloader.
-    set_bootloader(RD),
+	% install bootloader.
+	set_bootloader(RD),
 
 	% tui_msgbox('umount_filesystems', []),
-    % unmount all filesystems.
-    umount_filesystems(RD),
+	% unmount all filesystems.
+	umount_filesystems(RD),
 	tui_msgbox('Void Linux has been installed successfully!', [sz([6, 40])]),
 	os_call2([clear]),
 	true.
@@ -2316,7 +2535,7 @@ run_install :-
 do_install :-
 	ux_user_root, !,
 	setup_tui,
-	menu,
+	menu_main,
 	true.
 do_install :-
 	writenl('Installer must run as root.'),
@@ -2355,6 +2574,7 @@ usage :-
 cmd_arg_info(help, 0'h, help, '', 'Show this help and exit.').
 cmd_arg_info(version, 0'v, version, '', 'Show the version and exit.').
 cmd_arg_info(rootdir, 0'r, rootdir, rootdir, 'Use an alternative rootdir. Acts like xbps\'s -r flag. Default is /mnt.').
+cmd_arg_info(config, 0, config, 'file_name', 'Set configuration file. Default is settings.pl.').
 
 % first argument is an alias.
 on_cmd_arg(help, _, _) :- !,
@@ -2371,11 +2591,22 @@ on_cmd_arg(rootdir, LI, T) :- !,
 	retractall(inst_setting(root_dir, _)),
 	assertz(inst_setting(root_dir, RD)),
 	true.
+on_cmd_arg(config, LI, T) :- !,
+	( LI = [CF|T]
+	; writenl('file name expected'),
+	  fail
+	), !,
+	retractall(inst_setting(config_file, _)),
+	assertz(inst_setting(config_file, CF)),
+	true.
 
 main :-
 	argument_list(AL),
 	( handle_cmd_args(AL) ->
-	  (F = 'settings.pl', file_exists(F) -> load_config(F); def_settings),
+	  ( inst_setting(config_file, CF), file_exists(CF) ->
+		load_config(CF)
+	  ; def_settings
+	  ),
 	  do_install,
 	  os_call2([clear])
 	; true

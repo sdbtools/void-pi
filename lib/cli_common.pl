@@ -7,42 +7,56 @@ handle_cmd_args([A|T]) :-
 	handle_cmd_args(T1).
 handle_cmd_args([]).
 
-handle_cmd_arg_short_list([], L, L) :- !.
-handle_cmd_arg_short_list([C|T], LI, LO) :-
+% First argument is a code list.
+handle_cmd_arg_short_cl([], L, L) :- !.
+handle_cmd_arg_short_cl([C|T], LI, LO) :-
 	cmd_arg_info(Alias, C, _, _, _), !,
 	on_cmd_arg(Alias, LI, LO1),
-	handle_cmd_arg_short_list(T, LO1, LO).
-handle_cmd_arg_short_list([C|_], _, _) :- !,
+	handle_cmd_arg_short_cl(T, LO1, LO).
+handle_cmd_arg_short_cl([C|_], _, _) :- !,
 	write('Unknown argument -'),
 	atom_codes(A, [C]),
 	writenl(A),
 	fail.
 
-handle_cmd_arg_long(A, LI, LO) :-
-	cmd_arg_info(Alias, _, A, _, _), !,
-	on_cmd_arg(Alias, LI, LO).
-handle_cmd_arg_long(A, _, _) :-
+% First argument is a code list.
+handle_cmd_arg_long_cl(CL, LI, LO) :-
+	split_list(CL, "=", [H|T1]),
+	atom_codes(A1, H),
+	cmd_arg_info(Alias, _, A1, _, _), !,
+	( T1 = [] ->
+	  on_cmd_arg(Alias, LI, LO)
+	; append(H, [0'=|T2], CL),
+	  atom_codes(V, T2),
+	  on_cmd_arg(Alias, [V|LI], LO)
+	),
+	true.
+handle_cmd_arg_long_cl(CL, _, _) :-
 	write('Unknown argument --'),
+	atom_codes(A, CL),
 	writenl(A),
 	fail.
 
+% First argument is a code list.
 handle_cmd_arg_cl([0'-,0'-|T], LI, LO) :- !,
-	atom_codes(A, T),
-	handle_cmd_arg_long(A, LI, LO),
+	handle_cmd_arg_long_cl(T, LI, LO),
 	true.
 handle_cmd_arg_cl([0'-|T], LI, LO) :-
-	handle_cmd_arg_short_list(T, LI, LO),
+	handle_cmd_arg_short_cl(T, LI, LO),
 	true.
 
 cmd_arg_usage_short(S) :-
 	% arguments without value
 	findall(SA, (cmd_arg_info(_, SA, _, '', _), SA \= 0), AL1),
-	% arguments with value
+	% short arguments with value
 	findall(A, (cmd_arg_info(_, SA, _, V, _), SA \= 0, V \= '', format_to_atom(A, '-~c ~w', [SA, V])), AL2),
+	% long only arguments with value
+	findall(A, (cmd_arg_info(_, 0, LA, V, _), V \= '', format_to_atom(A, '--~w ~w', [LA, V])), AL3),
+	append(AL2, AL3, CL1),
 	( AL1 = [] ->
 	  S = AL2
 	; atom_codes(A1, [0'-|AL1]),
-	  S = [A1|AL2]
+	  S = [A1|CL1]
 	),
 	true.
 
@@ -67,12 +81,13 @@ format_cmd_arg_long1(Max, a0(Line, D), S) :-
 
 format_cmd_arg_long0(a0(Line, D)) :-
 	cmd_arg_info(_, SA, LA, _, D),
-	format_cmd_arg_long0(SA, LA, Line).
+	format_cmd_arg_long0(SA, LA, Line),
+	true.
 
-format_cmd_arg_long0(0, LA, Line) :-
-	format_to_atom(Line, '    --~w', [LA]).
-format_cmd_arg_long0(SA, '', Line) :-
+format_cmd_arg_long0(0, LA, Line) :- !,
+	format_to_atom(Line, '        --~w', [LA]).
+format_cmd_arg_long0(SA, '', Line) :- !,
 	format_to_atom(Line, '    -~c', [SA]).
-format_cmd_arg_long0(SA, LA, Line) :-
+format_cmd_arg_long0(SA, LA, Line) :- !,
 	format_to_atom(Line, '    -~c, --~w', [SA, LA]).
 

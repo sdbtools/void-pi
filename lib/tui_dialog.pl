@@ -186,12 +186,12 @@ tui_timebox(Msg, H, M, S, UA, A) :-
 	tui_box2(timebox, Msg, [Ha, Ma, Sa], UA, OutL),
 	atom_codes(A, OutL).
 
-tui_gauge(PL, M, UA) :-
-	tui_tailbox2(PL, gauge, M, [], UA).
+tui_gauge_safe(PL, M, UA) :-
+	tui_tailbox2_safe(PL, gauge, M, [], UA).
 
 % text + OK
-tui_programbox(PL, M, UA) :-
-	tui_tailbox2(PL, programbox, M, [], UA).
+tui_programbox_safe(PL, M, UA) :-
+	tui_tailbox2_safe(PL, programbox, M, [], UA).
 
 % result of command execution + OK
 % C - command
@@ -204,8 +204,11 @@ tui_prgbox_rc(M, C, UA, RC) :-
 	tui_spawn(prgbox, [M, C], [], UA, RC).
 
 % Autoclose.
-tui_progressbox(PL, M, UA) :-
-	tui_tailbox2(PL, progressbox, M, [], UA).
+tui_progressbox_unsafe(PL, M, UA) :-
+	tui_tailbox2_unsafe(PL, progressbox, M, [], UA).
+
+tui_progressbox_safe(PL, M, UA) :-
+	tui_tailbox2_safe(PL, progressbox, M, [], UA).
 
 % text + Yes + No
 tui_yesno(M, UA) :-
@@ -356,15 +359,29 @@ tui_make_box2_cmdlist(B, M, SO, UA, DL) :-
 	atom_concat('--', B, BA),
 	DL = [dialog, '--stdout', TAL, BA, M1, SZA, SO].
 
-tui_tailbox2(PL, B, M, SO, UA) :-
+tui_tailbox2_unsafe(PL, B, M, SO, UA) :-
 	tui_make_box2_cmdlist(B, M, SO, UA, DL),
 	os_scmdl([PL, '|', DL], AA),
-	% tui_msgbox(AA, []),
 	os_shell(AA).
+
+tui_tailbox2_safe(PL, B, M, SO, UA) :-
+	tui_make_box2_cmdlist(B, M, SO, UA, DL),
+	% os_scmdl([PL, '|', DL], AA),
+	% os_scmdl([set, '-o', pipefail, ';', PL, '|', DL], AA),
+	% os_scmdl([mkfifo, named_pipe, ';', DL, '<', named_pipe, '&', PL, '>', named_pipe], AA),
+	% os_scmdl([mkfifo, named_pipe, ';', DL, '<', named_pipe, '&', PL, '>', named_pipe, ';', 'RC=$?', rm, named_pipe, ';', exit, '$RC'], AA),
+	os_scmdl([bash, '-c', '\'', set, '-o', pipefail, ';', PL, '|', DL, '\''], AA),
+	( os_shell(AA), !
+	; 
+	  tui_msgbox2(PL, [title(' Command has failed: ')]),
+	  % tui_msgbox(AA, [title(' Command has failed: ')]),
+	  fail
+	).
 
 tui_tailbox3(PL, B, M, SO, UA) :-
 	tui_make_box3_cmdlist(B, M, SO, UA, DL),
-	os_scmdl([PL, '|', DL], AA),
+	% os_scmdl([PL, '|', DL], AA),
+	os_scmdl([bash, '-c', '\'', set, '-o', pipefail, ';', PL, '|', DL, '\''], AA),
 	os_shell(AA).
 
 % B - box type

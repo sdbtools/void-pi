@@ -58,10 +58,18 @@ os_shell_codes(C, L) :-
 	),
 	true.
 
+os_shell2_codes(IL, L) :-
+	os_scmdl(IL, C),
+	os_shell_codes(C, L).
+
 % VL - value list.
 os_shell_codes(C, VL, L) :-
 	format_to_atom(CA, C, VL),
 	os_shell_codes(CA, L).
+
+os_shell2_codes(IL, VL, L) :-
+	os_scmdl(IL, C),
+	os_shell_codes(C, VL, L).
 
 % Empty list if there is no output.
 os_shell_codes_rc(C, L, RC) :-
@@ -85,8 +93,16 @@ os_shell_atom(C, A) :-
 	os_shell_codes(C, L),
 	atom_codes(A, L).
 
+os_shell2_atom(IL, A) :-
+	os_shell2_codes(IL, L),
+	atom_codes(A, L).
+
 os_shell_atom(C, VL, A) :-
 	os_shell_codes(C, VL, L),
+	atom_codes(A, L).
+
+os_shell2_atom(IL, VL, A) :-
+	os_shell2_codes(IL, VL, L),
 	atom_codes(A, L).
 
 os_shell_atom_list(C, AL) :-
@@ -195,13 +211,17 @@ os_cmdl([]) -->
 	[].
 
 os_cmd(o(O)) --> { atom_concat('-', O, O1) }, [O1].
-os_cmd(o(O, V)) --> { atom_concat('-', O, O1) }, [O1, V].
+os_cmd(o(O, V)) --> { phrase(os_cmd(V), [V1]), atom_concat('-', O, O1) }, [O1, V1].
 os_cmd(oo(O)) --> { atom_concat('--', O, O1) }, [O1].
-os_cmd(oo(O, V)) --> { format_to_atom(O1, '--~w=~w', [O, V]) }, [O1].
-os_cmd(dq(V)) --> { format_to_atom(QV, '"~w"', [V]) }, [QV].
-os_cmd(concat(V1, V2)) --> { atom_concat(V1, V2, V3) }, [V3].
-os_cmd(V1 + V2) --> { atom_concat(V1, V2, V3) }, [V3].
+os_cmd(oo(O, V)) --> { phrase(os_cmd(V), [V1]), format_to_atom(O1, '--~w=~w', [O, V1]) }, [O1].
+os_cmd(dq(V)) --> { phrase(os_cmd(V), [V1]), format_to_atom(QV, '"~w"', [V1]) }, [QV].
+% value assignment
+os_cmd(v(O, V)) --> { phrase(os_cmd(V), [V1]), format_to_atom(O1, '~w=~w', [O, V1]) }, [O1].
+os_cmd(O = V) --> { phrase(os_cmd(V), [V1]), format_to_atom(O1, '~w=~w', [O, V1]) }, [O1].
+% concat
+os_cmd(concat(V1, V2)) --> { phrase(os_cmd(V1), [V11]), phrase(os_cmd(V2), [V21]), atom_concat(V11, V21, V3) }, [V3].
+os_cmd(V1 + V2) --> { phrase(os_cmd(V1), [V11]), phrase(os_cmd(V2), [V21]), atom_concat(V11, V21, V3) }, [V3].
 
-os_cmd(V) --> { list(V) }, os_cmdl(V).
+os_cmd(V) --> { is_list(V) }, os_cmdl(V).
 os_cmd(V) --> [V].
 

@@ -16,7 +16,7 @@ Last tested | ISO                                                               
 void-pi is a Void Linux installer similar to [void-installer](https://docs.voidlinux.org/installation/live-images/guide.html).
 
 It extends void-installer in several ways:
-- provides predefined templates for [BTRFS](https://en.wikipedia.org/wiki/Btrfs) and [LVM](https://en.wikipedia.org/wiki/Logical_volume_management)
+- provides predefined templates for [BTRFS](https://en.wikipedia.org/wiki/Btrfs), [LVM](https://en.wikipedia.org/wiki/Logical_volume_management), and [LUKS](https://en.wikipedia.org/wiki/Linux_Unified_Key_Setup).
 - supports [rEFInd](https://rodsbooks.com/refind/) and [Limine](https://limine-bootloader.org/) boot managers
 
 void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
@@ -25,16 +25,18 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 
 - completely emulates void-installer.
 - install from Void ISO or network.
-- predefined templates for BTRFS and LVM.
+- predefined templates for BTRFS, LVM, and LUKS.
 - uses GRUB, rEFIind, or Limine as a bootloader.
 - TUI dynamically changes depending on selected template.
 - uses `/mnt` for chroot by default.
-- all settings can be saved in a file and loaded on startup.
+- allows to use an alternative rootdir via `--rootdir` command line argument.
+- all settings can be saved in a file and loaded on startup. File name is controlled via `--config` command line argument.
 - passwords are never saved in files even temporarily.
 - GRUB supports btrfs, ext2, ext3, ext4, and xfs file systems.
 - rEFIind supports btrfs, ext2, ext3, and ext4 file systems.
 - rEFIind is configured to use kernel auto detection.
 - Limine supports ext2, ext3, and ext4 file systems.
+- LUKS can be used with GRUB.
 
 ### Default settings
 
@@ -44,6 +46,7 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - keymap: us
 - locale: en_US.UTF-8
 - timezone: America/New_York
+- LUKS mapping name: cryptroot
 
 ### Filesystem
 
@@ -81,7 +84,7 @@ Subvolume name    | Mounting point    | Mount options
 
 ### Run precompiled executable.
 ```sh
-sudo xbps-install -Suy xbps
+sudo xbps-install -Suy xbps wget
 wget https://github.com/sdbtools/void-pi/releases/latest/download/void-pi.x86_64.tgz
 tar -xzf void-pi.x86_64.tgz
 ./void-pi
@@ -89,7 +92,7 @@ tar -xzf void-pi.x86_64.tgz
 
 ### Run as script.
 ```sh
-sudo xbps-install gprolog
+sudo xbps-install gprolog git
 git clone https://github.com/sdbtools/void-pi.git
 cd void-pi
 ./void-pi.pl
@@ -100,7 +103,7 @@ gprolog --consult-file void-pi.pl
 ### Compile Prolog code locally and run it.
 
 ```sh
-sudo xbps-install gprolog gcc
+sudo xbps-install gprolog gcc git
 git clone https://github.com/sdbtools/void-pi.git
 cd void-pi
 gplc --min-size void-pi.pl
@@ -110,6 +113,7 @@ gplc --min-size void-pi.pl
 
 Name      | Provides                | Included in Void ISO?
 ---       | ---                     | ---
+bash      | `set -o pipefail` | Y
 dialog    | ncurses user input menu | Y
 gptfdisk  | GPT disk partitioning with sgdisk | N
 
