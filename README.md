@@ -26,19 +26,25 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - completely emulates void-installer.
 - install from Void ISO or network.
 - predefined templates for BTRFS, LVM, and LUKS.
-- uses GRUB, rEFIind, or Limine as a bootloader.
 - TUI dynamically changes depending on selected template.
 - uses `/mnt` for chroot by default.
 - allows to use an alternative rootdir via `--rootdir` command line argument.
 - all settings can be saved in a file and loaded on startup. File name is controlled via `--config` command line argument.
 - passwords are never saved in files even temporarily.
-- GRUB supports btrfs, ext2, ext3, ext4, and xfs file systems.
-- rEFIind supports btrfs, ext2, ext3, and ext4 file systems.
-- rEFIind is configured to use kernel auto detection.
-- Limine supports ext2, ext3, and ext4 file systems.
-- LUKS can be used with GRUB.
+- Bootloaders
+    - uses GRUB, rEFIind, or Limine as a bootloader.
+    - GRUB supports btrfs, ext2, ext3, ext4, and xfs file systems.
+    - rEFIind supports btrfs, ext2, ext3, and ext4 file systems.
+    - rEFIind is configured to use kernel auto detection.
+    - Limine supports ext2, ext3, and ext4 file systems.
+    - if a bootloader doesn't support a file system, then installer will create an ext4 `/boot` partition.
+- LUKS
+    - LUKS can be used with GRUB.
+    - whole system on LUKS, including encrypted `/boot`
 
 ### Default settings
+
+All default settings can be changed via `Common Attrs` sub-menu.
 
 - installation source: local
 - host name: voidpp
@@ -47,6 +53,9 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - locale: en_US.UTF-8
 - timezone: America/New_York
 - LUKS mapping name: cryptroot
+- MBR size: 2M
+- ESP size: [550M][550M]
+- Boot partition size: 1G
 
 ### Filesystem
 
@@ -79,6 +88,10 @@ Subvolume name    | Mounting point    | Mount options
 `@var-spool`      | `/var/spool`      | `nodev,noexec,nosuid` + nodatacow
 `@var-tmp`        | `/var/tmp`        | `nodev,noexec,nosuid` + nodatacow
 `@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
+
+#### F2FS options
+
+- `extra_attr,inode_checksum,sb_checksum,compression,encrypt`
 
 ## How to run
 
@@ -116,6 +129,7 @@ Name      | Provides                | Included in Void ISO?
 bash      | `set -o pipefail` | Y
 dialog    | ncurses user input menu | Y
 gptfdisk  | GPT disk partitioning with sgdisk | N
+lz4       | Extremely Fast Compression algorithm | N
 
 ## Licensing
 

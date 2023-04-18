@@ -203,6 +203,10 @@ os_scmdl(IL, A) :-
 	os_ccmdl(IL, OL),
 	join_atoms(OL, ' ', A), !.
 
+os_wcmdl(IL, S) :-
+	os_ccmdl(IL, OL),
+	write_atoms(OL, ' ', S), !.
+
 % !!! Do not use os_cmdl directly!
 os_cmdl([H|T]) -->
 	os_cmd(H),

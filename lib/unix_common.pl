@@ -5,12 +5,16 @@ ux_user_root :-
 	os_shell_number('id -u', 0).
 
 % sgdisk -L
+% sfdisk --list-types
 part_typecode(bios_boot, 'EF02').
 part_typecode(efi_system, 'EF00').
 part_typecode(solaris_root, 'BF00').
 part_typecode(solaris_boot, 'BF01').
-part_typecode(linux, '8300').
 part_typecode(swap, '8200').
+part_typecode(linux, '8300').
+part_typecode(linux_luks, '8309').
+part_typecode(linux_lvm, '8e00').
+part_typecode(linux_raid, 'fd00').
 
 fs_info(btrfs, 'Oracle\'s Btrfs').
 fs_info(ext2, 'Linux ext2 (no journaling)').

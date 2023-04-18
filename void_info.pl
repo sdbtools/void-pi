@@ -1,6 +1,16 @@
 % vi: noexpandtab:tabstop=4:ft=prolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
+version :-
+	writenl('version 0.4').
+
+source_dep_module('void-live', filesystem(zfs), [zfs, lz4]).
+source_dep_module('void-live', filesystem(f2fs), [lz4]).
+source_dep_module('void-live', template(_), [gptfdisk]).
+source_dep_module('void-live', template(gpt_luks1), [lz4]).
+source_dep_module('void-live', template(gpt_raid), [mdadm]).
+source_dep_module('void-live', inst_method(rootfs), [xz]).
+
 % Directory to store installation key files and detached headers
 config_dir(instkey, '/boot').
 % Directory to store boot key files and detached headers
