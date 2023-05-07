@@ -42,6 +42,14 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
     - LUKS can be used with GRUB.
     - whole system on LUKS, including encrypted `/boot`
 
+### Templates
+
+- Manual configuration of everything
+- GPT. One device 
+- GPT. LVM. One device
+- GPT. LUKS1. One device
+- GPT. LUKS1. LVM. One device
+
 ### Default settings
 
 All default settings can be changed via `Common Attrs` sub-menu.
@@ -126,7 +134,6 @@ gplc --min-size void-pi.pl
 
 Name      | Provides                | Included in Void ISO?
 ---       | ---                     | ---
-bash      | `set -o pipefail` | Y
 dialog    | ncurses user input menu | Y
 gptfdisk  | GPT disk partitioning with sgdisk | N
 lz4       | Extremely Fast Compression algorithm | N

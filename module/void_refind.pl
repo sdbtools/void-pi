@@ -3,9 +3,9 @@
 
 refind_install(BD, RD) :-
 	% BD is the disk (not a partition)
-	% part(Dev, Part, PartDev, PartType, FileSystem, Label, MountPoint, create/keep, size)
-	( inst_setting(partition, part(BD, _P, EFI_PD, efi_system, _FS, _Label, _MP, _CK, _SZ))
-	; tui_msgbox('efi system partition was not found', []),
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	( inst_setting(partition, part4(bd1([EFI_PD| BD]), efi_system, _CK, _SZ))
+	; tui_msgbox('efi system partition was not found'),
 	  fail
 	), !,
 	CL1 = [chroot, RD, 'refind-install', oo(usedefault), EFI_PD, '2>&1'],
@@ -14,15 +14,8 @@ refind_install(BD, RD) :-
 	true.
 
 refind_configure(BD, RD) :-
-	( inst_setting(partition, part(BD, _P1, ROOT_PD, _PT1, _FS1, _Label1, '/', _CK1, _SZ1))
-	; tui_msgbox('root partition was not found', []),
-	  fail
-	), !,
-
-	( inst_setting(partition, part(BD, _P2, _ROOT_PD2, _PT2, _FS2, _Label2, '/boot', _CK2, _SZ2)) ->
-	  Pref = ''
-	; Pref = 'boot\\'
-	),
+	root_pd(BD, ROOT_PD),
+	boot_pref(BD, Pref),
 	(
 	  lx_get_dev_partuuid(ROOT_PD, RPID),
 	  atom_concat(RD, '/boot/refind_linux.conf', FN),

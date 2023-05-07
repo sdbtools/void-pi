@@ -78,6 +78,11 @@ tui_checklist_tag(L, M, UA, AL) :-
 	split_list_ne(OutL, " ", CL),
 	maplist(codes_atom, CL, AL).
 
+% DI - default item.
+tui_checklist_tag2(L, DI, M, UA, AL) :-
+	maplist(tui_checklist_on_off(DI), L, L1),
+	tui_checklist_tag(L1, M, [default-item(DI)|UA], AL).
+
 tui_radiolist_ind(L, M, UA, N) :-
 	tui_list3_ind(radiolist, L, M, UA, OutL),
 	number_codes(N, OutL).
@@ -86,7 +91,7 @@ tui_radiolist_tag(L, M, UA, A) :-
 	tui_list3_tag(radiolist, L, M, UA, OutL),
 	atom_codes(A, OutL).
 
-% SI - default item.
+% DI - default item.
 tui_radiolist_tag2(L, DI, M, UA, A) :-
 	maplist(tui_radiolist_on_off(DI), L, L1),
 	tui_radiolist_tag(L1, M, [default-item(DI)|UA], A).
@@ -193,6 +198,9 @@ tui_gauge_safe(PL, M, UA) :-
 tui_programbox_safe(PL, M, UA) :-
 	tui_tailbox2_safe(PL, programbox, M, [], UA).
 
+tui_programbox_atom(A, M, UA) :-
+	tui_tailbox2_atom(A, programbox, M, [], UA).
+
 % result of command execution + OK
 % C - command
 % M - message
@@ -222,8 +230,14 @@ tui_pause(M, N, UA) :-
 	RC == 0.
 
 % text + OK
+tui_msgbox(M) :-
+	tui_msgbox(M, []).
+
 tui_msgbox(M, UA) :-
 	tui_spawn(msgbox, M, [], UA, _).
+
+tui_msgbox2(M) :-
+	tui_msgbox2(M, []).
 
 tui_msgbox2(ML, UA) :-
 	os_scmdl(ML, AL),
@@ -366,17 +380,18 @@ tui_tailbox2_unsafe(PL, B, M, SO, UA) :-
 
 tui_tailbox2_safe(PL, B, M, SO, UA) :-
 	tui_make_box2_cmdlist(B, M, SO, UA, DL),
-	% os_scmdl([PL, '|', DL], AA),
-	% os_scmdl([set, '-o', pipefail, ';', PL, '|', DL], AA),
-	% os_scmdl([mkfifo, named_pipe, ';', DL, '<', named_pipe, '&', PL, '>', named_pipe], AA),
-	% os_scmdl([mkfifo, named_pipe, ';', DL, '<', named_pipe, '&', PL, '>', named_pipe, ';', 'RC=$?', rm, named_pipe, ';', exit, '$RC'], AA),
-	os_scmdl([bash, '-c', '\'', set, '-o', pipefail, ';', PL, '|', DL, '\''], AA),
-	( os_shell(AA), !
-	; 
-	  tui_msgbox2(PL, [title(' Command has failed: ')]),
-	  % tui_msgbox(AA, [title(' Command has failed: ')]),
+	os_shell2_pipe_rc(PL, DL, OA, RC),
+	( RC = 0, !
+	; os_scmdl(PL, PLA),
+	  format_to_atom(A, '~w\n\n~w', [PLA, OA]),
+	  tui_msgbox(A, [title(' Command has failed ')]),
+	  % tui_programbox_atom(OA, PLA, [title(' Command has failed '), sz(max)]),
 	  fail
 	).
+
+tui_tailbox2_atom(A, B, M, SO, UA) :-
+	tui_make_box2_cmdlist(B, M, SO, UA, DL),
+	os_shell2_atom_pipe(A, DL).
 
 tui_tailbox3(PL, B, M, SO, UA) :-
 	tui_make_box3_cmdlist(B, M, SO, UA, DL),

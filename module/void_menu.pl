@@ -36,21 +36,9 @@ action_info(mbr_size, 'MBR Size', 'Set MBR Size').
 action_info(esp_size, 'ESP Size', 'Set EFI System Partition Size').
 action_info(boot_size, 'Boot Size', 'Set Boot Partition Size').
 
-% DO NOT delete
-% Use portray_clause.
-% setting_value(partition, V1) :- !,
-% 	findall(N, inst_setting(partition, part(_, N, _, _, _, _, _, _, _)), VL),
-% 	open_output_codes_stream(ST),
-% 	portray_clause(ST, VL),
-% 	close_output_atom_stream(ST, V1).
-% setting_value(S, V1) :-
-% 	inst_setting(S, V), !,
-% 	open_output_codes_stream(ST),
-% 	portray_clause(ST, V),
-% 	close_output_atom_stream(ST, V1).
-
 setting_value(partition, V1) :- !,
-	findall(N, inst_setting(partition, part(_, N, _, _, _, _, _, _, _)), VL),
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	findall(PD, inst_setting(partition, part4(bd1([PD| _]), _, _, _)), VL),
 	write_to_atom(V1, VL).
 setting_value(root_passwd, '********') :-
 	inst_setting_tmp(passwd(root), _), !.
@@ -131,16 +119,16 @@ menu_part_manually :-
 	true.
 
 menu_part_select :-
-	% ONL - list of already configured partitions.
-	findall(PN, inst_setting(partition, part(_, PN, _, _, _, _, _, _, _SZ)), ONL),
+	% OPL - list of already configured partitions.
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	findall(PD, inst_setting(partition, part4(bd1([PD| _]), _, _, _)), OPL),
 	lx_list_part_info(PIL),
 	PIL \= [], !,
 	maplist(part2taglist, PIL, ML1),
-	maplist(tui_checklist_on_off(ONL), ML1, ML2),
 	MT1 = ' Select partition(s) to use ',
 	dialog_msg(menu, MENULABEL),
-	tui_checklist_tag(ML2, MENULABEL, [title(MT1)], PLO),
-	update_part_info(ONL, PLO),
+	tui_checklist_tag2(ML1, OPL, MENULABEL, [title(MT1)], PLO),
+	update_part_info(OPL, PLO),
 	!.
 menu_part_select :-
 	tui_msgbox('There are no partitions available.', [sz([6, 40])]),
@@ -232,7 +220,7 @@ menu_dev_light(Title, NAME) :-
 	), !.
 
 menu_btrfs :-
-	tui_msgbox2([not, implemented, yet], []),
+	tui_msgbox2([not, implemented, yet]),
 	true.
 
 menu_bootloader :-
@@ -325,15 +313,16 @@ menu_luks :-
 	assertz(inst_setting(luks, luks(NName))),
 	true.
 
-part2menu_tag(PIL, PA, [P, FSS]) :-
-	memberchk(part_info(_D, P, PA, _FS, FSS, _Type), PIL),
+part2menu_tag(PIL, PD, [PD, FSS]) :-
+	memberchk(part_info(bd1([PD| _]), _FS, FSS, _Type), PIL),
 	true.
 
 menu_filesystem :-
 	% do not try to edit swap partition.
-	findall(PD, (inst_setting(partition, part(_D, _P, PD, PT, _FD, _Label, _MP, _F, _SZ)), PT \= swap), PL0),
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	findall(PD, (inst_setting(partition, part4(bd1([PD| _]), PT, _F, _SZ)), PT \= swap), PL0),
 	( PL0 = [] ->
-	  tui_msgbox('No partitions was selected.', []),
+	  tui_msgbox('No partitions was selected.'),
 	  fail
 	; sort(PL0, PL1)
 	),
@@ -342,32 +331,35 @@ menu_filesystem :-
 	MT1 = ' Select the partition to edit ',
 	dialog_msg(menu, MENULABEL),
 	repeat,
-	tui_menu_tag2(edit_fs_short, ML1, MENULABEL, [cancel-label('Done'), title(MT1)], P),
-	menu_fs_short(P),
+	tui_menu_tag2(edit_fs_short, ML1, MENULABEL, [cancel-label('Done'), title(MT1)], PD),
+	menu_fs_short(PD),
 	!.
 
 menu_fs_short(cancel) :- !,
 	true.
-menu_fs_short(P) :-
+menu_fs_short(PD) :-
 	dialog_msg(menu, MENULABEL),
-	make_tmp_part_rec(P),
+	make_tmp_part_rec(PD),
 	repeat,
-	inst_setting_tmp(partition, part(_, P, _Dev, _, Type, Label, MP, F, _SZ)),
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	inst_setting_tmp(partition, part4(bd1([PD| _]), _, F, _SZ)),
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	inst_setting_tmp(fs, fs4(FS, Label, MP, bd1([PD| _]))),
 	( F = create ->
 	  FV = yes
 	; FV = no
 	),
 	ML1 = [
 		[label, Label],
-		[type, Type],
+		[type, FS],
 		[mount_point, MP],
 		[create, FV]
 	],
 	maplist(make_menu_fs_short, ML1, ML2),
-	format_to_atom(TA, ' Set ~w filesystem parameters ', [P]),
+	format_to_atom(TA, ' Set ~w filesystem parameters ', [PD]),
 	tui_menu_tag2(file_system, ML2, MENULABEL, [extra-button, extra-label('Accept'), ok-label('Edit'), title(TA)], Tag),
 	menu_fs_info(CMD, Tag),
-	menu_fs_action(CMD, P), !,
+	menu_fs_action(CMD, PD), !,
 	fail.
 
 make_menu_fs_short([T, V], [N, V]) :-
@@ -383,47 +375,62 @@ menu_fs_info(exit, cancel) :- !.
 
 menu_fs_action(exit, _) :- !,
 	true.
-menu_fs_action(save, P) :-
-	make_perm_part_rec(P), !,
-	tui_msgbox('Settings are saved.', []),
+menu_fs_action(save, PD) :-
+	make_perm_part_rec(PD), !,
+	tui_msgbox('Settings are saved.'),
 	true.
-menu_fs_action(label, P) :- !,
-	inst_setting_tmp(partition, part(D, P, PD, PT, Type, Label, MP, F, SZ)), !,
+menu_fs_action(label, PD) :- !,
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	inst_setting_tmp(fs, fs4(FS, Label, MP, bd1([PD| T]))), !,
 	tui_inputbox('', Label, [title('Label')], A),
-	retractall(inst_setting_tmp(partition, part(_, P, _, _, _, _, _, _, _SZ))),
-	assertz(inst_setting_tmp(partition, part(D, P, PD, PT, Type, A, MP, F, SZ))),
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	retractall(inst_setting_tmp(fs, fs4(_, _, _, bd1([PD| _])))),
+	assertz(inst_setting_tmp(fs, fs4(FS, A, MP, bd1([PD| T])))),
 	fail.
-menu_fs_action(type, P) :- !,
-	inst_setting_tmp(partition, part(D, P, PD, PT, OFS, Label, MP, F, SZ)), !,
+menu_fs_action(type, PD) :- !,
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	inst_setting_tmp(fs, fs4(OFS, Label, MP, bd1([PD| T]))), !,
 	menu_select_fs(OFS, NFS),
-	retractall(inst_setting_tmp(partition, part(_, P, _, _, _, _, _, _, _SZ))),
-	assertz(inst_setting_tmp(partition, part(D, P, PD, PT, NFS, Label, MP, F, SZ))),
+	retractall(inst_setting_tmp(fs, fs4(_, _, _, bd1([PD| _])))),
+	assertz(inst_setting_tmp(fs, fs4(NFS, Label, MP, bd1([PD| T])))),
 	fail.
-menu_fs_action(mount_point, P) :- !,
-	inst_setting_tmp(partition, part(D, P, PD, PT, Type, Label, MP, F, SZ)), !,
+menu_fs_action(mount_point, PD) :- !,
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	inst_setting_tmp(fs, fs4(FS, Label, MP, bd1([PD| T]))), !,
 	tui_inputbox('', MP, [title('Mount Point')], A),
-	retractall(inst_setting_tmp(partition, part(_, P, _, _, _, _, _, _, _SZ))),
-	assertz(inst_setting_tmp(partition, part(D, P, PD, PT, Type, Label, A, F, SZ))),
+	retractall(inst_setting_tmp(fs, fs4( _, _, _, bd1([PD| _])))),
+	assertz(inst_setting_tmp(fs, fs4(FS, Label, A, bd1([PD| T])))),
 	fail.
-menu_fs_action(create, P) :-
-	inst_setting_tmp(partition, part(D, P, PD, PT, Type, Label, MP, _F, SZ)), !,
+menu_fs_action(create, PD) :-
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	inst_setting_tmp(partition, part4(bd1([PD| T]), PT, _F, SZ)), !,
 	( tui_yesno('Create file system?', [sz([6, 40])]) -> FV = create
 	; FV = keep
 	),
-	retractall(inst_setting_tmp(partition, part(_, P, _, _, _, _, _, _, _SZ))),
-	assertz(inst_setting_tmp(partition, part(D, P, PD, PT, Type, Label, MP, FV, SZ))),
+	retractall(inst_setting_tmp(partition, part4(bd1([PD| _]), _, _, _SZ))),
+	assertz(inst_setting_tmp(partition, part4(bd1([PD| T]), PT, FV, SZ))),
 	fail.
 
-make_tmp_part_rec(P) :-
-	inst_setting(partition, part(D, P, PD, PT, Type, Label, MP, F, SZ)),
-	retractall(inst_setting_tmp(partition, part(_, P, _, _, _, _, _, _, _SZ))),
-	assertz(inst_setting_tmp(partition, part(D, P, PD, PT, Type, Label, MP, F, SZ))),
+make_tmp_part_rec(PD) :-
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	inst_setting(partition, part4(bd1([PD| T]), PT, F, SZ)),
+	retractall(inst_setting_tmp(partition, part4(bd1([PD| _]), _, _, _SZ))),
+	assertz(inst_setting_tmp(partition, part4(bd1([PD| T]), PT, F, SZ))),
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	inst_setting(fs, fs4(FS, Label, MP, bd1([PD| T]))),
+	retractall(inst_setting_tmp(fs, fs4( _, _, _, bd1([PD| _])))),
+	assertz(inst_setting_tmp(fs, fs4(FS, Label, MP, bd1([PD| T])))),
 	true.
 
-make_perm_part_rec(P) :-
-	inst_setting_tmp(partition, part(D, P, PD, PT, Type, Label, MP, F, SZ)), !,
-	retractall(inst_setting(partition, part(_, P, _, _, _, _, _, _, _SZ))),
-	assertz(inst_setting(partition, part(D, P, PD, PT, Type, Label, MP, F, SZ))),
+make_perm_part_rec(PD) :-
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	inst_setting_tmp(partition, part4(bd1([PD| T]), PT, F, SZ)), !,
+	retractall(inst_setting(partition, part4(bd1([PD| _]), _, _, _SZ))),
+	assertz(inst_setting(partition, part4(bd1([PD| T]), PT, F, SZ))),
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	inst_setting_tmp(fs, fs4(FS, Label, MP, bd1([PD| T]))),
+	retractall(inst_setting(fs, fs4( _, _, _, bd1([PD| _])))),
+	assertz(inst_setting(fs, fs4(FS, Label, MP, bd1([PD| T])))),
 	true.
 
 fs_type_to_menu(FST, [FST, Descr]) :-
@@ -506,6 +513,8 @@ menu_review_opt([lvm_info]) :-
 	inst_setting(template, gpt_lvm).
 menu_review_opt([luks_info, luks_passwd]) :-
 	inst_setting(template, gpt_luks1).
+menu_review_opt([lvm_info, luks_info, luks_passwd]) :-
+	inst_setting(template, gpt_luks1_lvm).
 
 menu_review :-
 	findall(S0, (menu_review_opt(SL0), member(S0, SL0)), S),
@@ -523,6 +532,10 @@ menu_template(B) :-
 	  tui_radiolist_tag2(TL, OT, RADIOLABEL, [no-tags, title(' Choose configuration ')], NT)
 	),
 	switch_template(OT, NT, B),
+	true.
+
+template_to_menu(T, [T, Descr]) :-
+	template_info(T, Descr, _),
 	true.
 
 menu_save :-
@@ -588,6 +601,8 @@ menu_common_opt([lvm_info]) :-
 	inst_setting(template, gpt_lvm).
 menu_common_opt([luks_info, luks_passwd]) :-
 	inst_setting(template, gpt_luks1).
+menu_common_opt([lvm_info, luks_info, luks_passwd]) :-
+	inst_setting(template, gpt_luks1_lvm).
 
 menu_common :-
 	findall(M0, (menu_common_opt(ML0), member(M0, ML0)), M),

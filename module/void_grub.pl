@@ -41,10 +41,7 @@ grub_configure(BD, RD) :-
 		, v('GRUB_DISTRIBUTOR', 'Void', '')
 	],
 	( uses_luks ->
-	  ( inst_setting(partition, part(BD, _P1, ROOT_PD, _PT1, _FS1, _Label1, '/', _CK1, _SZ1))
-	  ; tui_msgbox('root partition was not found', []),
-	    fail
-	  ), !,
+	  root_pd(BD, ROOT_PD),
 	  lx_get_dev_uuid(ROOT_PD, PUUID),
 	  luks_dev_name(LUKS_PD),
 	  os_scmdl([

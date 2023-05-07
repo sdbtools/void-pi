@@ -196,6 +196,60 @@ os_shell2_lines(IL, AL) :-
 	os_shell2_lines_codes(IL, CL),
 	maplist(codes_atom, CL, AL).
 
+os_shell_pipe_rc(C1, C2, OA, RC) :-
+	exec(C1, SI, SO, SE, Pid),
+	popen(C2, write, WS),
+	open_output_atom_stream(AS),
+	set_stream_type(SO, binary),
+	set_stream_type(WS, binary),
+	set_stream_buffering(SO, block),
+	% set_stream_buffering(WS, block),
+	set_stream_buffering(WS, none),
+	add_stream_mirror(SO, WS),
+	add_stream_mirror(SO, AS),
+	repeat,
+	get_byte(SO, -1),
+	close(SI),
+	close(SO),
+	close(SE),
+	close(WS),
+	close_output_atom_stream(AS, OA),
+	wait(Pid, RC),
+	!.
+
+% Pipe input stream to a command.
+os_shell_stream_pipe(RS, C2) :-
+	popen(C2, write, WS),
+	set_stream_type(RS, binary),
+	set_stream_type(WS, binary),
+	set_stream_buffering(RS, block),
+	% set_stream_buffering(WS, block),
+	set_stream_buffering(WS, none),
+	add_stream_mirror(RS, WS),
+	repeat,
+	get_byte(RS, -1),
+	close(WS),
+	!.
+
+% Pipe atom to a command.
+os_shell_atom_pipe(A, C2) :-
+	open_input_atom_stream(A, SO),
+	os_shell_stream_pipe(SO, C2),
+	close_input_atom_stream(SO).
+
+os_shell2_pipe_rc(IL1, IL2, OA, RC) :-
+	os_scmdl(IL1, IL1A),
+	os_scmdl(IL2, IL2A),
+	os_shell_pipe_rc(IL1A, IL2A, OA, RC).
+
+os_shell2_stream_pipe(SI, IL2) :-
+	os_scmdl(IL2, IL2A),
+	os_shell_stream_pipe(SI, IL2A).
+
+os_shell2_atom_pipe(A, IL2) :-
+	os_scmdl(IL2, IL2A),
+	os_shell_atom_pipe(A, IL2A).
+
 os_ccmdl(IL, OL) :-
 	phrase(os_cmdl(IL), OL), !.
 
@@ -203,9 +257,13 @@ os_scmdl(IL, A) :-
 	os_ccmdl(IL, OL),
 	join_atoms(OL, ' ', A), !.
 
+% Space-separated.
 os_wcmdl(IL, S) :-
+	os_wcmdl(IL, ' ', S).
+
+os_wcmdl(IL, SEP, S) :-
 	os_ccmdl(IL, OL),
-	write_atoms(OL, ' ', S), !.
+	write_atoms(OL, SEP, S), !.
 
 % !!! Do not use os_cmdl directly!
 os_cmdl([H|T]) -->
@@ -218,7 +276,10 @@ os_cmd(o(O)) --> { atom_concat('-', O, O1) }, [O1].
 os_cmd(o(O, V)) --> { phrase(os_cmd(V), [V1]), atom_concat('-', O, O1) }, [O1, V1].
 os_cmd(oo(O)) --> { atom_concat('--', O, O1) }, [O1].
 os_cmd(oo(O, V)) --> { phrase(os_cmd(V), [V1]), format_to_atom(O1, '--~w=~w', [O, V1]) }, [O1].
+% double-quoted
 os_cmd(dq(V)) --> { phrase(os_cmd(V), [V1]), format_to_atom(QV, '"~w"', [V1]) }, [QV].
+% comma-separated list
+os_cmd(lc(L)) --> { os_ccmdl(L, OL), join_atoms(OL, ',', A) }, [A].
 % value assignment
 os_cmd(v(O, V)) --> { phrase(os_cmd(V), [V1]), format_to_atom(O1, '~w=~w', [O, V1]) }, [O1].
 os_cmd(O = V) --> { phrase(os_cmd(V), [V1]), format_to_atom(O1, '~w=~w', [O, V1]) }, [O1].

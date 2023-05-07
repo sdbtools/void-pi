@@ -31,16 +31,9 @@ limine_configure(BD, RD) :-
 	true.
 
 limine_write_cfg(BD, V, S) :-
-	( inst_setting(partition, part(BD, _P1, ROOT_PD, _PT1, _FS1, _Label1, '/', _CK1, _SZ1))
-	; tui_msgbox('root partition was not found', []),
-	  fail
-	), !,
+	root_pd(BD, ROOT_PD),
 	lx_get_dev_uuid(ROOT_PD, RPID),
-
-	( inst_setting(partition, part(BD, _P2, _ROOT_PD2, _PT2, _FS2, _Label2, '/boot', _CK2, _SZ2)) ->
-	  Pref = ''
-	; Pref = 'boot/'
-	),
+	boot_pref(BD, Pref),
 
 	write(S, 'INTERFACE_BRANDING=Void Linux'), nl(S),
 	write(S, 'TIMEOUT=5'), nl(S), nl(S),

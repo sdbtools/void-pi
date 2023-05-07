@@ -15,12 +15,10 @@ create_btrfs_subv(RD) :-
 create_btrfs_subv(_RD).
 
 create_btrfs_subv(D, RD) :-
-	( inst_setting(fs(btrfs, '/'), mount(AL)) ->
-	  true
+	( inst_setting(fs_attr(btrfs, '/'), mount(AL))
 	; AL = [rw, noatime]
-	),
-	join_atoms(AL, ',', AA),
-	os_call2([mount, '-o', AA, D, RD]),
+	), !,
+	os_call2([mount, o(o, lc(AL)), D, RD]),
 	create_btrfs_subv(RD),
 	os_call2([umount, RD]),
 	true.
@@ -28,11 +26,9 @@ create_btrfs_subv(D, RD) :-
 mount_btrfs(BD, RD) :-
 	inst_setting(btrfs, subv(SV, mp(MP), OL, _)),
 	atom_concat(RD, MP, DA),
-	atom_concat('subvol=/', SV, SO),
-	O = [SO|OL],
-	join_atoms(O, ',', OA),
 	os_mkdir_p(DA),
-	os_call2([mount, '-o', OA, BD, DA]),
+	O = [subvol=concat('/', SV)| OL],
+	os_call2([mount, o(o, lc(O)), BD, DA]),
 	fail.
 mount_btrfs(_, _).
 

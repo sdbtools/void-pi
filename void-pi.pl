@@ -18,25 +18,25 @@
 :- include('lib/tui_common.pl').
 :- include('lib/tui_dialog.pl').
 
-:- include('void_info.pl').
-:- include('void_cmd_arg.pl').
-:- include('void_menu.pl').
+:- include('module/void_info.pl').
+:- include('module/void_cmd_arg.pl').
+:- include('module/void_menu.pl').
 
-:- include('void_luks.pl').
-:- include('void_dracut.pl').
-:- include('void_net.pl').
-:- include('void_fstab.pl').
+:- include('module/void_luks.pl').
+:- include('module/void_dracut.pl').
+:- include('module/void_net.pl').
+:- include('module/void_fstab.pl').
 
-:- include('void_grub.pl').
-:- include('void_limine.pl').
-:- include('void_refind.pl').
-:- include('void_bootloader.pl').
+:- include('module/void_grub.pl').
+:- include('module/void_limine.pl').
+:- include('module/void_refind.pl').
+:- include('module/void_bootloader.pl').
 
-:- include('void_zfs.pl').
-:- include('void_btrfs.pl').
-:- include('void_fs.pl').
+:- include('module/void_zfs.pl').
+:- include('module/void_btrfs.pl').
+:- include('module/void_fs.pl').
 
-:- include('void_template.pl').
+:- include('module/void_template.pl').
 
 :- dynamic([inst_setting/2, inst_setting_tmp/2]).
 
@@ -50,6 +50,7 @@
 
 def_settings :-
 	setup_conf,
+	setup_fs_template,
 	B = grub2,
 	assertz(inst_setting(keymap, us)),
 	assertz(inst_setting(locale, 'en_US.UTF-8')),
@@ -61,9 +62,11 @@ def_settings :-
 	assertz(inst_setting(esp_size, '550M')),
 	assertz(inst_setting(boot_size, '1G')),
 	assertz(inst_setting(root_dir, '/mnt')),
-	assertz(inst_setting(fs(btrfs, '/'), mount([rw, noatime, 'compress-force=zstd', 'space_cache=v2', 'commit=120']))),
-	assertz(inst_setting(fs(vfat, '/boot/efi'), mount([rw, nosuid, nodev, noexec, relatime, 'fmask=0022', 'dmask=0022', 'codepage=437', 'iocharset=iso8859-1', 'shortname=mixed', utf8, 'errors=remount-ro']))),
-	assertz(inst_setting(fs(f2fs, '/'), mount([rw, 'compress_algorithm=lz4', compress_chksum, atgc, gc_merge, lazytime]))),
+	% fs_attr(Name, MountPoint)
+	assertz(inst_setting(fs_attr(btrfs, '/'), mount([rw, noatime, 'compress-force'=zstd, space_cache=v2, commit=120]))),
+	assertz(inst_setting(fs_attr(vfat, '/boot/efi'), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
+	assertz(inst_setting(fs_attr(f2fs, '/'), mount([rw, compress_algorithm=lz4, compress_chksum, atgc, gc_merge, lazytime]))),
+	assertz(inst_setting(fs_attr(f2fs, '/'), create([extra_attr, inode_checksum, sb_checksum, compression, encrypt]))),
 	assertz(inst_setting(source, local)),
 	assertz(inst_setting(hostname, voidpp)),
 	assertz(inst_setting(lvm, lv(void, void, ''))),
@@ -79,10 +82,10 @@ source_dependency_pkg(Distro, DL) :-
 
 source_dep(Distro, D) :-
 	% Collect all used filesystems.
-	% part(Dev, Part, PartDev, PartType, FileSystem, Label, MountPoint, create/keep, size)
-	findall(FS, inst_setting(partition, part(_D, _S1, _P1, _PT, FS, _Label, _MP, _CK, _SZ)), FSL0),
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	findall(FS, inst_setting(fs, fs4(FS, _Label, _MP, _BD1)), FSL0),
 	sort(FSL0, FSL),
-	% tui_msgbox2(PTL, []),
+	% tui_msgbox2(PTL),
 	member(F, FSL),
 	source_dep_module(Distro, filesystem(F), DL),
 	member(D, DL),
@@ -119,26 +122,21 @@ setup_tui :-
 	retractall(tui_def_args_all(_)),
 	asserta(tui_def_args_all([sz(auto), clear, no-shadow])).
 
+setup_sys_kernel :-
+	lx_sys_kernel(V1N, V2N, V3A),
+	retractall(inst_setting(system(kernel), _)),
+	assertz(inst_setting(system(kernel), v(V1N, V2N, V3A))),
+	true.
+
 setup_sys_arch :-
-	% x86_64 | x86_64-musl ...
-	% os_shell_line('xbps-uhelper arch', ARCH),
-	os_shell_line('uname -m', A0),
-	( A0 = x86_64, file_exists('/lib/ld-musl-x86_64.so.1') ->
-	  ARCH = 'x86_64-musl'
-	; ARCH = A0
-	),
-	% tui_msgbox(ARCH, []),
+	lx_sys_arch(ARCH),
+	% tui_msgbox(ARCH),
 	retractall(inst_setting(system(arch), _)),
 	assertz(inst_setting(system(arch), ARCH)),
 	true.
 
 setup_sys_efi :-
-	file_exists('/sys/firmware/efi/systab'),
-	os_shell2_number([cat, '/sys/firmware/efi/fw_platform_size'], N),
-	( N = 64 ->
-	  EFI_TARGET='x86_64-efi'
-	; EFI_TARGET='i386-efi'
-	),
+	lx_sys_efi(EFI_TARGET),
 	retractall(inst_setting(system(efi), _)),
 	assertz(inst_setting(system(efi), EFI_TARGET)),
 	!.
@@ -147,13 +145,14 @@ setup_sys_efi.
 setup_conf :-
 	setup_sys_efi,
 	setup_sys_arch,
+	setup_sys_kernel,
 	true.
 
 setup_install :-
 	% Install dependencies
 	host_name(HN),
 	( source_dependency_pkg(HN, D) ->
-	  % tui_msgbox2(D, []),
+	  % tui_msgbox2(D),
 	  install_deps([], D)
 	; true
 	).
@@ -172,8 +171,8 @@ is_void_live :-
 	host_name('void-live').
 
 make_sgdisk_par([PD|T], N, [A1, A2|T1]) :-
-	% part(Dev, Part, PartDev, PartType, FileSystem, Label, MountPoint, create/keep, size)
-	inst_setting(partition, part(_D, _P, PD, PT, _FD, _Label, _MP, _F, SZ)),
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	inst_setting(partition, part4(bd1([PD| _]), PT, _F, SZ)),
 	part_typecode(PT, PTC),
 	( T = [] ->
 	  format_to_atom(A1, '--new=~d:0:0', [N])
@@ -186,21 +185,22 @@ make_sgdisk_par([PD|T], N, [A1, A2|T1]) :-
 make_sgdisk_par([], _, []).
 
 part_sgdisk(D) :-
-	findall(P, inst_setting(partition, part(D, P, _, _, _, _, _, _, _SZ)), PL),
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	findall(PD, inst_setting(partition, part4(bd1([PD| D]), _, _, _SZ)), PL),
 	sort(PL, SPL),
 	part_sgdisk_pl(D, SPL),
 	true.
 
 part_dev(D) :-
-	% part(Dev, Part, PartDev, PartType, FileSystem, Label, MountPoint, create/keep, size)
-	findall(PD, inst_setting(partition, part(D, _P, PD, _, _, _, _, _, _SZ)), PL),
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	findall(PD, inst_setting(partition, part4(bd1([PD| D]), _, _, _SZ)), PL),
 	sort(PL, SPL),
 	make_par(D, SPL),
 	true.
 
 % PL - partition list.
 part_sgdisk_pl(D, PL) :-
-	% tui_msgbox2([part_sgdisk_pl, PL], []),
+	% tui_msgbox2([part_sgdisk_pl, PL]),
 	make_sgdisk_par(PL, 1, SGPL),
 	format_to_atom(MA, ' Partitioning ~w ', [D]),
 	tui_progressbox_safe([sgdisk, '--zap-all', '--clear', '--mbrtogpt', SGPL, D], '', [title(MA), sz([6, 60])]),
@@ -211,8 +211,10 @@ make_par(D, PL) :-
 	true.
 
 split_pl([PD|T], [PD|T1], T2) :-
-	% part(Dev, Part, PartDev, PartType, FileSystem, Label, MountPoint, create/keep, size)
-	inst_setting(partition, part(_D, _P, PD, PT, FS, _Label, MP, _F, _SZ)),
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	inst_setting(partition, part4(bd1([PD| _]), PT, _F, _SZ)),
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	inst_setting(fs, fs4(FS, _Label, MP, bd1([PD| _]))),
 	explicit_part(PT, FS, MP), !,
 	split_pl(T, T1, T2).
 split_pl([H|T], T1, [H|T2]) :-
@@ -225,56 +227,29 @@ split_pl([], [], []).
 explicit_part(bios_boot, _, _) :- !.
 explicit_part(efi_system, vfat, '/boot/efi') :- !.
 
-disk_partitioning :-
-	inst_setting(template, manual),
-	!.
-disk_partitioning :-
-	% setof(D, P^PD^PT^FD^Label^MP^F^SZ^inst_setting(partition, part(D, P, PD, PT, FD, Label, MP, F, SZ)), DL),
-	findall(D, inst_setting(partition, part(D,_P,_PD,_PT,_FS,_Label,_MP,_F,_SZ)), DL0),
-	sort(DL0, DL),
-	maplist(part_dev, DL),
-	true.
-
 mount_boot_efi(ED, RD) :-
 	atom_concat(RD, '/boot/efi', DA),
 	os_mkdir_p(DA),
 	os_call2([mount, '-o', 'rw,noatime', ED, DA]).
 
 validate_fs :-
-	( root_part(_) ->
-	  true
-	; tui_msgbox('ERROR: the mount point for the root filesystem (/) has not yet been configured.', []),
+	( has_root_part
+	; tui_msgbox('ERROR: the mount point for the root filesystem (/) has not yet been configured.'),
 	  fail
-	),
+	), !,
 	% https://arch-general.archlinux.narkive.com/MgF0tcbX/usr-is-not-mounted-this-is-not-supported
-	( usr_part(_) ->
-	  tui_msgbox('ERROR: /usr mount point has been configured but is not supported, please remove it to continue.', []),
+	( \+ has_usr_part
+	; tui_msgbox('ERROR: /usr mount point has been configured but is not supported, please remove it to continue.'),
 	  fail
-	; true
-	),
+	), !,
 	% EFI
 	( inst_setting(system(efi), _) ->
-	  ( efi_system_part(_) -> true
-	  ; tui_msgbox('ERROR: The EFI System Partition has not yet been configured, please create it as FAT32, mountpoint /boot/efi and at least with 100MB of size.', []),
+	  ( has_efi_system_part
+	  ; tui_msgbox('ERROR: The EFI System Partition has not yet been configured, please create it as FAT32, mountpoint /boot/efi and at least with 100MB of size.'),
 	    fail
-	  )
+	  ), !
 	; true
 	),
-	true.
-
-root_part(P) :-
-	% part(Dev, Part, PartDev, PartType, FileSystem, Label, MountPoint, create/keep, size)
-	inst_setting(partition, part(_D, P, _PD, _PT, _FS, _Label, '/', _CK, _SZ)), !,
-	true.
-
-efi_system_part(P) :-
-	% part(Dev, Part, PartDev, PartType, FileSystem, Label, MountPoint, create/keep, size)
-	inst_setting(partition, part(_D, P, _PD, _PT, vfat, _Label, '/boot/efi', _CK, _SZ)), !,
-	true.
-
-usr_part(P) :-
-	% part(Dev, Part, PartDev, PartType, FileSystem, Label, MountPoint, create/keep, size)
-	inst_setting(partition, part(_D, P, _PD, _PT, _FS, _Label, '/usr', _CK, _SZ)), !,
 	true.
 
 parse_rootfs_name(N, ARCH) :-
@@ -282,7 +257,7 @@ parse_rootfs_name(N, ARCH) :-
 	parse_rootfs_name_(NL, ARCH),
 	!.
 parse_rootfs_name(N, _NL) :-
-	tui_msgbox2(['Invalid rootfs file name:', N], []),
+	tui_msgbox2(['Invalid rootfs file name:', N]),
 	fail.
 
 split_rootfs_file_name(N, NL) :-
@@ -332,8 +307,10 @@ install_pkg(rootfs, RD) :-
 	os_mkdir_p(RD + '/etc'), os_call2([cp, '-L', '/etc/resolv.conf', RD + '/etc/']),
 
 	% dracut stuff.
+	% tui_msgbox('dracut_conf'),
 	dracut_conf(RD),
 
+	% tui_msgbox('install_target_dep'),
 	install_target_dep(RD),
 
 	% Remove stuff
@@ -347,7 +324,6 @@ install_pkg(net, RD) :-
 	% mount required fs
 	mount_chroot_filesystems(RD),
 
-	% tui_msgbox('OK', []),
 	os_mkdir_p([RD + '/var/db/xbps/keys', RD + '/usr/share']),
 	os_call2([cp, '-a', '/usr/share/xbps.d', RD + '/usr/share/']),
 	os_shell2([cp, '/var/db/xbps/keys/*.plist', RD + '/var/db/xbps/keys']),
@@ -393,6 +369,7 @@ install_pkg(local, RD) :-
 	DL = [chroot, RD, dracut, '--regenerate-all', '--hostonly', '--force', '2>&1'],
 	tui_progressbox_safe(DL, '', [title(' Rebuilding initramfs for target '), sz(max)]),
 
+	% tui_msgbox('install_target_dep'),
 	install_target_dep(RD),
 
 	% Remove stuff
@@ -428,19 +405,12 @@ target_dep(zfs) :-
 	uses_zfs,
 	true.
 
-target_dep_bootloader(limine, limine) :- !.
-target_dep_bootloader(rEFInd, refind) :- !.
-target_dep_bootloader(grub2, GRUB) :-
-	\+ inst_setting(source, local),
-	inst_setting(system(arch), ARCH),
-	arch2grub(ARCH, GRUB), !.
-
 set_keymap(RD) :-
 	inst_setting(keymap, KM),
 	lx_set_keymap(RD, KM),
 	!.
 set_keymap(_) :-
-	tui_msgbox('Setting of keymap has failed.', []),
+	tui_msgbox('Setting of keymap has failed.'),
 	fail.
 
 set_locale(_RD) :-
@@ -451,7 +421,7 @@ set_locale(RD) :-
 	lx_set_locale(RD, LC),
 	!.
 set_locale(_RD) :-
-	tui_msgbox('Setting of locale has failed.', []),
+	tui_msgbox('Setting of locale has failed.'),
 	fail.
 
 set_timezone(RD) :-
@@ -459,7 +429,7 @@ set_timezone(RD) :-
 	lx_set_timezone(RD, TZ),
 	!.
 set_timezone(_RD) :-
-	tui_msgbox('Setting of timezone has failed.', []),
+	tui_msgbox('Setting of timezone has failed.'),
 	fail.
 
 set_hostname(RD) :-
@@ -467,7 +437,7 @@ set_hostname(RD) :-
 	lx_set_hostname(RD, HN),
 	!.
 set_hostname(_RD) :-
-	tui_msgbox('Setting of hostname has failed.', []),
+	tui_msgbox('Setting of hostname has failed.'),
 	fail.
 
 set_rootpassword(RD) :-
@@ -475,17 +445,17 @@ set_rootpassword(RD) :-
 	lx_set_password(RD, root, PW),
 	!.
 set_rootpassword(_RD) :-
-	tui_msgbox('Setting of root password has failed.', []),
+	tui_msgbox('Setting of root password has failed.'),
 	fail.
 
 on_useradd_rc(0) :- !.
 on_useradd_rc(RC) :-
 	lx_useradd_rc(RC, M), !,
-	tui_msgbox(M, []),
+	tui_msgbox(M),
 	fail.
 on_useradd_rc(RC) :-
 	number_atom(RC, RCA),
-	tui_msgbox2(['useradd. Unknown error code:', RCA], []),
+	tui_msgbox2(['useradd. Unknown error code:', RCA]),
 	fail.
 
 set_useraccount(RD) :-
@@ -500,7 +470,7 @@ set_useraccount(RD) :-
 	lx_set_password(RD, UL, UP),
 	!.
 set_useraccount(_RD) :-
-	tui_msgbox('Setting up of a user account has failed.', []),
+	tui_msgbox('Setting up of a user account has failed.'),
 	fail.
 
 copy_rootfs(RD) :-
@@ -520,7 +490,7 @@ set_sudoers :-
 	lx_chroot_set_sudoers(UL, UGL),
 	!.
 set_sudoers :-
-	tui_msgbox('Setting up of sudoers has failed.', []),
+	tui_msgbox('Setting up of sudoers has failed.'),
 	fail.
 
 mount_chroot_filesystems(RD) :-
@@ -547,22 +517,11 @@ umount_filesystems(RD) :-
 umount_filesystems(_RD).
 
 umount_dev(D) :-
-	tui_msgbox(D, []),
+	tui_msgbox(D),
 	os_call2([umount, '--recursive', D]).
 umount_dev(D) :-
 	tui_msgbox2(['ERROR: filesystem unmounting has failed.', D], [sz([6, 40])]),
 	fail.
-
-wipe_disk :-
-	inst_setting(template, manual),
-	!.
-wipe_disk :-
-	inst_setting(bootloader_dev, dev(D, PL, TL)),
-	( wipe_dev_tree_list(TL, PL)
-	; tui_msgbox2([wipe_disk, D, has, failed], []),
-	  fail
-	),
-	!.
 
 wipe_disk(D) :-
 	os_shell2_lines([wipefs, '--noheadings', D], L),
@@ -578,7 +537,7 @@ wipe_dev_tree_list(L, PL) :-
 wipe_dev_tree(PL, tree(NAME, L)) :-
 	wipe_dev_tree_list(L, PL),
 	% dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)
-	memberchk(dev_part(NAME,CN,ET,_SIZE), PL),
+	memberchk(dev_part(NAME, CN, ET, _SIZE), PL),
 	wipe_dev(ET, NAME, CN),
 	true.
 
@@ -592,19 +551,15 @@ wipe_dev(part(_PARTUUID,_UUID), D, _CN) :- !,
 wipe_dev(disk, D, _CN) :- !,
 	wipe_disk(D),
 	true.
+wipe_dev(lvm, D, _CN) :- !,
+	wipe_disk(D),
+	true.
 wipe_dev(ET, D, _CN) :- !,
 	format_to_atom(A, 'Unknown type "~w" of ~w.', [ET, D]),
-	tui_msgbox(A, []),
+	tui_msgbox(A),
 	fail.
 
-part2checklist_tag_on_off(ON, part_info(_D, P, _PA, _FS, FSS, _Type), [P, FSS, I]) :-
-	( member(P, ON) ->
-	  I = on
-	; I = off
-	),
-	true.
-
-part2taglist(part_info(_D, P, _PA, _FS, FSS, _Type), [P, FSS]).
+part2taglist(part_info(bd1([PD| _]), _FS, FSS, _Type), [PD, FSS]).
 
 update_part_info(ONL, PLO) :-
 	maplist(del_part_info(PLO), ONL),
@@ -612,21 +567,24 @@ update_part_info(ONL, PLO) :-
 	maplist(ins_part_info(PIL, ONL), PLO),
 	true.
 
-% L - list of partitions to keep.
-del_part_info(L, P) :-
-	( member(P, L) ->
-	  true
-	; retractall(inst_setting(partition, part(_, P, _, _, _, _, _, _, _SZ)))
-	),
-	true.
+% KL - list of partitions to keep.
+del_part_info(KL, PD) :-
+	memberchk(PD, KL), !.
+del_part_info(_, PD) :-
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	retractall(inst_setting(partition, part4(bd1([PD| _]), _, _, _SZ))),
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	retractall(inst_setting(fs, fs4(_, _, _, bd1([PD| _])))).
 
-ins_part_info(PIL, L, P) :-
-	( member(P, L) ->
-	  true
-	; memberchk(part_info(D, P, PA, FS, _FSS, _Type), PIL),
-	  assertz(inst_setting(partition, part(D, P, PA, linux, FS, '', '', keep, _SZ)))
-	),
-	true.
+ins_part_info(_PIL, L, PD) :-
+	memberchk(PD, L), !.
+ins_part_info(PIL, _L, PD) :-
+	member(part_info(BD1, FS, _FSS, _Type), PIL),
+	BD1 = bd1([PD| _]),
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	assertz(inst_setting(partition, part4(BD1, linux, keep, _SZ))),
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	assertz(inst_setting(fs, fs4(FS, '', '', BD1))).
 
 ensure_settings :-
 	% S = [partition, bootloader_dev, keymap, network, source, hostname, locale, timezone, passwd, useraccount],
@@ -648,6 +606,12 @@ ensure_passwd :-
 	\+ inst_setting_tmp(passwd(U), _),
 	menu_password(U),
 	fail.
+ensure_passwd :-
+	inst_setting(template, gpt_luks1_lvm),
+	U = '$_luks_$',
+	\+ inst_setting_tmp(passwd(U), _),
+	menu_password(U),
+	fail.
 ensure_passwd.
 
 ensure_setting(passwd) :- !,
@@ -663,68 +627,148 @@ save_settings(S) :-
 	fail.
 save_settings(_).
 
-run_install :-
+run_cmd(RD, prepare_to_install) :- !,
 	setup_install,
 	ensure_settings,
 	validate_fs,
-	inst_setting(root_dir, RD),
 	clean_mnt(RD),
-	wipe_disk,
-	disk_partitioning,
-	run_mkfs(RD),
-	inst_setting(source, IM),
+	!.
+run_cmd(_RD, wipe(D, TL, PL)) :- !,
+	( wipe_dev_tree_list(TL, PL)
+	; tui_msgbox2([wipe_disk, D, has, failed]),
+	  fail
+	),
+	!.
+run_cmd(_RD, part(D, PL)) :- !,
+	( part_sgdisk_pl(D, PL)
+	; tui_msgbox('Disk partitioning has failed.'),
+	  fail
+	),
+	!.
+run_cmd(_RD, modprobe(FS)) :- !,
+	( os_call2([modprobe, FS])
+	; tui_msgbox2([modprobe, FS, has, failed]),
+	  fail
+	),
+	!.
+run_cmd(_RD, mkbd(BD, CMD)) :- !, % make block device.
+	mkbd(BD, CMD),
+	!.
+run_cmd(RD, mkfs(FS, PD, Label)) :- !,
+	mkfs(FS, PD, Label, RD),
+	true.
+run_cmd(RD, mount(FS, PD, MP)) :- !,
+	mount_fs(FS, PD, MP, RD),
+	true.
+run_cmd(RD, install_pkg(IM)) :- !,
 	install_pkg(IM, RD),
 
-	% tui_msgbox('make_fstab', []),
+	% tui_msgbox('make_fstab'),
 	make_fstab(RD),
 
-	% tui_msgbox('set_keymap', []),
+	% tui_msgbox('set_keymap'),
 	% set up keymap, locale, timezone, hostname, root passwd and user account.
 	set_keymap(RD),
 
-	% tui_msgbox('set_locale', []),
+	% tui_msgbox('set_locale'),
 	set_locale(RD),
 
-	% tui_msgbox('set_timezone', []),
+	% tui_msgbox('set_timezone'),
 	set_timezone(RD),
 
-	% tui_msgbox('set_hostname', []),
+	% tui_msgbox('set_hostname'),
 	set_hostname(RD),
 
-	% tui_msgbox('set_rootpassword', []),
+	% tui_msgbox('set_rootpassword'),
 	set_rootpassword(RD),
 
-	% tui_msgbox('set_useraccount', []),
+	% tui_msgbox('set_useraccount'),
 	set_useraccount(RD),
 
-	% tui_msgbox('cp /mnt/etc/skel/.[bix]* /mnt/root', []),
+	% tui_msgbox('cp /mnt/etc/skel/.[bix]* /mnt/root'),
 	% Copy /etc/skel files for root.
 	os_shell2([cp, RD + '/etc/skel/.[bix]*', RD + '/root']),
 
-	% tui_msgbox('set_network', []),
+	% tui_msgbox('set_network'),
 	% set network
 	set_network(RD),
 
-	% tui_msgbox('set_sudoers', []),
+	% tui_msgbox('set_sudoers'),
 	% set sudoers
 	set_sudoers,
 
 	% clean up polkit rule - it's only useful in live systems
 	( IM = local ->
-	  % tui_msgbox('rm -f /mnt/etc/polkit-1/rules.d/void-live.rules', []),
+	  % tui_msgbox('rm -f /mnt/etc/polkit-1/rules.d/void-live.rules'),
 	  os_rm_f(RD + '/etc/polkit-1/rules.d/void-live.rules')
 	; true
 	),
 
-	% tui_msgbox('set_bootloader', []),
+	% tui_msgbox('set_bootloader'),
 	% install bootloader.
 	set_bootloader(RD),
 
-	% tui_msgbox('umount_filesystems', []),
+	% tui_msgbox('umount_filesystems'),
 	% unmount all filesystems.
 	umount_filesystems(RD),
 	tui_msgbox('Void Linux has been installed successfully!', [sz([6, 40])]),
 	os_call2([clear]),
+	true.
+
+run_cmdl(L) :-
+	inst_setting(root_dir, RD),
+	maplist(run_cmd(RD), L).
+
+make_cmd(prepare_to_install).
+make_cmd(wipe(D, TL, PL)) :-
+	\+ inst_setting(template, manual),
+	inst_setting(bootloader_dev, dev(D, PL, TL)),
+	true.
+make_cmd(part(D, SPL)) :-
+	\+ inst_setting(template, manual),
+	% Find all devices.
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	findall(D0, inst_setting(partition, part4(bd1([_, D0]), _PT0, _F0, _SZ0)), DL0),
+	sort(DL0, DL),
+	% For each device
+	member(D, DL),
+	% Make partition list
+	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
+	findall(PD, inst_setting(partition, part4(bd1([PD, D]), _, _, _SZ1)), PL0),
+	sort(PL0, SPL),
+	true.
+make_cmd(modprobe(FS)) :-
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	findall(FS0, (inst_setting(fs, fs4(FS0, _Label, _MP, _BD1)), \+ memberchk(FS0, [swap, lvm, luks1])), FSL),
+	sort(FSL, SFSL),
+	member(FS, SFSL),
+	true.
+make_cmd(mkbd(BD, CMD)) :-
+	inst_setting(bdev, bdev(BD, CMD)),
+	true.
+make_cmd(mkfs(FS, PD, Label)) :-
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	inst_setting(fs, fs4(FS, Label, _MP, bd1([PD| _]))),
+	true.
+make_cmd(mount(FS, PD, MP)) :-
+	get_mp_list(MPL),
+	member(MP, MPL),
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	inst_setting(fs, fs4(FS, _Label, MP, bd1([PD| _]))),
+	true.
+make_cmd(install_pkg(IM)) :-
+	inst_setting(source, IM),
+	true.
+
+make_cmdl(CL) :-
+	findall(C, make_cmd(C), CL),
+	true.
+
+run_install :-
+	make_cmdl(CL),
+	% write_to_atom(A, CL),
+	% tui_msgbox(A, [sz(max)]),
+	run_cmdl(CL),
 	true.
 
 do_install :-

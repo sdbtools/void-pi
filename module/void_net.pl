@@ -4,7 +4,7 @@
 set_network(RD) :-
 	inst_setting(network, NC), !,
 	( set_network_(NC, RD)
-	; tui_msgbox('Setting up of network has failed.', []),
+	; tui_msgbox('Setting up of network has failed.'),
 	  fail
 	),
 	!.
@@ -33,7 +33,7 @@ set_network_(static(D, IP, GW, DNS1, DNS2), RD) :- !,
 	enable_dhcpd(RD),
 	true.
 set_network_(_, _RD) :- !,
-	tui_msgbox('Invalid network connection type.', []),
+	tui_msgbox('Invalid network connection type.'),
 	fail.
 
 enable_dhcpd(RD) :-
@@ -41,7 +41,7 @@ enable_dhcpd(RD) :-
 	true.
 
 test_network(_) :-
-	% tui_msgbox('before xbps-uhelper fetch', []),
+	% tui_msgbox('before xbps-uhelper fetch'),
 	tui_infobox('Testing network connection.', [sz([4, 40])]),
 	between(1, 20, _),
 	sleep(0.25),
@@ -64,18 +64,18 @@ select_net_conf(D, dhcp) :-
 select_net_conf(_, static).
 
 configure_net(D, dhcp) :-
-	% tui_msgbox('dhcp', []),
+	% tui_msgbox('dhcp'),
 	lx_iface_setup(D, RC1),
 	( RC1 = 1 ->
 	  ( os_shell2([sv, restart, dhcpcd, '1>/dev/null'])
-	  ; tui_msgbox('ERROR: failed to run dhcpcd', []),
+	  ; tui_msgbox('ERROR: failed to run dhcpcd'),
 	    fail
 	  ), !,
 	  ( tui_infobox('Retrieving IP address.', [sz([6, 40])]),
 		between(1, 40, _),
 		sleep(0.25),
 		lx_iface_setup(D, 0)
-	  ; tui_msgbox2(['ERROR: DHCP request failed for', D], []),
+	  ; tui_msgbox2(['ERROR: DHCP request failed for', D]),
 	    fail
 	  )
 	; true
@@ -94,24 +94,24 @@ configure_net(D, static) :-
 		item('DNS Secondary', '8.8.4.4')
 		], FORMLABEL, [title(MA)], L),
 	L = [IP, GW, DNS1, DNS2| _],
-	( IP = '' -> tui_msgbox('IP adress is missing', []), fail ; true),
-	( GW = '' -> tui_msgbox('Gateway adress is missing', []), fail ; true),
-	( DNS1 = '' -> tui_msgbox('Primary DNS is missing', []), fail ; true),
-	( DNS2 = '' -> tui_msgbox('Secondary DNS is missing', []), fail ; true),
+	( IP = '' -> tui_msgbox('IP adress is missing'), fail ; true),
+	( GW = '' -> tui_msgbox('Gateway adress is missing'), fail ; true),
+	( DNS1 = '' -> tui_msgbox('Primary DNS is missing'), fail ; true),
+	( DNS2 = '' -> tui_msgbox('Secondary DNS is missing'), fail ; true),
 	( os_shell2([ip, link, set, dev, D, up])
 	; format_to_atom(EA1, 'ERROR: Failed to bring ~w interface.', [D]),
-	  tui_msgbox(EA1, []),
+	  tui_msgbox(EA1),
 	  fail
 	), !,
 	% format_to_atom(IPA, 'ip addr add "~w" dev ~w', [IP, D]),
 	( os_call2([ip, addr, add, IP, dev, D])
 	; format_to_atom(EA2, 'ERROR: Failed to set ip to the ~w interface.', [D]),
-	  tui_msgbox(EA2, []),
+	  tui_msgbox(EA2),
 	  fail
 	), !,
 	( os_call2([ip, route, add, default, via, GW])
 	; format_to_atom(EA3, 'ERROR: Failed to setup gateway.', []),
-	  tui_msgbox(EA3, []),
+	  tui_msgbox(EA3),
 	  fail
 	), !,
 	open('/etc/resolv.conf', write, S),
@@ -134,15 +134,15 @@ configure_wifi(D) :-
 		], FORMLABEL, [title(MA)], L),
 	L = [SSID, PSWD, ENCR| _],
 	( SSID = '' ->
-	  tui_msgbox('Invalid SSID.', []), fail
+	  tui_msgbox('Invalid SSID.'), fail
 	; true
 	),
 	( \+ member(ENCR, [wep, wpa]) ->
-	  tui_msgbox('Invalid encryption type (possible values: wep or wpa', []), fail
+	  tui_msgbox('Invalid encryption type (possible values: wep or wpa'), fail
 	; true
 	),
 	( PSWD = '' ->
-	  tui_msgbox('Invalid AP password.', []), fail
+	  tui_msgbox('Invalid AP password.'), fail
 	; true
 	),
 	WPASUPCONF = '/etc/wpa_supplicant/wpa_supplicant.conf',

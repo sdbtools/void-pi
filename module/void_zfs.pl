@@ -2,8 +2,8 @@
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 uses_zfs :-
-	% part(Dev, Part, PartDev, PartType, FileSystem, Label, MountPoint, create/keep, size)
-	inst_setting(partition, part(_D, _P, _PD, _PT, zfs, _Label, _MP, _CK, _SZ)),
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	inst_setting(fs, fs4(zfs, _, _, _)),
 	!.
 
 make_zfs_pool_cmd(MP, DS, AL, [zfs, create, '-o', MPA|T]) :-

@@ -2,8 +2,9 @@
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 uses_luks :-
-	inst_setting(template, gpt_luks1),
-	!.
+	inst_setting(template, gpt_luks1), !.
+uses_luks :-
+	inst_setting(template, gpt_luks1_lvm), !.
 
 create_keyfile(ROOT_PD, RD) :-
 	VK = '/boot/volume.key',
@@ -14,7 +15,10 @@ create_keyfile(ROOT_PD, RD) :-
 	inst_setting_tmp(passwd('$_luks_$'), RPWD),
 	lx_get_dev_disk_uuid(ROOT_PD, DISK_PUUID),
 	tui_infobox('Adding crypto-key.', [sz([4, 40])]),
-	lx_luks_add_keyfile(DISK_PUUID, KF, RPWD),
+	( lx_luks_add_keyfile(DISK_PUUID, KF, RPWD)
+	; tui_msgbox('luks_add_keyfile has failed'),
+	  fail
+	), !,
 
 	% os_shell2([chmod, '000', KF]),
 	os_shell2([chroot, RD, chmod, '000', VK]),
@@ -40,10 +44,7 @@ luks_dev_name(LUKS_PD) :-
 
 setup_crypt(RD) :-
 	inst_setting(bootloader_dev, dev(BD, _, _)),
-	( inst_setting(partition, part(BD, _P1, ROOT_PD, _PT1, _FS1, _Label1, '/', _CK1, _SZ1))
-	; tui_msgbox('root partition was not found', []),
-	  fail
-	), !,
+	root_pd(BD, ROOT_PD),
 	lx_get_dev_uuid(ROOT_PD, PUUID),
 	% Create the keyfile
 	create_keyfile(ROOT_PD, RD),

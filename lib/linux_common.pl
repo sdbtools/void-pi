@@ -10,6 +10,36 @@ lx_is_ssd(D) :-
 	format_to_atom(C, 'cat /sys/block/~d/queue/rotational', [D]),
 	os_shell_number(C, 0).
 
+% V1N - number
+% V2N - number
+% V3A - atom
+lx_sys_kernel(V1N, V2N, V3A) :-
+	os_shell_codes_line('uname -r', CL),
+	split_list_ne(CL, ".", [V1, V2, V3| _]),
+	number_codes(V1N, V1),
+	number_codes(V2N, V2),
+	atom_codes(V3A, V3),
+	true.
+
+lx_sys_arch(ARCH) :-
+	% x86_64 | x86_64-musl ...
+	% os_shell_line('xbps-uhelper arch', ARCH),
+	os_shell_line('uname -m', A0),
+	( A0 = x86_64, file_exists('/lib/ld-musl-x86_64.so.1') ->
+	  ARCH = 'x86_64-musl'
+	; ARCH = A0
+	),
+	true.
+
+lx_sys_efi(EFI_TARGET) :-
+	file_exists('/sys/firmware/efi/systab'),
+	os_shell2_number([cat, '/sys/firmware/efi/fw_platform_size'], N),
+	( N = 64 ->
+	  EFI_TARGET='x86_64-efi'
+	; EFI_TARGET='i386-efi'
+	),
+	true.
+
 lx_set_keymap(RD, KM) :-
 	file_exists('/etc/vconsole.conf'), !,
 	format_to_atom(KMA, 's|KEYMAP=.*|KEYMAP=~w|g', [KM]),
@@ -264,13 +294,16 @@ lx_part_info_fs(DA, FS, FSS, Type) :-
 	),
 	!.
 
-lx_part_info_disk_(DP, DA, P, part_info(DA, P1, PA, FS, FSS, Type)) :-
+% DA - base device name
+% P1 - raw partition name
+% PD - full partition name
+lx_part_info_disk_(DP, DA, P, part_info(bd1([PD, DA]), FS, FSS, Type)) :-
 	atom_codes(P, PCL),
 	split_list_ne(PCL, "/", SL),
 	SL = [_, _, _, PL],
 	atom_codes(P1, PL),
-	atom_concat(DP, P1, PA),
-	lx_part_info_fs(PA, FS, FSS, Type),
+	atom_concat(DP, P1, PD),
+	lx_part_info_fs(PD, FS, FSS, Type),
 	true.
 
 % Get list of partitions for a device.
@@ -287,7 +320,7 @@ lx_part_info_disk(D, DA, L) :-
 % Get list of partitions for a device except of LUKS, LVM, and iso9660.
 lx_part_info_disk_base(D, DA, L1) :-
 	lx_part_info_disk(D, DA, L),
-	subtract(L, [part_info(_, _, _, iso9660, _, _), part_info(_, _, _, crypto_LUKS, _, _), part_info(_, _, _, 'LVM2_member', _, _)], L1),
+	subtract(L, [part_info(_, iso9660, _, _), part_info(_, crypto_LUKS, _, _), part_info(_, 'LVM2_member', _, _)], L1),
 	!.
 lx_part_info_disk_base(_, _, []).
 
@@ -295,7 +328,7 @@ lx_dev2part(dev(NAME,SNAME,_TYPE,_RO,_RM,_SIZE,_SSZ), L1) :-
 	lx_part_info_disk_base(SNAME, NAME, L1),
 	true.
 
-lx_part_info_mapper_(P, part_info('/dev/mapper', P, PA, FS, FSS, Type)) :-
+lx_part_info_mapper_(P, part_info(bd1([PA, '/dev/mapper']), FS, FSS, Type)) :-
 	atom_concat('/dev/mapper/', P, PA),
 	lx_part_info_fs(PA, FS, FSS, Type),
 	true.
@@ -307,21 +340,18 @@ lx_part_info_mapper(L2) :-
 	true.
 lx_part_info_mapper([]).
 
-lx_part_info_raid_(P, part_info('/dev/md', P1, P, FS, FSS, Type)) :-
-	atom_chars(P, PCL),
-	split_list_ne(PCL, ['/'], [_, PL]),
-	atom_chars(P1, PL),
+lx_part_info_raid_(P, part_info(bd1([P, '/dev/md']), FS, FSS, Type)) :-
 	lx_part_info_fs(P, FS, FSS, Type),
 	true.
 
 lx_part_info_raid(L3) :-
 	os_shell_lines('ls -d /dev/md* 2>/dev/null | grep \'[0-9]\'', L1), !,
 	maplist(lx_part_info_raid_, L1, L2),
-	subtract(L2, [part_info(_, _, _, crypto_LUKS, _, _), part_info(_, _, _, 'LVM2_member', _, _)], L3),
+	subtract(L2, [part_info(_, crypto_LUKS, _, _), part_info(_, 'LVM2_member', _, _)], L3),
 	true.
 lx_part_info_raid([]).
 
-lx_part_info_cciss_(P, part_info('/dev/cciss', P, PA, FS, FSS, Type)) :-
+lx_part_info_cciss_(P, part_info(bd1([PA, '/dev/cciss']), FS, FSS, Type)) :-
 	atom_concat('/dev/cciss/', P, PA),
 	lx_part_info_fs(PA, FS, FSS, Type),
 	true.
@@ -329,7 +359,7 @@ lx_part_info_cciss_(P, part_info('/dev/cciss', P, PA, FS, FSS, Type)) :-
 lx_part_info_cciss(L3) :-
 	os_shell_lines('ls /dev/cciss 2>/dev/null | grep -E \'c[0-9]d[0-9]p[0-9]+\'', L1), !,
 	maplist(lx_part_info_cciss_, L1, L2),
-	subtract(L2, [part_info(_, _, _, crypto_LUKS, _, _), part_info(_, _, _, 'LVM2_member', _, _)], L3),
+	subtract(L2, [part_info(_, crypto_LUKS, _, _), part_info(_, 'LVM2_member', _, _)], L3),
 	true.
 lx_part_info_cciss([]).
 
@@ -345,17 +375,22 @@ lx_part_info_lvm(L1) :-
 lx_part_info_lvm([]).
 
 lx_list_part_info(PL) :-
+	findall(L, lx_list_part_info_(L), PL0),
+	flatten(PL0, PL).
+
+lx_list_part_info_(PL) :-
 	lx_list_dev_disk(DL),
 	% ATA/SCSI/SATA
-	maplist(lx_dev2part, DL, PL1),
+	maplist(lx_dev2part, DL, PL).
+lx_list_part_info_(PL) :-
 	% Device Mapper
-	lx_part_info_mapper(PL2),
+	lx_part_info_mapper(PL).
+lx_list_part_info_(PL) :-
 	% raid
-	lx_part_info_raid(PL3),
+	lx_part_info_raid(PL).
+lx_list_part_info_(PL) :-
 	% cciss(4) devices
-	lx_part_info_cciss(PL4),
-	flatten([PL1, PL2, PL3, PL4], PL),
-	!.
+	lx_part_info_cciss(PL).
 
 % D - device
 % P - prefix

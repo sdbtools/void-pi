@@ -66,8 +66,8 @@ lvm_lvcreate_unsafe(VG, LV) :-
 lvm_lvcreate_unsafe(VG, LV, '') :- !,
 	lvm_lvcreate_unsafe(VG, LV, '100%FREE').
 lvm_lvcreate_unsafe(VG, LV, SZ) :-
-	% os_shell2([lvcreate, '--yes', '-l', SZ, VG, '-n', LV]),
-	os_shell2([lvcreate, '--yes', '-l', SZ, VG, '-n', LV, '1>/dev/null', '2>/dev/null']),
+	% os_shell2([lvcreate, '--yes', '--extents', SZ, VG, '-n', LV]),
+	os_shell2([lvcreate, '--yes', '--extents', SZ, '--name', LV, VG, '1>/dev/null', '2>/dev/null']),
 	true.
 
 % Remove all LVs the specified VG.

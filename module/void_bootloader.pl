@@ -17,7 +17,8 @@ bootloader_info(grub2, [
 		, gpt_basic
 		, gpt_lvm
 		, gpt_luks1
-		, gpt_raid
+		, gpt_luks1_lvm
+		% , gpt_raid
 		% , gpt_zfsbootmenu
 	]).
 bootloader_info(rEFInd, [
@@ -45,6 +46,13 @@ bootloader_info(zfsBootMenu, [
 		  gpt_zfsbootmenu
 	]).
 
+target_dep_bootloader(limine, limine) :- !.
+target_dep_bootloader(rEFInd, refind) :- !.
+target_dep_bootloader(grub2, GRUB) :-
+	\+ inst_setting(source, local),
+	inst_setting(system(arch), ARCH),
+	arch2grub(ARCH, GRUB), !.
+
 set_bootloader_dev(D) :-
 	% We are trying to set the same value.
 	inst_setting(bootloader_dev, dev(D, _, _)), !.
@@ -59,7 +67,7 @@ set_bootloader(RD) :-
 	inst_setting(bootloader, B),
 	set_bootloader(B, BD, RD), !.
 set_bootloader(_RD) :-
-	tui_msgbox('Setting up of a bootloader has failed.', []),
+	tui_msgbox('Setting up of a bootloader has failed.'),
 	fail.
 
 % set_bootloader(bootloader, bootloader_dev, root_dir)
