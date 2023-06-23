@@ -205,18 +205,20 @@ menu_dev_(dev(_NAME,SNAME,disk,_RO,_RM,SIZE,SSZ), [SNAME, DIA]) :-
 	format_to_atom(DIA, 'size:~w; sector size:~d', [SIZE, SSZ]),
 	true.
 
-menu_dev(Title, D) :-
+menu_dev(Title, NAME) :-
 	lx_list_dev_disk(L),
 	maplist(menu_dev_, L, DL),
 	dialog_msg(menu, MENULABEL),
-	tui_menu_tag(DL, MENULABEL, [title(Title)], D).
+	tui_menu_tag(DL, MENULABEL, [title(Title)], SN),
+	member(dev(NAME,SN,_TYPE,_RO,_RM,_SIZE,_SSZ), L).
 
 menu_dev_light(Title, NAME) :-
 	lx_list_dev_disk(L),
 	( L = [dev(NAME,_SNAME,_TYPE,_RO,_RM,_SIZE,_SSZ)]
 	; maplist(menu_dev_, L, DL),
 	  dialog_msg(menu, MENULABEL),
-	  tui_menu_tag(DL, MENULABEL, [title(Title)], NAME)
+	  tui_menu_tag(DL, MENULABEL, [title(Title)], SN),
+	  member(dev(NAME,SN,_TYPE,_RO,_RM,_SIZE,_SSZ), L)
 	), !.
 
 menu_btrfs :-
