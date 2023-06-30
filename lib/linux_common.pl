@@ -176,7 +176,7 @@ lx_fiter_disk_wwn([H|T], ID) :-
 	), !.
 lx_fiter_disk_wwn([H], H).
 
-lx_dev_info_cciss(D, dev(D, DA, GB, DSSZ)) :-
+lx_dev_info_cciss(D, dev4(D, DA, GB, DSSZ)) :-
 	os_shell_number('cat /sys/block/cciss\\\\!~w/size', [D], DSZ),
 	os_shell_number('cat /sys/block/cciss\\\\!~w/queue/hw_sector_size', [D], DSSZ),
 	GB is DSZ * DSSZ / 1024 / 1024 /1024,
@@ -187,7 +187,7 @@ lx_dev_info_cciss(D, dev(D, DA, GB, DSSZ)) :-
 % DA - device full name
 % GB - device size in GB
 % DSSZ - device block size
-lx_dev_info_ide_sata(D, dev(D, DA, GB, DSSZ)) :-
+lx_dev_info_ide_sata(D, dev4(D, DA, GB, DSSZ)) :-
 	os_shell_number('cat /sys/block/~w/size', [D], DSZ),
 	os_shell_number('cat /sys/block/~w/queue/hw_sector_size', [D], DSSZ),
 	GB is DSZ * DSSZ / 1024 / 1024 /1024,
@@ -201,7 +201,7 @@ lx_list_dev(DL) :-
 
 lx_list_dev_disk(DL) :-
 	lx_list_dev(L),
-	findall(D, (member(D, L), D=dev(_NAME,_SNAME,disk,_RO,_RM,_SIZE,_SSZ)), DL),
+	findall(D, (member(D, L), D=dev7(_NAME,_SNAME,disk,_RO,_RM,_SIZE,_SSZ)), DL),
 	true.
 
 lx_list_dev_part(D, PL) :-
@@ -210,7 +210,7 @@ lx_list_dev_part(D, PL) :-
 	!.
 
 % SSZ - number.
-lx_list_dev_(IL, dev(NAME,SNAME,TYPE,RO,RM,SIZE,SSZ)) :-
+lx_list_dev_(IL, dev7(NAME,SNAME,TYPE,RO,RM,SIZE,SSZ)) :-
 	split_list_ne(IL, " ", LL),
 	LL = [H|_],
 	split_list_ne(H, "/", NL),
@@ -324,7 +324,7 @@ lx_part_info_disk_base(D, DA, L1) :-
 	!.
 lx_part_info_disk_base(_, _, []).
 
-lx_dev2part(dev(NAME,SNAME,_TYPE,_RO,_RM,_SIZE,_SSZ), L1) :-
+lx_dev2part(dev7(NAME,SNAME,_TYPE,_RO,_RM,_SIZE,_SSZ), L1) :-
 	lx_part_info_disk_base(SNAME, NAME, L1),
 	true.
 

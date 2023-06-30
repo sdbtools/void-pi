@@ -1,4 +1,4 @@
-% vi: noexpandtab:tabstop=4:ft=prolog
+% vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 dracut_conf(RD) :-
@@ -23,14 +23,18 @@ dracut_conf(common, RD) :- !,
 	dracut_conf(VL, common, RD),
 	true.
 dracut_conf(luks, RD) :- !,
-	setup_crypt(RD),
+	% In case of a dedicated boot partition we do not need a key-file.
+	( has_boot_part ->
+	  L0 = []
+	; setup_crypt(RD),
+	  L0 = [v(install_items, ['/boot/volume.key', '/etc/crypttab'])]
+	),
 	VL = [
 		  v(add_dracutmodules, [crypt])
 		, v(add_drivers, [lz4, lz4hc, xxhash_generic])
 		, v(compress, lz4)
 		, v(hostonly, yes)
-		, v(install_items, ['/boot/volume.key', '/etc/crypttab'])
-		% , v(kernel_cmdline, ['rd.lvm=0', 'rd.md=0', 'rd.dm=0'])
+		| L0
 	],
 	dracut_conf(VL, luks, RD),
 	true.

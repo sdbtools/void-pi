@@ -1,4 +1,4 @@
-% vi: noexpandtab:tabstop=4:ft=prolog
+% vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 dialog_msg(menu, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and ENTER or SPACE to select.') :- !.
@@ -53,7 +53,7 @@ setting_value(lvm_info, V1) :- !,
 setting_value(luks_info, N) :- !,
 	inst_setting(luks, luks(N)).
 setting_value(bootloader_dev, D) :- !,
-	( inst_setting(bootloader_dev, dev(D, _, _))
+	( inst_setting(bootloader_dev, dev3(D, _, _))
 	; D = 'not set'
 	), !.
 setting_value(S, V1) :-
@@ -113,9 +113,9 @@ menu_part_soft(S) :-
 	tui_menu_tag(SL, MENULABEL, [title(' Select the software for partitioning ')], S).
 
 menu_part_manually :-
-	menu_dev(' Select the disk to partition ', D),
+	menu_dev(' Select the disk to partition ', dev7(LN,_SN,_TYPE,_RO,_RM,_SIZE,_SSZ)),
 	menu_part_soft(S),
-	os_call2([S, D]),
+	os_call2([S, LN]),
 	true.
 
 menu_part_select :-
@@ -201,24 +201,27 @@ split_tz(TZ, A1, A2) :-
 	maplist(codes_atom, LL, [A1, A2]),
 	true.
 
-menu_dev_(dev(_NAME,SNAME,disk,_RO,_RM,SIZE,SSZ), [SNAME, DIA]) :-
+menu_dev_(dev7(_NAME,SNAME,disk,_RO,_RM,SIZE,SSZ), [SNAME, DIA]) :-
 	format_to_atom(DIA, 'size:~w; sector size:~d', [SIZE, SSZ]),
 	true.
 
-menu_dev(Title, NAME) :-
-	lx_list_dev_disk(L),
+% L - list of devices to select from.
+menu_dev_list(Title, L, D) :-
 	maplist(menu_dev_, L, DL),
 	dialog_msg(menu, MENULABEL),
 	tui_menu_tag(DL, MENULABEL, [title(Title)], SN),
-	member(dev(NAME,SN,_TYPE,_RO,_RM,_SIZE,_SSZ), L).
+	member(D, L),
+	D = dev7(_NAME,SN,_TYPE,_RO,_RM,_SIZE,_SSZ),
+	!.
 
-menu_dev_light(Title, NAME) :-
+menu_dev(Title, D) :-
 	lx_list_dev_disk(L),
-	( L = [dev(NAME,_SNAME,_TYPE,_RO,_RM,_SIZE,_SSZ)]
-	; maplist(menu_dev_, L, DL),
-	  dialog_msg(menu, MENULABEL),
-	  tui_menu_tag(DL, MENULABEL, [title(Title)], SN),
-	  member(dev(NAME,SN,_TYPE,_RO,_RM,_SIZE,_SSZ), L)
+	menu_dev_list(Title, L, D).
+
+menu_dev_light(Title, D) :-
+	lx_list_dev_disk(L),
+	( L = [D]
+	; menu_dev_list(Title, L, D)
 	), !.
 
 menu_btrfs :-
@@ -248,7 +251,7 @@ menu_bootloader_dev :-
 	lx_list_dev_disk(L),
 	maplist(menu_dev_, L, DL),
 	dialog_msg(radiolist, RADIOLABEL),
-	( inst_setting(bootloader_dev, dev(OB, _, _))
+	( inst_setting(bootloader_dev, dev3(OB, _, _))
 	; OB = none
 	), !,
 	append(DL, [[none, 'Manage bootloader otherwise']], BL1),

@@ -1,4 +1,4 @@
-% vi: noexpandtab:tabstop=4:ft=prolog
+% vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 uses_luks :-
@@ -13,12 +13,15 @@ create_keyfile(ROOT_PD, RD) :-
 	% os_shell2([dd, v(bs, 1), v(count, 64), v(if, '/dev/urandom'), v(of, KF)]),
 
 	inst_setting_tmp(passwd('$_luks_$'), RPWD),
+	% tui_msgbox2(['ROOT_PD', ROOT_PD]),
 	lx_get_dev_disk_uuid(ROOT_PD, DISK_PUUID),
+	% tui_msgbox2(['DISK_PUUID', DISK_PUUID]),
 	tui_infobox('Adding crypto-key.', [sz([4, 40])]),
 	( lx_luks_add_keyfile(DISK_PUUID, KF, RPWD)
 	; tui_msgbox('luks_add_keyfile has failed'),
 	  fail
 	), !,
+	% tui_msgbox2([after, lx_luks_add_keyfile]),
 
 	% os_shell2([chmod, '000', KF]),
 	os_shell2([chroot, RD, chmod, '000', VK]),
@@ -43,11 +46,10 @@ luks_dev_name(LUKS_PD) :-
 	true.
 
 setup_crypt(RD) :-
-	inst_setting(bootloader_dev, dev(BD, _, _)),
-	root_pd(BD, ROOT_PD),
-	lx_get_dev_uuid(ROOT_PD, PUUID),
+	inst_setting(bdev, bdev(luks, luks(luks1, PD))),
+	lx_get_dev_uuid(PD, PUUID),
 	% Create the keyfile
-	create_keyfile(ROOT_PD, RD),
+	create_keyfile(PD, RD),
 	% Setup crypttab
 	setup_cryptab(PUUID, RD),
 	true.

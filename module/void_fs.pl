@@ -1,5 +1,10 @@
-% vi: noexpandtab:tabstop=4:ft=prolog
+% vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+
+has_boot_part :-
+	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
+	inst_setting(fs, fs4(_FS, _Label, '/boot', _BD1)), !,
+	true.
 
 has_root_part :-
 	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
@@ -16,20 +21,21 @@ has_usr_part :-
 	inst_setting(fs, fs4(_FS, _Label, '/usr', _BD1)), !,
 	true.
 
-root_pd(D, PD) :-
+root_pd(PD) :-
 	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
-	inst_setting(fs, fs4(_FS, _Labe1, '/', bd1(L))),
-	append(_, [PD, D], L),
+	inst_setting(fs, fs4(_FS, _Labe1, '/', bd1([PD| _]))),
+	% inst_setting(fs, fs4(_FS, _Labe1, '/', bd1(L))),
+	% append(_, [PD, D], L),
 	!.
-root_pd(D, _PD) :-
-	tui_msgbox2(['root partition for', D, 'was not found']),
+root_pd(_PD) :-
+	tui_msgbox2(['root partition was not found']),
 	fail.
 
-boot_pref(D, '') :-
+boot_pref('') :-
 	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
-	inst_setting(fs, fs4(_Name, _Labe1, '/boot', bd1([_ROOT_PD, D]))),
+	inst_setting(fs, fs4(_Name, _Labe1, '/boot', _BD1)),
 	!.
-boot_pref(_D, 'boot/').
+boot_pref('boot/').
 
 mkfs(RD) :-
 	% tui_msgbox('mkfs'),
@@ -134,18 +140,14 @@ mkfs(FS, _, _, _, _RD) :- !,
 	fail.
 
 % bdev4(Name, Label, TargetDev, SourceDevList)
-mkbd(lvm, vg(VG, SDL)) :- !,
+% vg(Name, [PhysicalVolumeList], [LogicalVolumeList])
+mkbd(lvm, vg(VG, SDL, CL)) :- !,
 	maplist(mk_lvm_pvcreate, SDL),
 	( lvm_vgcreate(VG, SDL)
 	; tui_msgbox('vgcreate has failed'),
 	  fail
 	), !,
-	true.
-mkbd(lvm, lv(LV, VG, SZ)) :- !,
-	( lvm_lvcreate_unsafe(VG, LV, SZ)
-	; tui_msgbox('lvcreate has failed'),
-	  fail
-	), !,
+	maplist(mk_lvm_lvcreate(VG), CL),
 	true.
 mkbd(luks, luks(Type, PD)) :- !,
 	inst_setting_tmp(passwd('$_luks_$'), RPWD),
@@ -165,11 +167,18 @@ mkbd(BD, _) :- !,
 	tui_msgbox2(['Unknown block device', BD]),
 	fail.
 
+% PD - a single device or a list
 mk_lvm_pvcreate(PD) :-
 	% A PV can be a disk partition, whole disk, meta device, or loopback file.
 	lvm_pvcreate_unsafe(PD), !.
 mk_lvm_pvcreate(PD) :-
 	tui_msgbox2(['lvm_pvcreate', PD, 'has failed']),
+	fail.
+
+mk_lvm_lvcreate(VG, lv(LV, SZ)) :-
+	lvm_lvcreate_unsafe(VG, LV, SZ), !.
+mk_lvm_lvcreate(VG, lv(LV, _SZ)) :-
+	tui_msgbox2([lvcreate, VG, LV, 'has failed']),
 	fail.
 
 mount_fs(RD) :-
@@ -232,7 +241,7 @@ clean_mnt(RD) :-
 	fail.
 clean_mnt(_RD) :-
 	% LVM
-	inst_setting(bootloader_dev, dev(D, _, _)),
+	inst_setting(bootloader_dev, dev3(D, _, _)),
 	lvm_pvs(PVL),
 	findall(pv(PV,VG), (member(pv(PV,VG), PVL), atom_concat(D, _, PV)), VGL),
 	maplist(clean_mnt_lvm_, VGL),

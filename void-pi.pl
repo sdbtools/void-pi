@@ -1,5 +1,5 @@
 #!/usr/bin/gprolog --consult-file
-% vi: noexpandtab:tabstop=4:ft=prolog
+% vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 :- initialization(main).
@@ -7,11 +7,11 @@
 :- include('lib/atom_common.pl').
 :- include('lib/list_common.pl').
 :- include('lib/os_common.pl').
-:- include('lib/os_dracut.pl').
 :- include('lib/os_grub.pl').
 :- include('lib/cli_common.pl').
 :- include('lib/unix_common.pl').
 :- include('lib/linux_common.pl').
+:- include('lib/linux_dracut.pl').
 :- include('lib/linux_luks.pl').
 :- include('lib/zfs_common.pl').
 :- include('lib/lvm_common.pl').
@@ -475,7 +475,7 @@ set_useraccount(_RD) :-
 
 copy_rootfs(RD) :-
 	TA = [tar, '--create', '--one-file-system', '--xattrs'],
-	TAE = [TA, '-f', '-', '/', '2>/dev/null', '|', 
+	TAE = [TA, '-f', '-', '/', '2>/dev/null', '|',
 		tar, '--extract', '--xattrs', '--xattrs-include=\'*\'', '--preserve-permissions', '-v', '-f', '-', '-C', RD, '2>&1'
 	],
 	% TAN = [TA, '-v', '-f', '/dev/null', '/', '2>/dev/null', '|', 'wc', '-l'],
@@ -722,7 +722,7 @@ run_cmdl(L) :-
 make_cmd(prepare_to_install).
 make_cmd(wipe(D, TL, PL)) :-
 	\+ inst_setting(template, manual),
-	inst_setting(bootloader_dev, dev(D, PL, TL)),
+	inst_setting(bootloader_dev, dev3(D, PL, TL)),
 	true.
 make_cmd(part(D, SPL)) :-
 	\+ inst_setting(template, manual),
@@ -732,7 +732,7 @@ make_cmd(part(D, SPL)) :-
 	sort(DL0, DL),
 	% For each device
 	member(D, DL),
-	% Make partition list
+	% Make partiotion list
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
 	findall(PD, inst_setting(partition, part4(bd1([PD, D]), _, _, _SZ1)), PL0),
 	sort(PL0, SPL),

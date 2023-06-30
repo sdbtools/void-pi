@@ -1,4 +1,4 @@
-% vi: noexpandtab:tabstop=4:ft=prolog
+% vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 arch2grub(_, grub) :-
@@ -33,7 +33,7 @@ grub_install_env(['ZPOOL_VDEV_NAME_PATH=1']) :-
 grub_install_env([]) :-
 	true.
 
-grub_configure(BD, RD) :-
+grub_configure(RD) :-
 	% Configure grub.
 	GVL0 = [
 		  v('GRUB_DEFAULT', 0, '')
@@ -41,13 +41,12 @@ grub_configure(BD, RD) :-
 		, v('GRUB_DISTRIBUTOR', 'Void', '')
 	],
 	( uses_luks ->
-	  root_pd(BD, ROOT_PD),
-	  lx_get_dev_uuid(ROOT_PD, PUUID),
-	  luks_dev_name(LUKS_PD),
+	  inst_setting(bdev, bdev(luks, luks(luks1, PD))),
+	  lx_get_dev_uuid(PD, PUUID),
+	  inst_setting(luks, luks(Name)),
 	  os_scmdl([
-		  'rd.luks'=1
-		, 'rd.luks.name'=v(PUUID, LUKS_PD)
-		, loglevel=6
+		  'rd.luks.name'=v(PUUID, Name)
+		, loglevel=4
 		, slub_debug='FZ'
 		, slab_nomerge=1
 		, pti=on
@@ -65,7 +64,8 @@ grub_configure(BD, RD) :-
 		| GVL0
 	  ]
 	; GVL = [
-		  v('GRUB_CMDLINE_LINUX_DEFAULT', 'loglevel=4', '')
+		  'rd.luks'=0
+		, v('GRUB_CMDLINE_LINUX_DEFAULT', 'loglevel=4', '')
 		| GVL0
 	  ]
 	),

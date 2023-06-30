@@ -1,10 +1,9 @@
-% vi: noexpandtab:tabstop=4:ft=prolog
+% vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
-refind_install(BD, RD) :-
-	% BD is the disk (not a partition)
+refind_install(RD) :-
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	( inst_setting(partition, part4(bd1([EFI_PD| BD]), efi_system, _CK, _SZ))
+	( inst_setting(partition, part4(bd1([EFI_PD| _]), efi_system, _CK, _SZ))
 	; tui_msgbox('efi system partition was not found'),
 	  fail
 	), !,
@@ -13,41 +12,44 @@ refind_install(BD, RD) :-
 	% os_shell2(CL1),
 	true.
 
-refind_configure(BD, RD) :-
-	root_pd(BD, ROOT_PD),
-	boot_pref(BD, Pref),
-	(
-	  lx_get_dev_partuuid(ROOT_PD, RPID),
-	  atom_concat(RD, '/boot/refind_linux.conf', FN),
-	  open(FN, write, S),
+refind_configure(RD) :-
+	atom_concat(RD, '/boot/refind_linux.conf', FN),
+	open(FN, write, S),
 
-	  write(S, '"Boot with standard options" "'),
-	  refind_write_cfg(S, Pref, RPID, []),
-	  write(S, '"'), nl(S),
+	write(S, '"Boot with standard options" "'),
+	refind_write_cfg(S, []),
+	write(S, '"'), nl(S),
 
-	  write(S, '"Boot to single-user mode" "'),
-	  refind_write_cfg(S, Pref, RPID, [single]),
-	  write(S, '"'), nl(S),
+	write(S, '"Boot to single-user mode" "'),
+	refind_write_cfg(S, [single]),
+	write(S, '"'), nl(S),
 
-	  close(S)
-	),
-	% CL2 = [chroot, RD, mkrlconf, '2>&1'],
-	% os_shell2(CL2),
+	close(S),
 	true.
 
-refind_write_cfg(S, Pref, RPID, L) :-
-	inst_setting(keymap, KB),
-	inst_setting(locale, LC),
-	( inst_setting(root_fs, btrfs) ->
-	  L0 = [rootflags=v(subvol, '@'), initrd='@\\boot\\initramfs-%v.img'| L]
-	; atom_concat(Pref, 'initramfs-%v.img', BI),
-	  L0 = [initrd=BI| L]
+refind_kernel_params(L) :-
+	% Device
+	root_pd(ROOT_PD),
+	( atom_concat('/dev/mapper/', _, ROOT_PD) ->
+	  L = [root=ROOT_PD]
+	; lx_get_dev_partuuid(ROOT_PD, RPID),
+	  L = [root=v('PARTUUID', RPID)]
 	),
-	AL = [
-		  root=v('PARTUUID', RPID)
-		, rw
-		, 'rd.luks'=0
-		, 'rd.md'=0
+	true.
+refind_kernel_params(L) :-
+	% LUKS
+	( inst_setting(bdev, bdev(luks, luks(luks1, PD))) ->
+	  lx_get_dev_uuid(PD, PDID),
+	  inst_setting(luks, luks(Name)),
+	  L = ['rd.luks.name'=v(PDID, Name)]
+	; L = ['rd.luks'=0]
+	),
+	true.
+refind_kernel_params(['rd.lvm'=0]) :-
+	\+ inst_setting(bdev, bdev(lvm, _Value)),
+	true.
+refind_kernel_params([
+		  'rd.md'=0
 		, 'rd.dm'=0
 		, loglevel=4
 		, gpt
@@ -55,9 +57,20 @@ refind_write_cfg(S, Pref, RPID, L) :-
 		, 'vconsole.unicode'=1
 		, 'vconsole.keymap'=KB
 		, 'locale.LANG'=LC
-		% , 'rd.live.overlay.overlayfs'=1
-		| L0
-	],
+	]) :-
+	inst_setting(keymap, KB),
+	inst_setting(locale, LC),
+	true.
+refind_kernel_params(L) :-
+	( inst_setting(root_fs, btrfs), \+ has_boot_part ->
+	  L = [rootflags=v(subvol, '@'), initrd='@\\boot\\initramfs-%v.img']
+	; boot_pref(Pref),
+	  atom_concat(Pref, 'initramfs-%v.img', BI),
+	  L = [initrd=BI]
+	).
+
+refind_write_cfg(S, L) :-
+	findall(P0, ((refind_kernel_params(PL0); PL0 = L), member(P0, PL0)), AL),
 	os_wcmdl(AL, S),
 	true.
 

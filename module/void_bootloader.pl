@@ -1,4 +1,4 @@
-% vi: noexpandtab:tabstop=4:ft=prolog
+% vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % bootloader_info(bootloade, supported_fs, supported_template).
@@ -30,6 +30,9 @@ bootloader_info(rEFInd, [
 	], [
 		  manual
 		, gpt_basic
+		, gpt_lvm
+		, gpt_luks1
+		, gpt_luks1_lvm
 	]).
 bootloader_info(limine, [
 		  ext2
@@ -39,6 +42,9 @@ bootloader_info(limine, [
 	], [
 		  manual
 		, gpt_basic
+		, gpt_lvm
+		, gpt_luks1
+		, gpt_luks1_lvm
 	]).
 bootloader_info(zfsBootMenu, [
 		  zfs
@@ -55,15 +61,15 @@ target_dep_bootloader(grub2, GRUB) :-
 
 set_bootloader_dev(D) :-
 	% We are trying to set the same value.
-	inst_setting(bootloader_dev, dev(D, _, _)), !.
+	inst_setting(bootloader_dev, dev3(D, _, _)), !.
 set_bootloader_dev(D) :-
 	lx_list_dev_part(D, PL),
 	lx_dev_part_tree(D, PL, TL),
 	retractall(inst_setting(bootloader_dev, _)),
-	assertz(inst_setting(bootloader_dev, dev(D, PL, TL))).
+	assertz(inst_setting(bootloader_dev, dev3(D, PL, TL))).
 
 set_bootloader(RD) :-
-	inst_setting(bootloader_dev, dev(BD, _, _)),
+	inst_setting(bootloader_dev, dev3(BD, _, _)),
 	inst_setting(bootloader, B),
 	set_bootloader(B, BD, RD), !.
 set_bootloader(_RD) :-
@@ -73,16 +79,16 @@ set_bootloader(_RD) :-
 % set_bootloader(bootloader, bootloader_dev, root_dir)
 set_bootloader(_, none, _RD) :- !.
 set_bootloader(grub2, BD, RD) :- !,
-	grub_configure(BD, RD),
+	grub_configure(RD),
 	grub_install(BD, RD),
 	grub_mkconfig(RD),
 	!.
-set_bootloader(rEFInd, BD, RD) :-
-	refind_install(BD, RD),
-	refind_configure(BD, RD),
+set_bootloader(rEFInd, _BD, RD) :-
+	refind_install(RD),
+	refind_configure(RD),
 	!.
 set_bootloader(limine, BD, RD) :-
 	limine_install(BD, RD), !,
-	limine_configure(BD, RD),
+	limine_configure(RD),
 	!.
 
