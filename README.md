@@ -4,10 +4,10 @@ Void Linux installer implemented in GNU Prolog.
 
 Last tested | ISO                                                                                | Result
 ----------- | ---------------------------------------------------------------------------------- | ------
-2023-03-02  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
-2023-03-02  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
-2023-03-02  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
-2023-03-03  | [void-live-i686-20210930.iso](https://repo-default.voidlinux.org/live/20210930/void-live-i686-20210930.iso) | PASS
+2023-06-29  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
+2023-06-29  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
+2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
+2023-06-29  | [void-live-i686-20210930.iso](https://repo-default.voidlinux.org/live/20210930/void-live-i686-20210930.iso) | PASS
 
 ## Description
 
@@ -32,15 +32,16 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - all settings can be saved in a file and loaded on startup. File name is controlled via `--config` command line argument.
 - passwords are never saved in files even temporarily.
 - Bootloaders
-    - uses GRUB, rEFIind, or Limine as a bootloader.
+    - uses GRUB, rEFInd, or Limine as a bootloader.
     - GRUB supports btrfs, ext2, ext3, ext4, and xfs file systems.
-    - rEFIind supports btrfs, ext2, ext3, and ext4 file systems.
-    - rEFIind is configured to use kernel auto detection.
+    - rEFInd supports btrfs, ext2, ext3, and ext4 file systems.
+    - rEFInd is configured to use kernel auto detection.
     - Limine supports ext2, ext3, and ext4 file systems.
-    - if a bootloader doesn't support a file system, then installer will create an ext4 `/boot` partition.
+    - if a bootloader doesn't support a file system (or LVM, or LUKS), then installer will create an ext4 `/boot` partition.
 - LUKS
-    - LUKS can be used with GRUB.
-    - whole system on LUKS, including encrypted `/boot`
+    - LUKS can be used with GRUB, rEFInd, and Limine.
+    - In case of GRUB whole system is located on LUKS, including encrypted `/boot`
+    - In case of rEFInd and Limine installer will create an unencrypted ext4 `/boot` partition.
 
 ### Templates
 
