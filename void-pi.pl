@@ -604,13 +604,13 @@ ensure_passwd :-
 	inst_setting(template, gpt_luks1),
 	U = '$_luks_$',
 	\+ inst_setting_tmp(passwd(U), _),
-	menu_password(U),
+	menu_password_luks(U),
 	fail.
 ensure_passwd :-
 	inst_setting(template, gpt_luks1_lvm),
 	U = '$_luks_$',
 	\+ inst_setting_tmp(passwd(U), _),
-	menu_password(U),
+	menu_password_luks(U),
 	fail.
 ensure_passwd.
 

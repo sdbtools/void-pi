@@ -86,26 +86,34 @@ select_pkg_inst_method :-
 	retractall(inst_setting(source, _)),
 	assertz(inst_setting(source, A)).
 
-menu_password(UL) :-
-	format_to_atom(MP1, ' Enter password for user ~w ', [UL]),
+menu_password0(UL, Title) :-
 	dialog_msg(form, FORMLABEL),
 	( inst_setting_tmp(passwd(UL), UP) ->
 	  true
 	; UP = ''
 	),
-	tui_passwordform_v(25, 0, [item('Choose a password:', UP), item('Confirm your password:', UP)], FORMLABEL, [title(MP1)], [P1, P2|_]),
-	check_password(UL, P1, P2), !,
+	tui_passwordform_v(25, 0, [item('Choose a password:', UP), item('Confirm your password:', UP)], FORMLABEL, [title(Title)], [P1, P2|_]),
+	check_password(UL, Title, P1, P2), !,
 	retractall(inst_setting_tmp(passwd(UL), _)),
 	assertz(inst_setting_tmp(passwd(UL), P1)).
 
-check_password(UL, P1, P2) :-
+menu_password(UL) :-
+	format_to_atom(Title, ' Enter password for user ~w ', [UL]),
+	menu_password0(UL, Title).
+
+menu_password_luks(UL) :-
+	inst_setting(useraccount, user(UD, _, _)),
+	format_to_atom(Title, ' Enter LUKS password for user ~w ', [UD]),
+	menu_password0(UL, Title).
+
+check_password(UL, Title, P1, P2) :-
 	P1 \= P2, !,
 	tui_yesno('Passwords don\'t match. Would you like to reenter?', [sz([6, 40])]),
-	menu_password(UL).
-check_password(UL, '', _) :- !,
+	menu_password0(UL, Title).
+check_password(UL, Title, '', _) :- !,
 	tui_yesno('Password is empty. Would you like to reenter?', [sz([6, 40])]),
-	menu_password(UL).
-check_password(_, _, _).
+	menu_password0(UL, Title).
+check_password(_, _, _, _).
 
 menu_part_soft(S) :-
 	SL = [[cfdisk, 'Easy to use'], [fdisk, 'More advanced']],
@@ -290,11 +298,11 @@ menu_useraccount :-
 	tui_form_v(20, 100, [
 		item('Login name:', LN),
 		item('User name:', UN)
-		], FORMLABEL, [title(' User account settings ')], [LN, UN|_]),
-	menu_password(LN),
+		], FORMLABEL, [title(' User account settings ')], [LN1, UN1|_]),
+	menu_password(LN1),
 	menu_usergroups(GL),
 	retractall(inst_setting(useraccount, _)),
-	assertz(inst_setting(useraccount, user(LN, UN, GL))),
+	assertz(inst_setting(useraccount, user(LN1, UN1, GL))),
 	true.
 
 menu_lvm :-
@@ -525,7 +533,14 @@ menu_review :-
 	findall(S0, (menu_review_opt(SL0), member(S0, SL0)), S),
 	maplist(menu_tag_v, S, SL),
 	dialog_msg(menu, MENULABEL),
-	tui_menu_tag(SL, MENULABEL, [no-cancel, title(' Current settings ')], _Tag),
+	tui_menu_tag(SL, MENULABEL, [no-cancel, ok-label('Return'), title(' Current settings ')], _Tag),
+	true.
+
+menu_review_form :-
+	findall(S0, (menu_review_opt(SL0), member(S0, SL0)), S),
+	maplist(menu_tag_form_v, S, SL),
+	dialog_msg(form, FORMLABEL),
+	tui_mixedform_v(30, 100, SL, FORMLABEL, [no-cancel, title(' Current settings ')], _L),
 	true.
 
 menu_template(B) :-
@@ -559,6 +574,11 @@ menu_tag_v(A, [T, V]) :-
 	action_info(A, T, _), !,
 	setting_value(A, V).
 menu_tag_v(A, [A,A]).
+
+menu_tag_form_v(A, item(T, V, 2)) :-
+	action_info(A, T, _), !,
+	setting_value(A, V).
+menu_tag_form_v(A, item(A, A, 2)).
 
 menu_network :-
 	( file_exists('/var/service/NetworkManager') ->
@@ -614,7 +634,7 @@ menu_common :-
 	dialog_msg(menu, MENULABEL),
 	repeat,
 	maplist(menu_tag_v, M, ML),
-	tui_menu_tag2(main_common, ML, MENULABEL, [cancel-label('Exit'), title(' Common installation settings ')], Tag),
+	tui_menu_tag2(main_common, ML, MENULABEL, [cancel-label('Return'), title(' Common installation settings ')], Tag),
 	action_info(A, Tag, _),
 	menu_action(A),
 	!.
@@ -683,7 +703,7 @@ cmd_menu(user_passwd) :- !,
 	menu_password(UL),
 	true.
 cmd_menu(luks_passwd) :- !,
-	menu_password('$_luks_$'),
+	menu_password_luks('$_luks_$'),
 	true.
 cmd_menu(useraccount) :- !,
 	menu_useraccount,
