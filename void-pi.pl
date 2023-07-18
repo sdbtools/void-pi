@@ -287,6 +287,20 @@ make_chroot_inst_pref_chroot(ARCH, P, RD) :-
 	P = [stdbuf, '-oL', env, XBPS_ARCH, chroot, RD],
 	true.
 
+need_to_remove_pkg([dialog, 'xtools-minimal']).
+need_to_remove_pkg([grub]) :-
+	  % Remove grub if we are using different bootloader.
+	  \+ inst_setting(bootloader, grub2).
+
+% Remove list of packages
+remove_pkg(L, RD) :-
+	% find installed packages
+	findall(P0, (member(P0, L), os_call2_rc(['xbps-query', P0], 0)), L0),
+	findall(P2, (member(P1, L0), os_shell2_lines(['xbps-query', '-X', P1], P2L), member(P2, P2L)), L1),
+	append(L1, L0, L3),
+	tui_progressbox_safe(['xbps-remove', o(r, RD), '-Ry', L3, '2>&1'], '', [title(' xbps-remove '), sz([12, 80])]),
+	true.
+
 install_pkg(rootfs, RD) :-
 	% N = 'void-x86_64-ROOTFS-20221001.tar.xz',
 	working_directory(PWD),
@@ -314,7 +328,7 @@ install_pkg(rootfs, RD) :-
 	install_target_dep(RD),
 
 	% Remove stuff
-	tui_progressbox_safe(['xbps-remove', o(r, RD), '-y', 'base-voidstrap', '2>&1'], '', [title(' Remove base-voidstrap '), sz(max)]),
+	remove_pkg(['base-voidstrap'], RD),
 
 	tui_progressbox_safe(['xbps-reconfigure', o(r, RD), '-f', 'base-files', '2>&1'], '', [title(' Reconfigure base-files '), sz(max)]),
 	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-a', '2>&1'], '', [title(' Reconfigure all '), sz(max)]),
@@ -375,13 +389,8 @@ install_pkg(local, RD) :-
 	% Remove stuff
 	( HN = hrmpf
 	; % Remove temporary packages from target
-	  RL0 = [dialog, 'xtools-minimal'],
-	  % Remove grub if we are using different bootloader.
-	  ( inst_setting(bootloader, grub2) ->
-	    RL1 = RL0
-	  ; RL1 = ['grub-i386-efi', 'grub-x86_64-efi', grub| RL0]
-	  ),
-	  tui_progressbox_safe(['xbps-remove', o(r, RD), '-Ry', RL1, '2>&1'], '', [title(' xbps-remove '), sz([12, 80])])
+	  findall(P, (need_to_remove_pkg(PL0), member(P, PL0)), PL),
+	  remove_pkg(PL, RD)
 	),
 	true.
 
