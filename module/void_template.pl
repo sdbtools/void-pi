@@ -103,13 +103,13 @@ partition_set_mbr(B, D, N, L) :-
 	inst_setting(system(efi), _), !,
 	partition_set_efi(B, D, N, L).
 partition_set_mbr(B, D, N, [p4(bios_boot, bd1([PD, D]), keep, MBR_SZ)| L]) :-
-	format_to_atom(PD, '~w~d', [D, N]),
+	part_name(D, N, PD),
 	inst_setting(mbr_size, MBR_SZ),
 	N1 is N + 1,
 	partition_set_efi(B, D, N1, L).
 
 partition_set_efi(B, D, N, [p4(efi_system, bd1([PD, D]), create, ESP_SZ), fs4(vfat, efi, '/boot/efi', bd1([PD, D]))| L]) :-
-	format_to_atom(PD, '~w~d', [D, N]),
+	part_name(D, N, PD),
 	inst_setting(esp_size, ESP_SZ),
 	N1 is N + 1,
 	partition_set_boot(B, D, N1, L).
@@ -117,7 +117,7 @@ partition_set_efi(B, D, N, [p4(efi_system, bd1([PD, D]), create, ESP_SZ), fs4(vf
 partition_set_boot(B, D, N, [p4(linux, bd1([PD, D]), create, BOOT_SZ), fs4(ext4, boot, '/boot', bd1([PD, D]))| L]) :-
 	inst_setting(root_fs, FS),
 	need_boot_part(B, FS), !,
-	format_to_atom(PD, '~w~d', [D, N]),
+	part_name(D, N, PD),
 	inst_setting(boot_size, BOOT_SZ),
 	N1 is N + 1,
 	partition_set_template(D, N1, L).
@@ -128,12 +128,12 @@ partition_set_template(D, N, [p4(linux_lvm, bd1([PD, D]), create, ''), bdev(lvm,
 	inst_setting(template, gpt_lvm), !,
 	inst_setting(lvm, lv(VG, LV, SZ)),
 	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
-	format_to_atom(PD, '~w~d', [D, N]),
+	part_name(D, N, PD),
 	inst_setting(root_fs, FS),
 	true.
 partition_set_template(D, N, [p4(linux_luks, bd1([PD, D]), create, ''), bdev(luks, luks(luks1, PD)), fs4(FS, void, '/', bd1([LUKS_PD, PD, D]))]) :-
 	inst_setting(template, gpt_luks1), !,
-	format_to_atom(PD, '~w~d', [D, N]),
+	part_name(D, N, PD),
 	inst_setting(root_fs, FS),
 	luks_dev_name(LUKS_PD),
 	true.
@@ -141,13 +141,13 @@ partition_set_template(D, N, [p4(linux_luks, bd1([PD, D]), create, ''), bdev(luk
 	inst_setting(template, gpt_luks1_lvm), !,
 	inst_setting(lvm, lv(VG, LV, SZ)),
 	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
-	format_to_atom(PD, '~w~d', [D, N]),
+	part_name(D, N, PD),
 	inst_setting(root_fs, FS),
 	luks_dev_name(LUKS_PD),
 	true.
 partition_set_template(D, N, [p4(PT, bd1([PD, D]), create, ''), fs4(FS, void, '/', bd1([PD, D]))]) :-
 	inst_setting(root_fs, FS),
-	format_to_atom(PD, '~w~d', [D, N]),
+	part_name(D, N, PD),
 	fs2parttype(FS, PT), !.
 
 part_set_(p4(PT, BD1, CK, SZ)) :- !,
@@ -159,5 +159,11 @@ part_set_(fs4(FS, Label, MP, BD1)) :- !,
 part_set_(bdev(Type, Value)) :- !,
 	assertz(inst_setting(bdev, bdev(Type, Value))),
 	true.
+
+part_name(D, N, PD) :-
+	atom_concat('/dev/nvme', _, D), !,
+	format_to_atom(PD, '~wp~d', [D, N]).
+part_name(D, N, PD) :-
+	format_to_atom(PD, '~w~d', [D, N]).
 
 

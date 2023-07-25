@@ -4,8 +4,9 @@ Void Linux installer implemented in GNU Prolog.
 
 Last tested | ISO                                                                                | Result
 ----------- | ---------------------------------------------------------------------------------- | ------
-2023-06-29  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
+2023-07-25  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
 2023-06-29  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
+2023-07-25  | [void-live-i686-20230628-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20230628-base.iso) | PASS
 2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
 2023-06-29  | [void-live-i686-20210930.iso](https://repo-default.voidlinux.org/live/20210930/void-live-i686-20210930.iso) | PASS
 
@@ -148,7 +149,7 @@ This software is released under the GNU GPLv2 license.
 - [Void Linux](https://voidlinux.org/)
 - [Voidvault](https://github.com/atweiden/voidvault)
  
-[550M]: https://wiki.archlinux.org/index.php/EFI_system_partition#Create_the_partition
+[550M]: https://unix.stackexchange.com/a/722439
 [flat layout]: https://btrfs.wiki.kernel.org/index.php/SysadminGuide#Layout
 [nodatacow]: https://wiki.archlinux.org/index.php/Btrfs#Disabling_CoW
 

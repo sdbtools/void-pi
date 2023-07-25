@@ -2,7 +2,7 @@
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 version :-
-	writenl('version 0.6.2').
+	writenl('version 0.6.3').
 
 source_dep_module('void-live', filesystem(zfs), [zfs, lz4]).
 source_dep_module('void-live', filesystem(f2fs), [lz4]).
