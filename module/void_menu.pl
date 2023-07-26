@@ -4,6 +4,7 @@
 dialog_msg(menu, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and ENTER or SPACE to select.') :- !.
 dialog_msg(list, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and ENTER or SPACE to select.') :- !.
 dialog_msg(radiolist, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and SPACE to select.') :- !.
+dialog_msg(checklist, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and SPACE to select.') :- !.
 dialog_msg(form, 'Use UP and DOWN arrows (or Ctrl/N, Ctrl/P) to move between fields. Use TAB to move between windows.') :- !.
 
 action_info(common_settings, 'Common Attrs', 'Common settings').
@@ -37,8 +38,9 @@ action_info(esp_size, 'ESP Size', 'Set EFI System Partition Size').
 action_info(boot_size, 'Boot Size', 'Set Boot Partition Size').
 
 setting_value(partition, V1) :- !,
+	inst_setting(template(_), TL),
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	findall(PD, inst_setting(partition, part4(bd1([PD| _]), _, _, _)), VL),
+	findall(PD, member(p4(_PT, bd1([PD| _]), _CK, _SZ), TL), VL),
 	write_to_atom(V1, VL).
 setting_value(root_passwd, '********') :-
 	inst_setting_tmp(passwd(root), _), !.
@@ -52,9 +54,17 @@ setting_value(lvm_info, V1) :- !,
 	format_to_atom(V1, 'VG: ~w, LV: ~w', [VG, LV]).
 setting_value(luks_info, N) :- !,
 	inst_setting(luks, luks(N)).
+setting_value(bootloader, B) :- !,
+	inst_setting(template(_), TL),
+	memberchk(bootloader(B, _), TL).
 setting_value(bootloader_dev, D) :- !,
-	( inst_setting(bootloader_dev, dev3(D, _, _))
-	; D = 'not set'
+	inst_setting(template(_), TL),
+	memberchk(bootloader(_, dev3(D, _PL, _TL1)), TL).
+setting_value(root_fs, FS) :- !,
+	inst_setting(template(_), TL),
+	% fs4(Name, Label, MountPoint, [DevList])
+	( memberchk(fs4(FS, _Label, '/', _DL), TL)
+	; FS = 'not set'
 	), !.
 setting_value(S, V1) :-
 	inst_setting(S, V), !,
@@ -121,25 +131,52 @@ menu_part_soft(S) :-
 	tui_menu_tag(SL, MENULABEL, [title(' Select the software for partitioning ')], S).
 
 menu_part_manually :-
-	menu_dev(' Select the disk to partition ', dev7(LN,_SN,_TYPE,_RO,_RM,_SIZE,_SSZ)),
+	menu_dev7_menu(' Select the disk to partition ', dev7(LN,_SN,_TYPE,_RO,_RM,_SIZE,_SSZ)),
 	menu_part_soft(S),
 	os_call2([S, LN]),
 	true.
 
 menu_part_select :-
 	% OPL - list of already configured partitions.
+	inst_setting(template(_), TL),
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	findall(PD, inst_setting(partition, part4(bd1([PD| _]), _, _, _)), OPL),
+	findall(PD, member(p4(_PT, bd1([PD| _]), _CK, _SZ), TL), OPL),
 	lx_list_part_info(PIL),
 	PIL \= [], !,
 	maplist(part2taglist, PIL, ML1),
 	MT1 = ' Select partition(s) to use ',
 	dialog_msg(menu, MENULABEL),
 	tui_checklist_tag2(ML1, OPL, MENULABEL, [title(MT1)], PLO),
-	update_part_info(OPL, PLO),
+	update_part_info2(PIL, OPL, PLO, TL, NTL),
+	retract(inst_setting(template(TN), _)),
+	assertz(inst_setting(template(TN), NTL)),
 	!.
 menu_part_select :-
 	tui_msgbox('There are no partitions available.', [sz([6, 40])]),
+	true.
+
+update_part_info2(_PIL, OPL, OPL, IL, IL) :- !.
+update_part_info2(PIL, OPL, PLO, IL, OL) :-
+	findall(M, (member(M, IL), keep_part_(PLO, M)), IL1),
+	add_part_(PIL, OPL, PLO, IL1, OL),
+	true.
+
+% KL - list of partitions to keep.
+keep_part_(KL, p4(_PT, bd1([PD| _]), _CK, _SZ)) :- !,
+	memberchk(PD, KL).
+keep_part_(KL, fs4(_, _, _, [PD| _])) :- !,
+	memberchk(PD, KL).
+keep_part_(_KL, _).
+
+% SL - list of partitions to skip.
+add_part_(PIL, SL, [PD| T], IL, OL) :-
+	memberchk(PD, SL), !,
+	add_part_(PIL, SL, T, IL, OL).
+add_part_(PIL, SL, [PD| T], IL, [p4(linux, BD1, keep, SZ), fs4(FS, '', '', [PD])| OL]) :-
+	member(part_info(BD1, FS, SZ, _Type), PIL),
+	BD1 = bd1([PD| _]), !,
+	add_part_(PIL, SL, T, IL, OL).
+add_part_(_PIL, _SL, [], L, L) :-
 	true.
 
 menu_keymap :-
@@ -209,28 +246,97 @@ split_tz(TZ, A1, A2) :-
 	maplist(codes_atom, LL, [A1, A2]),
 	true.
 
-menu_dev_(dev7(_NAME,SNAME,disk,_RO,_RM,SIZE,SSZ), [SNAME, DIA]) :-
+menu_dev7_menu_(dev7(_NAME,SNAME,disk,_RO,_RM,SIZE,SSZ), [SNAME, DIA]) :-
 	format_to_atom(DIA, 'size:~w; sector size:~d', [SIZE, SSZ]),
 	true.
 
 % L - list of devices to select from.
-menu_dev_list(Title, L, D) :-
-	maplist(menu_dev_, L, DL),
+menu_dev7_menu(Title, L, D) :-
+	maplist(menu_dev7_menu_, L, DL),
 	dialog_msg(menu, MENULABEL),
 	tui_menu_tag(DL, MENULABEL, [title(Title)], SN),
 	member(D, L),
 	D = dev7(_NAME,SN,_TYPE,_RO,_RM,_SIZE,_SSZ),
 	!.
 
-menu_dev(Title, D) :-
-	lx_list_dev_disk(L),
-	menu_dev_list(Title, L, D).
+% L - list of devices to select from.
+menu_dev71_menu(_Title, [D], D) :- !.
+menu_dev71_menu(Title, L, D) :-
+	menu_dev7_menu(Title, L, D).
 
-menu_dev_light(Title, D) :-
-	lx_list_dev_disk(L),
-	( L = [D]
-	; menu_dev_list(Title, L, D)
-	), !.
+% L - list of devices to select from.
+menu_dev7_checklist(Title, L, DL) :-
+	maplist(menu_dev7_menu_, L, DL0),
+	dialog_msg(checklist, LABEL),
+	tui_checklist_tag(DL0, LABEL, [title(Title)], DL1),
+	maplist(menu_dev7_checklist_(L), DL1, DL),
+	true.
+
+menu_dev7_checklist_used(Title, L, NL) :-
+	( inst_setting(dev7, used(OL))
+	; OL = []
+	), !,
+	menu_dev7_checklist2(Title, L, OL, NL),
+	( NL \= []
+	; tui_msgbox('No device selected'),
+	  fail
+	),
+	( OL = []
+	; retract(inst_setting(dev7, used(OL)))
+	),
+	assertz(inst_setting(dev7, used(NL))),
+	!.
+
+% L - list of devices to select from.
+% OL - old list of selected items.
+% NL - new list of selected items.
+menu_dev7_checklist2(Title, L, OL, NL) :-
+	maplist(menu_dev7_menu_, L, DL0),
+	maplist(lx_dev7_to_sdn, OL, DL1),
+	dialog_msg(checklist, LABEL),
+	tui_checklist_tag2(DL0, DL1, LABEL, [title(Title)], NL1),
+	maplist(menu_dev7_checklist_(L), NL1, NL),
+	true.
+
+menu_dev7_checklist_(L, SN, D7) :-
+	member(D7, L),
+	D7 = dev7(_NAME,SN,_TYPE,_RO,_RM,_SIZE,_SSZ),
+	!.
+
+menu_dev7_menu(Title, D) :-
+	lx_list_dev7_disk(L),
+	menu_dev7_menu(Title, L, D).
+
+menu_dev71_menu(Title, D) :-
+	lx_list_dev7_disk(L),
+	menu_dev71_menu(Title, L, D).
+
+menu_dev7_checklist_light(Title, NL) :-
+	inst_setting(dev7, available(L)),
+	( L = [_] ->
+	  NL = L
+	; menu_dev7_checklist_used(Title, L, NL)
+	),
+	true.
+
+% L - list of devices to select from.
+menu_d4_checklist(Title, L, DL) :-
+	maplist(menu_d4_to_checklist_, L, DL0),
+	dialog_msg(checklist, LABEL),
+	tui_checklist_tag(DL0, LABEL, [title(Title)], DL1),
+	maplist(menu_checklist_to_d4_(L), DL1, DL),
+	true.
+
+menu_d4_to_checklist_(d4(_LN,_SN,SDN,_N), SDN).
+
+menu_checklist_to_d4_(L, SDN, D4) :-
+	member(D4, L),
+	D4 = d4(_LN,_SN,SDN,_N),
+	!.
+
+menu_d4_checklist_light(_Title, [D], [D]) :- !.
+menu_d4_checklist_light(Title, L, DL) :-
+	menu_d4_checklist(Title, L, DL).
 
 menu_btrfs :-
 	tui_msgbox2([not, implemented, yet]),
@@ -244,27 +350,27 @@ menu_bootloader :-
 		% , zfsBootMenu
 	],
 	dialog_msg(radiolist, RADIOLABEL),
-	( inst_setting(bootloader, OB)
+	inst_setting(template(_), TL),
+	( memberchk(bootloader(OB, _), TL)
 	; OB = none
 	), !,
 	tui_radiolist_tag2(B, OB, RADIOLABEL, [no-tags, title(' Select a bootloader ')], NB), !,
 	( OB = NB
-	; menu_template(NB),
-	  retractall(inst_setting(bootloader, _)),
-	  assertz(inst_setting(bootloader, NB))
+	; menu_template(NB)
 	),
 	!.
 
 menu_bootloader_dev :-
-	lx_list_dev_disk(L),
-	maplist(menu_dev_, L, DL),
+	lx_list_dev7_disk(L),
+	maplist(menu_dev7_menu_, L, DL),
 	dialog_msg(radiolist, RADIOLABEL),
-	( inst_setting(bootloader_dev, dev3(OB, _, _))
-	; OB = none
+	inst_setting(template(_), TL),
+	( memberchk(bootloader(_, dev3(_, [dev_part(_LN, name(SN, _, _), _ET, _SIZE)| _], _TL)), TL)
+	; SN = none
 	), !,
 	append(DL, [[none, 'Manage bootloader otherwise']], BL1),
-	tui_radiolist_tag2(BL1, OB, RADIOLABEL, [title(' Select the disk to install the bootloader ')], D), !,
-	set_bootloader_dev(D).
+	tui_radiolist_tag2(BL1, SN, RADIOLABEL, [title(' Select the disk to install the bootloader ')], _D), !,
+	true.
 
 split_grp(G, GL) :-
 	atom_chars(G, GC),
@@ -332,8 +438,9 @@ part2menu_tag(PIL, PD, [PD, FSS]) :-
 
 menu_filesystem :-
 	% do not try to edit swap partition.
+	inst_setting(template(_), TL),
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	findall(PD, (inst_setting(partition, part4(bd1([PD| _]), PT, _F, _SZ)), PT \= swap), PL0),
+	findall(PD, (member(p4(PT, bd1([PD| _]), _CK, _SZ), TL), PT \= swap), PL0),
 	( PL0 = [] ->
 	  tui_msgbox('No partitions was selected.'),
 	  fail
@@ -355,10 +462,10 @@ menu_fs_short(PD) :-
 	make_tmp_part_rec(PD),
 	repeat,
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	inst_setting_tmp(partition, part4(bd1([PD| _]), _, F, _SZ)),
-	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
-	inst_setting_tmp(fs, fs4(FS, Label, MP, bd1([PD| _]))),
-	( F = create ->
+	inst_setting_tmp(partition, part4(bd1([PD| _]), _, CK, _SZ)),
+	% fs4(FileSystem, Label, MountPoint, [device_list])
+	inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| _])),
+	( CK = create ->
 	  FV = yes
 	; FV = no
 	),
@@ -393,26 +500,26 @@ menu_fs_action(save, PD) :-
 	tui_msgbox('Settings are saved.'),
 	true.
 menu_fs_action(label, PD) :- !,
-	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
-	inst_setting_tmp(fs, fs4(FS, Label, MP, bd1([PD| T]))), !,
+	% fs4(FileSystem, Label, MountPoint, [device_list])
+	inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T])), !,
 	tui_inputbox('', Label, [title('Label')], A),
-	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
-	retractall(inst_setting_tmp(fs, fs4(_, _, _, bd1([PD| _])))),
-	assertz(inst_setting_tmp(fs, fs4(FS, A, MP, bd1([PD| T])))),
+	% fs4(FileSystem, Label, MountPoint, [device_list])
+	retractall(inst_setting_tmp(fs, fs4(_, _, _, [PD| _]))),
+	assertz(inst_setting_tmp(fs, fs4(FS, A, MP, [PD| T]))),
 	fail.
 menu_fs_action(type, PD) :- !,
-	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
-	inst_setting_tmp(fs, fs4(OFS, Label, MP, bd1([PD| T]))), !,
+	% fs4(FileSystem, Label, MountPoint, [device_list])
+	inst_setting_tmp(fs, fs4(OFS, Label, MP, [PD| T])), !,
 	menu_select_fs(OFS, NFS),
-	retractall(inst_setting_tmp(fs, fs4(_, _, _, bd1([PD| _])))),
-	assertz(inst_setting_tmp(fs, fs4(NFS, Label, MP, bd1([PD| T])))),
+	retractall(inst_setting_tmp(fs, fs4(_, _, _, [PD| _]))),
+	assertz(inst_setting_tmp(fs, fs4(NFS, Label, MP, [PD| T]))),
 	fail.
 menu_fs_action(mount_point, PD) :- !,
-	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
-	inst_setting_tmp(fs, fs4(FS, Label, MP, bd1([PD| T]))), !,
+	% fs4(FileSystem, Label, MountPoint, [device_list])
+	inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T])), !,
 	tui_inputbox('', MP, [title('Mount Point')], A),
-	retractall(inst_setting_tmp(fs, fs4( _, _, _, bd1([PD| _])))),
-	assertz(inst_setting_tmp(fs, fs4(FS, Label, A, bd1([PD| T])))),
+	retractall(inst_setting_tmp(fs, fs4( _, _, _, [PD| _]))),
+	assertz(inst_setting_tmp(fs, fs4(FS, Label, A, [PD| T]))),
 	fail.
 menu_fs_action(create, PD) :-
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
@@ -425,26 +532,31 @@ menu_fs_action(create, PD) :-
 	fail.
 
 make_tmp_part_rec(PD) :-
+	inst_setting(template(_), TL),
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	inst_setting(partition, part4(bd1([PD| T]), PT, F, SZ)),
-	retractall(inst_setting_tmp(partition, part4(bd1([PD| _]), _, _, _SZ))),
-	assertz(inst_setting_tmp(partition, part4(bd1([PD| T]), PT, F, SZ))),
-	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
-	inst_setting(fs, fs4(FS, Label, MP, bd1([PD| T]))),
-	retractall(inst_setting_tmp(fs, fs4( _, _, _, bd1([PD| _])))),
-	assertz(inst_setting_tmp(fs, fs4(FS, Label, MP, bd1([PD| T])))),
+	memberchk(p4(PT, bd1([PD| T]), CK, SZ), TL),
+	retractall(inst_setting_tmp(partition, part4(bd1([PD| _]), _, _, _))),
+	assertz(inst_setting_tmp(partition, part4(bd1([PD| T]), PT, CK, SZ))),
+	% fs4(FileSystem, Label, MountPoint, [device_list])
+	memberchk(fs4(FS, Label, MP, [PD| T]), TL),
+	retractall(inst_setting_tmp(fs, fs4( _, _, _, [PD| _]))),
+	assertz(inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T]))),
 	true.
 
 make_perm_part_rec(PD) :-
+	inst_setting(template(TT), TL),
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	inst_setting_tmp(partition, part4(bd1([PD| T]), PT, F, SZ)), !,
-	retractall(inst_setting(partition, part4(bd1([PD| _]), _, _, _SZ))),
-	assertz(inst_setting(partition, part4(bd1([PD| T]), PT, F, SZ))),
-	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
-	inst_setting_tmp(fs, fs4(FS, Label, MP, bd1([PD| T]))),
-	retractall(inst_setting(fs, fs4( _, _, _, bd1([PD| _])))),
-	assertz(inst_setting(fs, fs4(FS, Label, MP, bd1([PD| T])))),
+	inst_setting_tmp(partition, part4(bd1([PD| T]), PT, CK, SZ)), !,
+	maplist(replace_element(p4(_, bd1([PD| _]), _, _), p4(PT, bd1([PD| T]), CK, SZ)), TL, TL1),
+	% fs4(FileSystem, Label, MountPoint, [device_list])
+	inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T])),
+	maplist(replace_element(fs4( _, _, _, [PD| _]), fs4(FS, Label, MP, [PD| T])), TL1, TL2),
+	retract(inst_setting(template(TT), _)),
+	assertz(inst_setting(template(TT), TL2)),
 	true.
+
+replace_element(E1, E2, E1, E2) :- !.
+replace_element(_, _, E1, E1) :- !.
 
 fs_type_to_menu(FST, [FST, Descr]) :-
 	fs_info(FST, Descr),
@@ -453,19 +565,20 @@ fs_type_to_menu(FST, [FST, Descr]) :-
 % OFS - old file system
 % NFS - new file system
 menu_select_fs(OFS, NFS) :-
-	inst_setting(template, TN),
-	menu_select_fs(TN, OFS, NFS),
+	inst_setting(template(TT), _),
+	menu_select_fs(TT, OFS, NFS),
 	true.
 
 % It is not supposed to assertz.
-% TN - template name
+% TT - template name
 % OFS - old file system
 % NFS - new file system
-menu_select_fs(TN, OFS, NFS) :-
+menu_select_fs(TT, OFS, NFS) :-
 	% bootloader_info(bootloade, supported_fs, supported_template).
 	% bootloader_info(B, FSL, _),
 	FSL = [
 		  btrfs
+		% , bcachefs
 		, ext2
 		, ext3
 		, ext4
@@ -475,26 +588,23 @@ menu_select_fs(TN, OFS, NFS) :-
 		, xfs
 	],
 	% template_info(name, descr, except_fs).
-	template_info(TN, _Descr, EL),
+	template_info(TT, _Descr, EL),
 	subtract(FSL, EL, ML1),
 	maplist(fs_type_to_menu, ML1, ML),
 	dialog_msg(radiolist, RADIOLABEL),
 	tui_radiolist_tag2(ML, OFS, RADIOLABEL, [title(' Select the filesystem type ')], NFS),
 	true.
 
-menu_root_fs :-
-	inst_setting(template, TN),
-	menu_root_fs(TN),
-	true.
-
 % B - bootloader
-% TN - template name
-menu_root_fs(TN) :-
-	inst_setting(root_fs, OFS),
-	menu_select_fs(TN, OFS, NFS),
-
-	retractall(inst_setting(root_fs, _)),
-	assertz(inst_setting(root_fs, NFS)),
+% TT - template name
+menu_root_fs(TT) :-
+	inst_setting(fs_info, info('/', OFS)),
+	menu_select_fs(TT, OFS, NFS),
+	retract(inst_setting(template(TT1), OTL)),
+	maplist(replace_fs('/', NFS), OTL, NTL),
+	assertz(inst_setting(template(TT1), NTL)),
+	retractall(inst_setting(fs_info, info('/', _))),
+	assertz(inst_setting(fs_info, info('/', NFS))),
 	true.
 
 menu_review_opt(S) :-
@@ -517,17 +627,20 @@ menu_review_opt(S) :-
 menu_review_opt([mbr_size]) :-
 	\+ inst_setting(system(efi), _).
 menu_review_opt([boot_size]) :-
-	inst_setting(root_fs, FS),
-	inst_setting(bootloader, B),
-	need_boot_part(B, FS).
+	inst_setting(fs_info, info('/', FS)),
+	inst_setting(template(TT), TL),
+	memberchk(bootloader(B, _), TL),
+	need_boot_part(TT, B, FS).
 menu_review_opt([boot_size]) :-
-	inst_setting(template, gpt_raid).
+	inst_setting(template(gpt_raid), _).
 menu_review_opt([lvm_info]) :-
-	inst_setting(template, gpt_lvm).
+	inst_setting(template(gpt_lvm), _).
 menu_review_opt([luks_info, luks_passwd]) :-
-	inst_setting(template, gpt_luks1).
+	inst_setting(template(gpt_luks1), _).
 menu_review_opt([lvm_info, luks_info, luks_passwd]) :-
-	inst_setting(template, gpt_luks1_lvm).
+	inst_setting(template(gpt_luks1_lvm), _).
+menu_review_opt([lvm_info, luks_info, luks_passwd]) :-
+	inst_setting(template(gpt_lvm_luks1), _).
 
 menu_review :-
 	findall(S0, (menu_review_opt(SL0), member(S0, SL0)), S),
@@ -536,22 +649,16 @@ menu_review :-
 	tui_menu_tag(SL, MENULABEL, [no-cancel, ok-label('Return'), title(' Current settings ')], _Tag),
 	true.
 
-menu_review_form :-
-	findall(S0, (menu_review_opt(SL0), member(S0, SL0)), S),
-	maplist(menu_tag_form_v, S, SL),
-	dialog_msg(form, FORMLABEL),
-	tui_mixedform_v(30, 100, SL, FORMLABEL, [no-cancel, title(' Current settings ')], _L),
-	true.
-
-menu_template(B) :-
-	inst_setting(template, OT),
-	bootloader_info(B, _, TL0),
+% NB - new bootloader.
+menu_template(NB) :-
+	inst_setting(template(OT), _),
+	bootloader_info(NB, _, TL0),
 	( TL0 = [NT]
 	; maplist(template_to_menu, TL0, TL),
 	  dialog_msg(radiolist, RADIOLABEL),
 	  tui_radiolist_tag2(TL, OT, RADIOLABEL, [no-tags, title(' Choose configuration ')], NT)
 	),
-	switch_template(OT, NT, B),
+	switch_template(OT, NT, NB),
 	true.
 
 template_to_menu(T, [T, Descr]) :-
@@ -574,11 +681,6 @@ menu_tag_v(A, [T, V]) :-
 	action_info(A, T, _), !,
 	setting_value(A, V).
 menu_tag_v(A, [A,A]).
-
-menu_tag_form_v(A, item(T, V, 2)) :-
-	action_info(A, T, _), !,
-	setting_value(A, V).
-menu_tag_form_v(A, item(A, A, 2)).
 
 menu_network :-
 	( file_exists('/var/service/NetworkManager') ->
@@ -612,22 +714,23 @@ menu_common_opt(M) :-
 		, user_passwd
 		, esp_size
 	].
-% menu_common_opt([btrfs_opt]) :-
-% 	inst_setting(root_fs, btrfs).
 menu_common_opt([mbr_size]) :-
 	\+ inst_setting(system(efi), _).
 menu_common_opt([boot_size]) :-
-	inst_setting(root_fs, FS),
-	inst_setting(bootloader, B),
-	need_boot_part(B, FS).
+	inst_setting(fs_info, info('/', FS)),
+	inst_setting(template(TT), TL),
+	memberchk(bootloader(B, _), TL),
+	need_boot_part(TT, B, FS).
 menu_common_opt([boot_size]) :-
-	inst_setting(template, gpt_raid).
+	inst_setting(template(gpt_raid), _).
 menu_common_opt([lvm_info]) :-
-	inst_setting(template, gpt_lvm).
+	inst_setting(template(gpt_lvm), _).
 menu_common_opt([luks_info, luks_passwd]) :-
-	inst_setting(template, gpt_luks1).
+	inst_setting(template(gpt_luks1), _).
 menu_common_opt([lvm_info, luks_info, luks_passwd]) :-
-	inst_setting(template, gpt_luks1_lvm).
+	inst_setting(template(gpt_luks1_lvm), _).
+menu_common_opt([lvm_info, luks_info, luks_passwd]) :-
+	inst_setting(template(gpt_lvm_luks1), _).
 
 menu_common :-
 	findall(M0, (menu_common_opt(ML0), member(M0, ML0)), M),
@@ -636,7 +739,8 @@ menu_common :-
 	maplist(menu_tag_v, M, ML),
 	tui_menu_tag2(main_common, ML, MENULABEL, [cancel-label('Return'), title(' Common installation settings ')], Tag),
 	action_info(A, Tag, _),
-	menu_action(A),
+	inst_setting(template(_), TL),
+	menu_action(A, TL),
 	!.
 
 menu_main :-
@@ -654,110 +758,111 @@ menu_main :-
 		, review
 		, install
 	],
-	( inst_setting(template, manual) ->
+	( inst_setting(template(manual), _) ->
 	  subtract(M, [root_fs], M1)
 	; subtract(M, [bootloader_dev, part_manually, part_select, filesystem], M1)
 	),
 	maplist(menu_tag, M1, ML),
 	tui_menu_tag2(main, ML, MENULABEL, [extra-button, extra-label('Save'), cancel-label('Exit'), title(' Void Linux installation menu ')], Tag),
 	action_info(A, Tag, _),
-	menu_action(A),
+	inst_setting(template(_), TL),
+	menu_action(A, TL),
 	true.
 
-cmd_menu(root_fs) :- !,
-	menu_root_fs,
+cmd_menu(root_fs, TL) :- !,
+	menu_root_fs(TL),
 	true.
-cmd_menu(btrfs_opt) :- !,
+cmd_menu(btrfs_opt, _TL) :- !,
 	menu_btrfs,
 	true.
-cmd_menu(common_settings) :- !,
+cmd_menu(common_settings, _TL) :- !,
 	menu_common,
 	true.
-cmd_menu(template) :- !,
-	inst_setting(bootloader, B),
+cmd_menu(template, TL) :- !,
+	memberchk(bootloader(B, _), TL),
 	menu_template(B),
 	true.
-cmd_menu(keymap) :- !,
+cmd_menu(keymap, _TL) :- !,
 	menu_keymap,
 	true.
-cmd_menu(network) :- !,
+cmd_menu(network, _TL) :- !,
 	menu_network,
 	true.
-cmd_menu(source) :- !,
+cmd_menu(source, _TL) :- !,
 	select_pkg_inst_method,
 	true.
-cmd_menu(hostname) :- !,
+cmd_menu(hostname, _TL) :- !,
 	menu_setting(hostname),
 	true.
-cmd_menu(locale) :- !,
+cmd_menu(locale, _TL) :- !,
 	menu_locale,
 	true.
-cmd_menu(timezone) :- !,
+cmd_menu(timezone, _TL) :- !,
 	menu_timezone,
 	true.
-cmd_menu(root_passwd) :- !,
+cmd_menu(root_passwd, _TL) :- !,
 	menu_password(root),
 	true.
-cmd_menu(user_passwd) :- !,
+cmd_menu(user_passwd, _TL) :- !,
 	inst_setting(useraccount, user(UL, _UN, _UGL)),
 	menu_password(UL),
 	true.
-cmd_menu(luks_passwd) :- !,
+cmd_menu(luks_passwd, _TL) :- !,
 	menu_password_luks('$_luks_$'),
 	true.
-cmd_menu(useraccount) :- !,
+cmd_menu(useraccount, _TL) :- !,
 	menu_useraccount,
 	true.
-cmd_menu(lvm_info) :- !,
+cmd_menu(lvm_info, _TL) :- !,
 	menu_lvm,
 	true.
-cmd_menu(luks_info) :- !,
+cmd_menu(luks_info, _TL) :- !,
 	menu_luks,
 	true.
-cmd_menu(bootloader) :- !,
+cmd_menu(bootloader, _TL) :- !,
 	menu_bootloader,
 	true.
-cmd_menu(bootloader_dev) :- !,
+cmd_menu(bootloader_dev, _TL) :- !,
 	menu_bootloader_dev,
 	true.
-cmd_menu(part_manually) :- !,
+cmd_menu(part_manually, _TL) :- !,
 	menu_part_manually,
 	true.
-cmd_menu(part_select) :- !,
+cmd_menu(part_select, _TL) :- !,
 	menu_part_select,
 	true.
-cmd_menu(filesystem) :- !,
+cmd_menu(filesystem, _TL) :- !,
 	menu_filesystem,
 	true.
-cmd_menu(review) :- !,
+cmd_menu(review, _TL) :- !,
 	menu_review,
 	true.
-cmd_menu(mbr_size) :- !,
+cmd_menu(mbr_size, _TL) :- !,
 	menu_setting(mbr_size),
 	true.
-cmd_menu(esp_size) :- !,
+cmd_menu(esp_size, _TL) :- !,
 	menu_setting(esp_size),
 	true.
-cmd_menu(boot_size) :- !,
+cmd_menu(boot_size, _TL) :- !,
 	menu_setting(boot_size),
 	true.
-cmd_menu(save) :- !,
+cmd_menu(save, _TL) :- !,
 	menu_save,
 	true.
-cmd_menu(install) :- !,
+cmd_menu(install, _TL) :- !,
 	run_install,
 	true.
-cmd_menu(exit) :- !,
+cmd_menu(exit, _TL) :- !,
 	% tui_yesno('Exit installer?', [sz([6, 40])]),
 	true.
 
-menu_action(install) :- !,
-	cmd_menu(install),
+menu_action(install, TL) :- !,
+	cmd_menu(install, TL),
 	true.
-menu_action(exit) :- !,
-	cmd_menu(exit),
+menu_action(exit, TL) :- !,
+	cmd_menu(exit, TL),
 	true.
-menu_action(A) :- !,
-	cmd_menu(A),
+menu_action(A, TL) :- !,
+	cmd_menu(A, TL),
 	fail.
 

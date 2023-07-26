@@ -1,4 +1,4 @@
-% vi: noexpandtab:tabstop=4:ft=prolog
+% vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 :- dynamic([tui_def_args_all/1, tui_def_args/1, menu_def_item/2]).
@@ -78,10 +78,10 @@ tui_checklist_tag(L, M, UA, AL) :-
 	split_list_ne(OutL, " ", CL),
 	maplist(codes_atom, CL, AL).
 
-% DI - default item.
-tui_checklist_tag2(L, DI, M, UA, AL) :-
-	maplist(tui_checklist_on_off(DI), L, L1),
-	tui_checklist_tag(L1, M, [default-item(DI)|UA], AL).
+% ONL - on-list.
+tui_checklist_tag2(L, ONL, M, UA, AL) :-
+	maplist(tui_checklist_on_off(ONL), L, L1),
+	tui_checklist_tag(L1, M, [default-item(ONL)|UA], AL).
 
 tui_radiolist_ind(L, M, UA, N) :-
 	tui_list3_ind(radiolist, L, M, UA, OutL),
@@ -236,12 +236,19 @@ tui_msgbox(M) :-
 tui_msgbox(M, UA) :-
 	tui_spawn(msgbox, M, [], UA, _).
 
-tui_msgbox2(M) :-
-	tui_msgbox2(M, []).
+tui_msgbox2(ML) :-
+	tui_msgbox2(ML, []).
+
+tui_msgbox_w(ML) :-
+	tui_msgbox_w(ML, []).
 
 tui_msgbox2(ML, UA) :-
 	os_scmdl(ML, AL),
 	tui_msgbox(AL, UA).
+
+tui_msgbox_w(ML, UA) :-
+	write_to_atom(A, ML),
+	tui_msgbox(A, UA).
 
 % text view + EXIT
 tui_textbox(F, UA) :-

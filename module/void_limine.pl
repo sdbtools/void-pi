@@ -18,7 +18,7 @@ arch2limine('x86_64-musl', 'BOOTX64.EFI').
 arch2limine('i686', 'BOOTIA32.EFI').
 arch2limine('aarch64', 'BOOTAA64.EFI').
 
-limine_configure(RD) :-
+limine_configure(TL, RD) :-
 	atom_concat(RD, '/boot/vmlinuz-', P0),
 	atom_concat(P0, '*', P1),
 	os_shell2_line([ls, P1], A0),
@@ -26,12 +26,12 @@ limine_configure(RD) :-
 
 	atom_concat(RD, '/boot/limine/limine.cfg', CF),
 	open(CF, write, S),
-	limine_write_cfg(V, S),
+	limine_write_cfg(TL, V, S),
 	close(S),
 	true.
 
-limine_write_cfg(V, S) :-
-	boot_pref(Pref),
+limine_write_cfg(TL, V, S) :-
+	boot_pref(TL, Pref),
 
 	write(S, 'INTERFACE_BRANDING=Void Linux'), nl(S),
 	write(S, 'TIMEOUT=5'), nl(S), nl(S),
@@ -39,30 +39,31 @@ limine_write_cfg(V, S) :-
 	write(S, '    PROTOCOL=linux'), nl(S),
 	write(S, '    KERNEL_PATH=boot:///'), write(S, Pref), write(S, 'vmlinuz-'), write(S, V), nl(S),
 	write(S, '    MODULE_PATH=boot:///'), write(S, Pref), write(S, 'initramfs-'), write(S, V), write(S, '.img'), nl(S),
-	write(S, '    CMDLINE='), limine_write_cmdline(S), nl(S),
+	write(S, '    CMDLINE='), limine_write_cmdline(TL, S), nl(S),
 	true.
 
-limine_kernel_params([
+limine_kernel_params(TL, [
 		  root=v('UUID', RPID)
 		, init='/sbin/init'
 		, rw
 	]) :-
-	root_pd(ROOT_PD),
+	root_pd(TL, ROOT_PD),
 	lx_get_dev_uuid(ROOT_PD, RPID),
 	true.
-limine_kernel_params(L) :-
+limine_kernel_params(TL, L) :-
 	% LUKS
-	( inst_setting(bdev, bdev(luks, luks(luks1, PD))) ->
+	( memberchk(bdev(luks, luks(luks1, PD)), TL) ->
 	  lx_get_dev_uuid(PD, PDID),
-	  inst_setting(luks, luks(Name)),
-	  L = ['rd.luks.name'=v(PDID, Name)]
+	  lx_split_dev(PD, _P, SDN),
+      luks_dev_name_short(SDN, LUKS_PD),
+	  L = ['rd.luks.name'=v(PDID, LUKS_PD)]
 	; L = ['rd.luks'=0]
 	),
 	true.
-limine_kernel_params(['rd.lvm'=0]) :-
-	\+ inst_setting(bdev, bdev(lvm, _Value)),
+limine_kernel_params(TL, ['rd.lvm'=0]) :-
+	\+ memberchk(bdev(lvm, _Value), TL),
 	true.
-limine_kernel_params([
+limine_kernel_params(_TL, [
 		  'rd.md'=0
 		, 'rd.dm'=0
 		, loglevel=4
@@ -77,8 +78,8 @@ limine_kernel_params([
 	inst_setting(locale, LC),
 	true.
 
-limine_write_cmdline(S) :-
-	findall(P0, (limine_kernel_params(PL0), member(P0, PL0)), AL),
+limine_write_cmdline(TL, S) :-
+	findall(P0, (limine_kernel_params(TL, PL0), member(P0, PL0)), AL),
 	os_wcmdl(AL, S),
 	true.
 

@@ -1,9 +1,9 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
-refind_install(RD) :-
+refind_install(TL, RD) :-
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	( inst_setting(partition, part4(bd1([EFI_PD| _]), efi_system, _CK, _SZ))
+	( memberchk(p4(efi_system, bd1([EFI_PD| _]), _CK, _SZ), TL)
 	; tui_msgbox('efi system partition was not found'),
 	  fail
 	), !,
@@ -12,43 +12,44 @@ refind_install(RD) :-
 	% os_shell2(CL1),
 	true.
 
-refind_configure(RD) :-
+refind_configure(TL, RD) :-
 	atom_concat(RD, '/boot/refind_linux.conf', FN),
 	open(FN, write, S),
 
 	write(S, '"Boot with standard options" "'),
-	refind_write_cfg(S, []),
+	refind_write_cfg(TL, S, []),
 	write(S, '"'), nl(S),
 
 	write(S, '"Boot to single-user mode" "'),
-	refind_write_cfg(S, [single]),
+	refind_write_cfg(TL, S, [single]),
 	write(S, '"'), nl(S),
 
 	close(S),
 	true.
 
-refind_kernel_params(L) :-
+refind_kernel_params(TL, L) :-
 	% Device
-	root_pd(ROOT_PD),
+	root_pd(TL, ROOT_PD),
 	( atom_concat('/dev/mapper/', _, ROOT_PD) ->
 	  L = [root=ROOT_PD]
 	; lx_get_dev_partuuid(ROOT_PD, RPID),
 	  L = [root=v('PARTUUID', RPID)]
 	),
 	true.
-refind_kernel_params(L) :-
+refind_kernel_params(TL, L) :-
 	% LUKS
-	( inst_setting(bdev, bdev(luks, luks(luks1, PD))) ->
+	( memberchk(bdev(luks, luks(luks1, PD)), TL) ->
 	  lx_get_dev_uuid(PD, PDID),
-	  inst_setting(luks, luks(Name)),
-	  L = ['rd.luks.name'=v(PDID, Name)]
+	  lx_split_dev(PD, _P, SDN),
+      luks_dev_name_short(SDN, LUKS_PD),
+	  L = ['rd.luks.name'=v(PDID, LUKS_PD)]
 	; L = ['rd.luks'=0]
 	),
 	true.
-refind_kernel_params(['rd.lvm'=0]) :-
-	\+ inst_setting(bdev, bdev(lvm, _Value)),
+refind_kernel_params(TL, ['rd.lvm'=0]) :-
+	\+ memberchk(bdev(lvm, _Value), TL),
 	true.
-refind_kernel_params([
+refind_kernel_params(_TL, [
 		  'rd.md'=0
 		, 'rd.dm'=0
 		, loglevel=4
@@ -61,16 +62,16 @@ refind_kernel_params([
 	inst_setting(keymap, KB),
 	inst_setting(locale, LC),
 	true.
-refind_kernel_params(L) :-
-	( inst_setting(root_fs, btrfs), \+ has_boot_part ->
+refind_kernel_params(TL, L) :-
+	( inst_setting(fs_info, info('/', btrfs)), \+ has_boot_part(TL) ->
 	  L = [rootflags=v(subvol, '@'), initrd='@\\boot\\initramfs-%v.img']
-	; boot_pref(Pref),
+	; boot_pref(TL, Pref),
 	  atom_concat(Pref, 'initramfs-%v.img', BI),
 	  L = [initrd=BI]
 	).
 
-refind_write_cfg(S, L) :-
-	findall(P0, ((refind_kernel_params(PL0); PL0 = L), member(P0, PL0)), AL),
+refind_write_cfg(TL, S, L) :-
+	findall(P0, ((refind_kernel_params(TL, PL0); PL0 = L), member(P0, PL0)), AL),
 	os_wcmdl(AL, S),
 	true.
 

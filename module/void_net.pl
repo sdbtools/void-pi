@@ -41,7 +41,6 @@ enable_dhcpd(RD) :-
 	true.
 
 test_network(_) :-
-	% tui_msgbox('before xbps-uhelper fetch'),
 	tui_infobox('Testing network connection.', [sz([4, 40])]),
 	between(1, 20, _),
 	sleep(0.25),
@@ -64,7 +63,6 @@ select_net_conf(D, dhcp) :-
 select_net_conf(_, static).
 
 configure_net(D, dhcp) :-
-	% tui_msgbox('dhcp'),
 	lx_iface_setup(D, RC1),
 	( RC1 = 1 ->
 	  ( os_shell2([sv, restart, dhcpcd, '1>/dev/null'])

@@ -2,15 +2,15 @@
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % generate fstab
-make_fstab(RD) :-
+make_fstab(TL, RD) :-
 	atom_concat(RD, '/etc/fstab', FN),
 	open(FN, write, S),
-	get_fstab_list(MPL),
+	get_fstab_list(TL, MPL),
 	maplist(make_fstab_(S), MPL),
 	close(S),
 	os_call2([chmod, '644', FN]),
 	!.
-make_fstab(_) :-
+make_fstab(_TL, _) :-
 	tui_msgbox('Making of fstab has failed.'),
 	fail.
 
@@ -74,9 +74,9 @@ fapassno(_FS, '/', '1').
 fapassno(_FS, _MP, '2').
 
 % Similar to get_mp_list but including swap.
-get_fstab_list(MPL1) :-
-	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
-	findall(fstab(MP, FS, PD), inst_setting(fs, fs4(FS, _Label, MP, bd1([PD| _]))), MPL0),
+get_fstab_list(TL, MPL1) :-
+	% fs4(FileSystem, Label, MountPoint, [device_list])
+	findall(fstab(MP, FS, PD), member(fs4(FS, _Label, MP, [PD| _]), TL), MPL0),
 	sort(MPL0, MPL1),
 	true.
 

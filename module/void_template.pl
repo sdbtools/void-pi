@@ -3,8 +3,9 @@
 
 % template_info(name, descr, except_fs).
 template_info(manual, 'Manual configuration of everything', []).
-template_info(gpt_basic, 'GPT. One device', [swap, vfat]).
-template_info(gpt_lvm, 'GPT. LVM. One device', [swap, vfat]).
+template_info(gpt_basic, 'GPT', [swap, vfat]).
+template_info(gpt_lvm, 'GPT. LVM', [swap, vfat]).
+template_info(gpt_lvm_luks1, 'GPT. LVM. LUKS1', [swap, vfat]).
 template_info(gpt_luks1, 'GPT. LUKS1. One device', [swap, vfat]).
 template_info(gpt_luks1_lvm, 'GPT. LUKS1. LVM. One device', [swap, vfat]).
 template_info(gpt_raid, 'GPT. RAID. One device', [swap]).
@@ -48,122 +49,191 @@ setup_fs_template :-
 
 	true.
 
-switch_template(OT, OT, _B) :- !.
-switch_template(OT, NT, B) :-
-	on_disable(template(OT)),
-	on_enable(template(NT), B),
+% OT - old template
+% NT - new template
+% NB - new bootloader.
+switch_template(OT, OT, NB) :- !,
+	inst_setting(template(OT), TL),
+	memberchk(bootloader(OB, _BD), TL),
+	( OB = NB
+	; make_cmd_list(manual, NB, L),
+	  retractall(inst_setting(template(OT), _)),
+	  assertz(inst_setting(template(OT), L))
+	),
 	!.
+switch_template(OT, NT, NB) :-
+	make_cmd_list(NT, NB, L),
+	retractall(inst_setting(template(OT), _)),
+	assertz(inst_setting(template(NT), L)),
+	true.
 
 fs2parttype(zfs, solaris_root).
 fs2parttype(_, linux).
 
-% need_boot_part(BootLoader, FileSystem).
-need_boot_part(B, _FS) :-
+% need_boot_part(TemplateType, BootLoader, FileSystem).
+need_boot_part(TT, B, _FS) :-
 	member(B, [rEFInd, limine]),
-	inst_setting(template, TT),
-	member(TT, [gpt_lvm, gpt_luks1, gpt_luks1_lvm]),
+	member(TT, [gpt_lvm, gpt_lvm_luks1, gpt_luks1, gpt_luks1_lvm]),
 	!.
-need_boot_part(B, FS) :-
+need_boot_part(_TT, B, FS) :-
 	% bootloader_info(bootloade, supported_fs, supported_template).
 	bootloader_info(B, FSL, _),
 	\+ member(FS, FSL),
 	!.
 
-on_enable(template(manual), _B) :- !,
-	assertz(inst_setting(template, manual)),
+% B - bootloader.
+make_cmd_list(manual, B, [bootloader(B, _)]) :- !.
+make_cmd_list(gpt_zfsbootmenu, B, [bootloader(B, _)]) :- !,
+	tui_msgbox('not implemented yet'),
 	true.
-on_enable(template(gpt_zfsbootmenu), _B) :- !,
-	assertz(inst_setting(template, gpt_zfsbootmenu)),
-	tui_msgbox2([not, implemented, yet]),
-	true.
-on_enable(template(TT), B) :- !,
-	assertz(inst_setting(template, TT)),
-	menu_dev_light(' Select the disk to partition ', dev7(LN,_SN,_TYPE,_RO,_RM,_SIZE,_SSZ)),
-	set_bootloader_dev(LN),
+make_cmd_list(TT, B, [bootloader(B, DEV3)| L]) :- !,
+	menu_dev7_combo(TT, LN1, SN1, DL1),
 	menu_root_fs(TT),
-	partition_set_mbr(B, LN, 1, L),
-	maplist(part_set_, L),
+	% Put boot device first.
+	part_name(SN1, 1, D1),
+	partition_set_mbr(TT, B, [d4(LN1, SN1, D1, 1)| DL1], L),
+	lx_make_dev3(LN1, DEV3),
 	true.
 
-on_disable(template(TT)) :- !,
-	retractall(inst_setting(template, TT)),
-	retractall(inst_setting(fs, _)),
-	retractall(inst_setting(bdev, _)),
-	retractall(inst_setting(partition, _)),
-	retractall(inst_setting(bootloader_dev, _)),
+% Select devices to use and a boot device.
+menu_dev7_combo(TT, LN1, SN1, DL1) :-
+	% multi-device templates.
+	memberchk(TT, [gpt_basic, gpt_lvm, gpt_lvm_luks1]), !,
+	menu_dev7_checklist_light(' Select device(s) to use ', DL0),
+	menu_dev71_menu(' Select boot device ', DL0, DEV71),
+	lx_dev7_to_ldn_sdn(DEV71, LN1, SN1),
+	findall(d4(LN2, SN2, D2, 1), (member(DEV72, DL0), lx_dev7_to_ldn_sdn(DEV72, LN2, SN2), LN2 \= LN1, part_name(SN2, 1, D2)), DL1),
+	true.
+menu_dev7_combo(_TT, LN1, SN1, []) :-
+	inst_setting(dev7, available(DL0)),
+	menu_dev71_menu(' Select boot device ', DL0, DEV71),
+	lx_dev7_to_ldn_sdn(DEV71, LN1, SN1),
 	true.
 
-% Partition + File System (device_list depends on partition).
-% pfs(PartType, FileSystem, Label, MountPoint, create/keep, size)
-% p(PartType, create/keep, size)
-% fs(FileSystem, Label, MountPoint, [device_list])
+enable_template(TT, B) :-
+	make_cmd_list(TT, B, L),
+	retractall(inst_setting(template(_), _)),
+	assertz(inst_setting(template(TT), L)),
+	true.
+
+% p4(PartType, device, create/keep, size)
+% fs4(FileSystem, Label, MountPoint, [device_list])
 % N - partition number.
+% B - bootloader.
+% P - partition.
 % vg(Name, [PhysicalVolumeList], [LogicalVolumeList])
-partition_set_mbr(B, D, N, L) :-
+partition_set_mbr(TT, B, P, L) :-
 	inst_setting(system(efi), _), !,
-	partition_set_efi(B, D, N, L).
-partition_set_mbr(B, D, N, [p4(bios_boot, bd1([PD, D]), keep, MBR_SZ)| L]) :-
+	partition_set_efi(TT, B, P, L).
+partition_set_mbr(TT, B, [d4(D, SN, _SDN, N)| T], [p4(bios_boot, bd1([PD, D]), keep, MBR_SZ)| L]) :-
 	part_name(D, N, PD),
 	inst_setting(mbr_size, MBR_SZ),
 	N1 is N + 1,
-	partition_set_efi(B, D, N1, L).
+	part_name(SN, N1, SD1),
+	partition_set_efi(TT, B, [d4(D, SN, SD1, N1)| T], L).
 
-partition_set_efi(B, D, N, [p4(efi_system, bd1([PD, D]), create, ESP_SZ), fs4(vfat, efi, '/boot/efi', bd1([PD, D]))| L]) :-
+partition_set_efi(TT, B, [d4(D, SN, _SDN, N)| T], [p4(efi_system, bd1([PD, D]), create, ESP_SZ), fs4(vfat, efi, '/boot/efi', [PD])| L]) :-
 	part_name(D, N, PD),
 	inst_setting(esp_size, ESP_SZ),
 	N1 is N + 1,
-	partition_set_boot(B, D, N1, L).
+	part_name(SN, N1, SD1),
+	partition_set_boot(TT, B, [d4(D, SN, SD1, N1)| T], L).
 
-partition_set_boot(B, D, N, [p4(linux, bd1([PD, D]), create, BOOT_SZ), fs4(ext4, boot, '/boot', bd1([PD, D]))| L]) :-
-	inst_setting(root_fs, FS),
-	need_boot_part(B, FS), !,
+partition_set_boot(TT, B, [d4(D, SN, _SDN, N)| T], [p4(linux, bd1([PD, D]), create, BOOT_SZ), fs4(ext4, boot, '/boot', [PD])| L]) :-
+	inst_setting(fs_info, info('/', FS)),
+	need_boot_part(TT, B, FS), !,
 	part_name(D, N, PD),
 	inst_setting(boot_size, BOOT_SZ),
 	N1 is N + 1,
-	partition_set_template(D, N1, L).
-partition_set_boot(_B, D, N, L) :-
-	partition_set_template(D, N, L).
+	part_name(SN, N1, SD1),
+	partition_set_template(TT, [d4(D, SN, SD1, N1)| T], L).
+partition_set_boot(TT, _B, P, L) :-
+	partition_set_template(TT, P, L).
 
-partition_set_template(D, N, [p4(linux_lvm, bd1([PD, D]), create, ''), bdev(lvm, vg(VG, [PD], [lv(LV, SZ)])), fs4(FS, void, '/', bd1([LVM_PD, PD, D]))]) :-
-	inst_setting(template, gpt_lvm), !,
+partition_set_template(gpt_lvm, DL, L) :- !,
+	inst_setting(lvm, lv(VG, LV, SZ)),
+	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
+	% menu_d4_checklist_light(' Select device(s) to use with LVM ', DL, DL0),
+	% DL0 \= [],
+	% maplist(d4_to_p4_pd(linux_lvm), DL0, P4L, PDL),
+	maplist(d4_to_p4_pd(linux_lvm), DL, P4L, PDL),
+	inst_setting(fs_info, info('/', FS)),
+	append(P4L, [bdev(lvm, vg(VG, PDL, [lv(LV, SZ)])), fs4(FS, void, '/', [LVM_PD])], L),
+	true.
+
+partition_set_template(gpt_lvm_luks1, DL, L) :- !,
+	inst_setting(lvm, lv(VG, LV, SZ)),
+	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
+	maplist(d4_to_p4_pd(linux_lvm), DL, P4L, PDL),
+	format_to_atom(LVM_PD_SHORT, '~w-~w', [VG, LV]),
+	luks_dev_name(LVM_PD_SHORT, LUKS_PD),
+	inst_setting(fs_info, info('/', FS)),
+	append(P4L, [bdev(lvm, vg(VG, PDL, [lv(LV, SZ)])), bdev(luks, luks(luks1, LVM_PD)), fs4(FS, void, '/', [LUKS_PD])], L),
+	true.
+
+partition_set_template(gpt_luks1, [d4(D, _SN, SDN, N)| _T], [p4(linux_luks, bd1([PD, D]), create, ''), bdev(luks, luks(luks1, PD)), fs4(FS, void, '/', [LUKS_PD])]) :- !,
+	part_name(D, N, PD),
+	luks_dev_name(SDN, LUKS_PD),
+	inst_setting(fs_info, info('/', FS)),
+	true.
+% !!! DO NOT delete !!!
+% multi-device support.
+% partition_set_template(gpt_luks1, DL, L) :- !,
+% 	DL = [D41| _T],
+% 	d4_to_luks_pd(D41, LUKS_PD),
+% 	% menu_d4_checklist_light(' Select device(s) to use with LUKS ', DL, DL0),
+% 	% DL0 \= [],
+% 	% maplist(d4_to_luks_bdev, DL0, P4L, BDEVL),
+% 	maplist(d4_to_luks_bdev, DL, P4L, BDEVL),
+% 	inst_setting(fs_info, info('/', FS)),
+% 	flatten([P4L, BDEVL, fs4(FS, void, '/', [LUKS_PD])], L),
+% 	true.
+partition_set_template(gpt_luks1_lvm, [d4(D, _SN, SDN, N)| _T], [p4(linux_luks, bd1([PD, D]), create, ''), bdev(luks, luks(luks1, PD)), bdev(lvm, vg(VG, [LUKS_PD], [lv(LV, SZ)])), fs4(FS, void, '/', [LVM_PD])]) :- !,
 	inst_setting(lvm, lv(VG, LV, SZ)),
 	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
 	part_name(D, N, PD),
-	inst_setting(root_fs, FS),
+	luks_dev_name(SDN, LUKS_PD),
+	inst_setting(fs_info, info('/', FS)),
 	true.
-partition_set_template(D, N, [p4(linux_luks, bd1([PD, D]), create, ''), bdev(luks, luks(luks1, PD)), fs4(FS, void, '/', bd1([LUKS_PD, PD, D]))]) :-
-	inst_setting(template, gpt_luks1), !,
-	part_name(D, N, PD),
-	inst_setting(root_fs, FS),
-	luks_dev_name(LUKS_PD),
+% !!! DO NOT delete !!!
+% multi-device support.
+% partition_set_template(gpt_luks1_lvm, DL, L) :- !,
+% 	maplist(d4_to_luks_bdev, DL, P4L, BDEVL),
+% 	inst_setting(lvm, lv(VG, LV, SZ)),
+% 	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
+% 	maplist(d4_to_luks_pd, DL, PDL),
+% 	inst_setting(fs_info, info('/', FS)),
+% 	flatten([P4L, BDEVL, bdev(lvm, vg(VG, PDL, [lv(LV, SZ)])), fs4(FS, void, '/', [LVM_PD])], L),
+% 	true.
+partition_set_template(_, DL, L) :-
+	inst_setting(fs_info, info('/', FS)),
+	fs_to_p4l_pdl(FS, DL, P4L, PDL),
+	append(P4L, [fs4(FS, void, '/', PDL)], L),
 	true.
-partition_set_template(D, N, [p4(linux_luks, bd1([PD, D]), create, ''), bdev(luks, luks(luks1, PD)), bdev(lvm, vg(VG, [LUKS_PD], [lv(LV, SZ)])), fs4(FS, void, '/', bd1([LVM_PD, LUKS_PD, PD, D]))]) :-
-	inst_setting(template, gpt_luks1_lvm), !,
-	inst_setting(lvm, lv(VG, LV, SZ)),
-	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
-	part_name(D, N, PD),
-	inst_setting(root_fs, FS),
-	luks_dev_name(LUKS_PD),
-	true.
-partition_set_template(D, N, [p4(PT, bd1([PD, D]), create, ''), fs4(FS, void, '/', bd1([PD, D]))]) :-
-	inst_setting(root_fs, FS),
-	part_name(D, N, PD),
-	fs2parttype(FS, PT), !.
 
-part_set_(p4(PT, BD1, CK, SZ)) :- !,
-	assertz(inst_setting(partition, part4(BD1, PT, CK, SZ))),
+fs_to_p4l_pdl(btrfs, DL, P4L, PDL) :- !,
+	fs2parttype(btrfs, PT),
+	maplist(d4_to_p4_pd(PT), DL, P4L, PDL),
 	true.
-part_set_(fs4(FS, Label, MP, BD1)) :- !,
-	assertz(inst_setting(fs, fs4(FS, Label, MP, BD1))),
+fs_to_p4l_pdl(FS, [H| _T], [P4], [PD]) :-
+	fs2parttype(FS, PT),
+	d4_to_p4_pd(PT, H, P4, PD),
 	true.
-part_set_(bdev(Type, Value)) :- !,
-	assertz(inst_setting(bdev, bdev(Type, Value))),
+
+d4_to_p4_pd(PT, d4(D, _SN, _SDN, N), p4(PT, bd1([PD, D]), create, ''), PD) :-
+	part_name(D, N, PD),
 	true.
+
+d4_to_luks_bdev(d4(D, _SN, _SDN, N), p4(linux_luks, bd1([PD, D]), create, ''), bdev(luks, luks(luks1, PD))) :-
+	part_name(D, N, PD),
+	true.
+
+d4_to_luks_pd(d4(_D, _SN, SDN, _N), LUKS_PD) :-
+	luks_dev_name(SDN, LUKS_PD).
 
 part_name(D, N, PD) :-
 	atom_concat('/dev/nvme', _, D), !,
 	format_to_atom(PD, '~wp~d', [D, N]).
 part_name(D, N, PD) :-
 	format_to_atom(PD, '~w~d', [D, N]).
-
 

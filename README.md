@@ -4,7 +4,7 @@ Void Linux installer implemented in GNU Prolog.
 
 Last tested | ISO                                                                                | Result
 ----------- | ---------------------------------------------------------------------------------- | ------
-2023-07-25  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
+2023-07-24  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
 2023-06-29  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
 2023-07-25  | [void-live-i686-20230628-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20230628-base.iso) | PASS
 2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
@@ -19,12 +19,13 @@ void-pi is a Void Linux installer similar to [void-installer](https://docs.voidl
 It extends void-installer in several ways:
 - provides predefined templates for [BTRFS](https://en.wikipedia.org/wiki/Btrfs), [LVM](https://en.wikipedia.org/wiki/Logical_volume_management), and [LUKS](https://en.wikipedia.org/wiki/Linux_Unified_Key_Setup).
 - supports [rEFInd](https://rodsbooks.com/refind/) and [Limine](https://limine-bootloader.org/) boot managers
+- supports multi-device configurations.
 
 void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 
 ### Features
 
-- completely emulates void-installer.
+- completely emulates `void-installer`.
 - install from Void ISO or network.
 - predefined templates for BTRFS, LVM, and LUKS.
 - TUI dynamically changes depending on selected template.
@@ -43,12 +44,15 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
     - LUKS can be used with GRUB, rEFInd, and Limine.
     - In case of GRUB whole system is located on LUKS, including encrypted `/boot`
     - In case of rEFInd and Limine installer will create an unencrypted ext4 `/boot` partition.
+- Multi-device support
+    - Multi-device configurations are available with BTRFS and LVM.
 
 ### Templates
 
 - Manual configuration of everything
-- GPT. One device 
-- GPT. LVM. One device
+- GPT.
+- GPT. LVM
+- GPT. LVM. LUKS1
 - GPT. LUKS1. One device
 - GPT. LUKS1. LVM. One device
 

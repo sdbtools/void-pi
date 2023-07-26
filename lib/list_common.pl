@@ -1,4 +1,4 @@
-% vi: noexpandtab:tabstop=4:ft=prolog
+% vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % S - separator.
@@ -82,4 +82,18 @@ split_atom(SL, IL, OL) :-
 split_atom_ne(SL, IL, OL) :-
 	split_list_ne(IL, SL, LL),
 	maplist(codes_atom, LL, OL).
+
+% E - first element of a suffix in a list
+% L - list
+% S - suffix
+% N - 1-based index of E.
+suffix(E, L, N, S) :-
+	suffix_(E, L, 1, N, S),
+	true.
+
+suffix_(H, [H|T], IN, IN, [H|T]) :- !.
+suffix_(E, [_|T], IN, ON, S) :-
+	N1 is IN + 1,
+	suffix_(E, T, N1, ON, S),
+	true.
 

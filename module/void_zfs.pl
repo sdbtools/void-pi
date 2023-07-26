@@ -1,9 +1,9 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
-uses_zfs :-
-	% fs4(Name, Label, MountPoint, bd1([PartDev, Dev]))
-	inst_setting(fs, fs4(zfs, _, _, _)),
+uses_zfs(TL) :-
+	% fs4(Name, Label, MountPoint, [DevList])
+	memberchk(fs4(zfs, _, _, _), TL),
 	!.
 
 make_zfs_pool_cmd(MP, DS, AL, [zfs, create, '-o', MPA|T]) :-
@@ -28,13 +28,13 @@ create_zfs_dataset :-
 create_zfs_dataset :-
 	true.
 
-install_zfs(RD) :-
-	uses_zfs,
+install_zfs(TL, RD) :-
+	uses_zfs(TL),
 	lx_gen_hostid(''),
 	\+ host_name(hrmpf),
 	inst_setting(system(arch), ARCH),
 	make_chroot_inst_pref_chroot(ARCH, Pref, RD),
 	install_deps(Pref, [zfs]),
 	!.
-install_zfs(_).
+install_zfs(_TL, _).
 

@@ -16,6 +16,7 @@ bootloader_info(grub2, [
 		  manual
 		, gpt_basic
 		, gpt_lvm
+		, gpt_lvm_luks1
 		, gpt_luks1
 		, gpt_luks1_lvm
 		% , gpt_raid
@@ -31,6 +32,7 @@ bootloader_info(rEFInd, [
 		  manual
 		, gpt_basic
 		, gpt_lvm
+		, gpt_lvm_luks1
 		, gpt_luks1
 		, gpt_luks1_lvm
 	]).
@@ -43,6 +45,7 @@ bootloader_info(limine, [
 		  manual
 		, gpt_basic
 		, gpt_lvm
+		, gpt_lvm_luks1
 		, gpt_luks1
 		, gpt_luks1_lvm
 	]).
@@ -59,36 +62,26 @@ target_dep_bootloader(grub2, GRUB) :-
 	inst_setting(system(arch), ARCH),
 	arch2grub(ARCH, GRUB), !.
 
-set_bootloader_dev(D) :-
-	% We are trying to set the same value.
-	inst_setting(bootloader_dev, dev3(D, _, _)), !.
-set_bootloader_dev(D) :-
-	lx_list_dev_part(D, PL),
-	lx_dev_part_tree(D, PL, TL),
-	retractall(inst_setting(bootloader_dev, _)),
-	assertz(inst_setting(bootloader_dev, dev3(D, PL, TL))).
-
-set_bootloader(RD) :-
-	inst_setting(bootloader_dev, dev3(BD, _, _)),
-	inst_setting(bootloader, B),
-	set_bootloader(B, BD, RD), !.
-set_bootloader(_RD) :-
+set_bootloader(TL, RD) :-
+	memberchk(bootloader(B, dev3(BD, _, _)), TL),
+	set_bootloader(B, TL, BD, RD), !.
+set_bootloader(_TL, _RD) :-
 	tui_msgbox('Setting up of a bootloader has failed.'),
 	fail.
 
-% set_bootloader(bootloader, bootloader_dev, root_dir)
-set_bootloader(_, none, _RD) :- !.
-set_bootloader(grub2, BD, RD) :- !,
-	grub_configure(RD),
-	grub_install(BD, RD),
+% set_bootloader(template_list, bootloader, bootloader_dev, root_dir)
+set_bootloader(_, _TL, none, _RD) :- !.
+set_bootloader(grub2, TL, BD, RD) :- !,
+	grub_configure(TL, RD),
+	grub_install(TL, BD, RD),
 	grub_mkconfig(RD),
 	!.
-set_bootloader(rEFInd, _BD, RD) :-
-	refind_install(RD),
-	refind_configure(RD),
+set_bootloader(rEFInd, TL, _BD, RD) :-
+	refind_install(TL, RD),
+	refind_configure(TL, RD),
 	!.
-set_bootloader(limine, BD, RD) :-
+set_bootloader(limine, TL, BD, RD) :-
 	limine_install(BD, RD), !,
-	limine_configure(RD),
+	limine_configure(TL, RD),
 	!.
 
