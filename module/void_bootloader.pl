@@ -63,7 +63,8 @@ target_dep_bootloader(grub2, GRUB) :-
 	arch2grub(ARCH, GRUB), !.
 
 set_bootloader(TL, RD) :-
-	memberchk(bootloader(B, dev3(BD, _, _)), TL),
+	memberchk(bootloader(B), TL),
+	memberchk(bootloader_dev(dev3(BD, _, _)), TL),
 	set_bootloader(B, TL, BD, RD), !.
 set_bootloader(_TL, _RD) :-
 	tui_msgbox('Setting up of a bootloader has failed.'),

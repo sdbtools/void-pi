@@ -293,6 +293,18 @@ lx_dev7_to_sdn(dev7(_LN,SN,_TYPE,_RO,_RM,_SIZE,_SSZ), SN).
 % convert dev7 to long and short device names. 
 lx_dev7_to_ldn_sdn(dev7(LN,SN,_TYPE,_RO,_RM,_SIZE,_SSZ), LN, SN).
 
+% Short device name to dev7
+lx_sdn_to_dev7(SDN, L, DEV7) :-
+	member(DEV7, L),
+	DEV7 = dev7(_LN,SDN,_TYPE,_RO,_RM,_SIZE,_SSZ),
+	!.
+
+% Long device name to dev7
+lx_ldn_to_dev7(LDN, L, DEV7) :-
+	member(DEV7, L),
+	DEV7 = dev7(LDN,_SD,_TYPE,_RO,_RM,_SIZE,_SSZ),
+	!.
+
 lx_dev_to_part(dev7(NAME,SNAME,_TYPE,_RO,_RM,_SIZE,_SSZ), L1) :-
 	lx_part_info_disk_base(SNAME, NAME, L1),
 	true.

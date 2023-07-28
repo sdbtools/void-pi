@@ -2,7 +2,7 @@
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 version :-
-	writenl('version 0.7').
+	writenl('version 0.7.1').
 
 fs_info(bcachefs, 'Linux Bcachefs (experimental)').
 fs_info(btrfs, 'Oracle\'s Btrfs').

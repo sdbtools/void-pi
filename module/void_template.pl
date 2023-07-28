@@ -54,7 +54,7 @@ setup_fs_template :-
 % NB - new bootloader.
 switch_template(OT, OT, NB) :- !,
 	inst_setting(template(OT), TL),
-	memberchk(bootloader(OB, _BD), TL),
+	memberchk(bootloader(OB), TL),
 	( OB = NB
 	; make_cmd_list(manual, NB, L),
 	  retractall(inst_setting(template(OT), _)),
@@ -82,11 +82,11 @@ need_boot_part(_TT, B, FS) :-
 	!.
 
 % B - bootloader.
-make_cmd_list(manual, B, [bootloader(B, _)]) :- !.
-make_cmd_list(gpt_zfsbootmenu, B, [bootloader(B, _)]) :- !,
+make_cmd_list(manual, B, [bootloader(B)]) :- !.
+make_cmd_list(gpt_zfsbootmenu, B, [bootloader(B)]) :- !,
 	tui_msgbox('not implemented yet'),
 	true.
-make_cmd_list(TT, B, [bootloader(B, DEV3)| L]) :- !,
+make_cmd_list(TT, B, [bootloader(B), bootloader_dev(DEV3)| L]) :- !,
 	menu_dev7_combo(TT, LN1, SN1, DL1),
 	menu_root_fs(TT),
 	% Put boot device first.

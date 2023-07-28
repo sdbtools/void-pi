@@ -100,7 +100,7 @@ source_dep(_TL, Distro, D) :-
 	member(D, DL),
 	true.
 source_dep(TL, Distro, D) :-
-	memberchk(bootloader(B, _), TL),
+	memberchk(bootloader(B), TL),
 	source_dep_module(Distro, bootloader(B), DL),
 	member(D, DL),
 	true.
@@ -266,7 +266,7 @@ make_chroot_inst_pref_chroot(ARCH, P, RD) :-
 need_to_remove_pkg(_TL, [dialog, 'xtools-minimal']).
 need_to_remove_pkg(TL, [grub]) :-
 	  % Remove grub if we are using different bootloader.
-	  memberchk(bootloader(BR, _), TL),
+	  memberchk(bootloader(BR), TL),
 	  BR \= grub2.
 
 % Remove list of packages
@@ -319,7 +319,7 @@ install_pkg(TL, net, RD) :-
 	os_mkdir_p([RD + '/var/db/xbps/keys', RD + '/usr/share']),
 	os_call2([cp, '-a', '/usr/share/xbps.d', RD + '/usr/share/']),
 	os_shell2([cp, '/var/db/xbps/keys/*.plist', RD + '/var/db/xbps/keys']),
-	( memberchk(bootloader(grub2, _), TL) ->
+	( memberchk(bootloader(grub2), TL) ->
 	  os_mkdir_p(RD + '/boot/grub')
 	; true
 	),
@@ -385,7 +385,7 @@ target_dep(_TL, 'base-system') :-
 	\+ inst_setting(source, local),
 	true.
 target_dep(TL, D) :-
-	memberchk(bootloader(B, _), TL),
+	memberchk(bootloader(B), TL),
 	target_dep_bootloader(B, D),
 	true.
 target_dep(TL, zfs) :-
@@ -582,13 +582,18 @@ ensure_passwd.
 ensure_setting(_TL, passwd) :- !,
 	ensure_passwd.
 ensure_setting(TL, bootloader_dev) :- !,
-	( memberchk(bootloader(_, _), TL)
-	; cmd_menu(bootloader_dev, TL)
-	), !.
+	inst_setting(template(TT), _),
+	ensure_bootloader_dev(TT, TL).
 ensure_setting(_TL, S) :-
 	inst_setting(S, _), !.
 ensure_setting(TL, S) :-
 	cmd_menu(S, TL).
+
+ensure_bootloader_dev(manual, _TL) :- !.
+ensure_bootloader_dev(_TT, TL) :-
+	( memberchk(bootloader_dev(_), TL)
+	; cmd_menu(bootloader_dev, TL)
+	), !.
 
 save_settings(S) :-
 	inst_setting(N, V),

@@ -56,10 +56,14 @@ setting_value(luks_info, N) :- !,
 	inst_setting(luks, luks(N)).
 setting_value(bootloader, B) :- !,
 	inst_setting(template(_), TL),
-	memberchk(bootloader(B, _), TL).
+	( memberchk(bootloader(B), TL)
+	; B = 'not set'
+	), !.
 setting_value(bootloader_dev, D) :- !,
 	inst_setting(template(_), TL),
-	memberchk(bootloader(_, dev3(D, _PL, _TL1)), TL).
+	( memberchk(bootloader_dev(dev3(D, _PL, _TL1)), TL)
+	; D = 'not set'
+	), !.
 setting_value(root_fs, FS) :- !,
 	inst_setting(template(_), TL),
 	% fs4(Name, Label, MountPoint, [DevList])
@@ -351,7 +355,7 @@ menu_bootloader :-
 	],
 	dialog_msg(radiolist, RADIOLABEL),
 	inst_setting(template(_), TL),
-	( memberchk(bootloader(OB, _), TL)
+	( memberchk(bootloader(OB), TL)
 	; OB = none
 	), !,
 	tui_radiolist_tag2(B, OB, RADIOLABEL, [no-tags, title(' Select a bootloader ')], NB), !,
@@ -364,13 +368,33 @@ menu_bootloader_dev :-
 	lx_list_dev7_disk(L),
 	maplist(menu_dev7_menu_, L, DL),
 	dialog_msg(radiolist, RADIOLABEL),
-	inst_setting(template(_), TL),
-	( memberchk(bootloader(_, dev3(_, [dev_part(_LN, name(SN, _, _), _ET, _SIZE)| _], _TL)), TL)
-	; SN = none
+	inst_setting(template(TT), TL),
+	( member(bootloader_dev(DEV31), TL),
+	  DEV31 = dev3(_, [dev_part(_, name(OSN, _, _), _, _)| _], _TL)
+	; OSN = none
 	), !,
 	append(DL, [[none, 'Manage bootloader otherwise']], BL1),
-	tui_radiolist_tag2(BL1, SN, RADIOLABEL, [title(' Select the disk to install the bootloader ')], _D), !,
-	true.
+	tui_radiolist_tag2(BL1, OSN, RADIOLABEL, [title(' Select the disk to install the bootloader ')], NSN),
+	( OSN = NSN
+	; replace_bootloader_dev(OSN, NSN, L, TL, NTL),
+	  retractall(inst_setting(template(TT), _)),
+	  assertz(inst_setting(template(TT), NTL))
+	),
+	!.
+
+replace_bootloader_dev(none, NSN, L, TL, NTL) :- !,
+	% add
+	lx_sdn_to_dev7(NSN, L, DEV7),
+	lx_dev7_to_dev3(DEV7, DEV3),
+	NTL = [bootloader_dev(DEV3)| TL].
+replace_bootloader_dev(_, none, _L, TL, NTL) :- !,
+	% remove
+	findall(E, (member(E, TL), E \= bootloader_dev(_)), NTL).
+replace_bootloader_dev(_, NSN, L, TL, NTL) :-
+	% replace
+	lx_sdn_to_dev7(NSN, L, DEV7),
+	lx_dev7_to_dev3(DEV7, DEV3),
+	maplist(replace_element(bootloader_dev(_), bootloader_dev(DEV3)), TL, NTL).
 
 split_grp(G, GL) :-
 	atom_chars(G, GC),
@@ -534,23 +558,23 @@ menu_fs_action(create, PD) :-
 make_tmp_part_rec(PD) :-
 	inst_setting(template(_), TL),
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	memberchk(p4(PT, bd1([PD| T]), CK, SZ), TL),
+	memberchk(p4(PT, bd1([PD| T1]), CK, SZ), TL),
 	retractall(inst_setting_tmp(partition, part4(bd1([PD| _]), _, _, _))),
-	assertz(inst_setting_tmp(partition, part4(bd1([PD| T]), PT, CK, SZ))),
+	assertz(inst_setting_tmp(partition, part4(bd1([PD| T1]), PT, CK, SZ))),
 	% fs4(FileSystem, Label, MountPoint, [device_list])
-	memberchk(fs4(FS, Label, MP, [PD| T]), TL),
+	memberchk(fs4(FS, Label, MP, [PD| T2]), TL),
 	retractall(inst_setting_tmp(fs, fs4( _, _, _, [PD| _]))),
-	assertz(inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T]))),
+	assertz(inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T2]))),
 	true.
 
 make_perm_part_rec(PD) :-
 	inst_setting(template(TT), TL),
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	inst_setting_tmp(partition, part4(bd1([PD| T]), PT, CK, SZ)), !,
-	maplist(replace_element(p4(_, bd1([PD| _]), _, _), p4(PT, bd1([PD| T]), CK, SZ)), TL, TL1),
+	inst_setting_tmp(partition, part4(bd1([PD| T1]), PT, CK, SZ)), !,
+	maplist(replace_element(p4(_, bd1([PD| _]), _, _), p4(PT, bd1([PD| T1]), CK, SZ)), TL, TL1),
 	% fs4(FileSystem, Label, MountPoint, [device_list])
-	inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T])),
-	maplist(replace_element(fs4( _, _, _, [PD| _]), fs4(FS, Label, MP, [PD| T])), TL1, TL2),
+	inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T2])),
+	maplist(replace_element(fs4( _, _, _, [PD| _]), fs4(FS, Label, MP, [PD| T2])), TL1, TL2),
 	retract(inst_setting(template(TT), _)),
 	assertz(inst_setting(template(TT), TL2)),
 	true.
@@ -629,7 +653,7 @@ menu_review_opt([mbr_size]) :-
 menu_review_opt([boot_size]) :-
 	inst_setting(fs_info, info('/', FS)),
 	inst_setting(template(TT), TL),
-	memberchk(bootloader(B, _), TL),
+	memberchk(bootloader(B), TL),
 	need_boot_part(TT, B, FS).
 menu_review_opt([boot_size]) :-
 	inst_setting(template(gpt_raid), _).
@@ -719,7 +743,7 @@ menu_common_opt([mbr_size]) :-
 menu_common_opt([boot_size]) :-
 	inst_setting(fs_info, info('/', FS)),
 	inst_setting(template(TT), TL),
-	memberchk(bootloader(B, _), TL),
+	memberchk(bootloader(B), TL),
 	need_boot_part(TT, B, FS).
 menu_common_opt([boot_size]) :-
 	inst_setting(template(gpt_raid), _).
@@ -779,7 +803,7 @@ cmd_menu(common_settings, _TL) :- !,
 	menu_common,
 	true.
 cmd_menu(template, TL) :- !,
-	memberchk(bootloader(B, _), TL),
+	memberchk(bootloader(B), TL),
 	menu_template(B),
 	true.
 cmd_menu(keymap, _TL) :- !,
