@@ -1,6 +1,8 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
+% Installing Void on a ZFS Root - https://docs.voidlinux.org/installation/guides/zfs.html
+
 uses_zfs(TL) :-
 	% fs4(Name, Label, MountPoint, [DevList])
 	memberchk(fs4(zfs, _, _, _), TL),

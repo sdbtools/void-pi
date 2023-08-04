@@ -182,15 +182,12 @@ get_net_devs :-
 	lx_get_net_devs(AL1),
 	maplist(get_mac_addr, AL1, AL2),
 	dialog_msg(radiolist, RADIOLABEL),
-	( inst_setting(network, D), net_dev_name(D, ON) ->
-	  true
+	( inst_setting(network, D), net_dev_name(D, ON)
 	; ON = none
 	),
 	append(AL2, [[none, 'Disable network']], AL3),
 	tui_radiolist_tag2(AL3, ON, RADIOLABEL, [title(' Select the network interface to configure ')], Tag), !,
-	( Tag = ON ->
-	  % value hasn't change.
-	  true
+	( Tag = ON % value hasn't change.
 	; ( atom_concat('wl', _, Tag) ->
 	    configure_wifi(Tag)
 	  ; configure_net(Tag)

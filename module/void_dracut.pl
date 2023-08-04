@@ -8,6 +8,10 @@ dracut_conf(TL, RD) :-
 	dracut_key(C, K),
 	lx_dracut_conf(VL, K, RD),
 	fail.
+dracut_conf(TL, RD) :-
+	memberchk(bootloader(efistub), TL),
+	efistub_configure(TL, RD),
+	fail.
 dracut_conf(_TL, _RD).
 
 dracut_enable(luks, TL) :- !,

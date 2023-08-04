@@ -3,7 +3,8 @@
 
 % template_info(name, descr, except_fs).
 template_info(manual, 'Manual configuration of everything', []).
-template_info(gpt_basic, 'GPT', [swap, vfat]).
+template_info(gpt_wizard, 'GPT. Wizard', [swap, vfat]).
+template_info(gpt_basic, 'GPT. Basic', [swap, vfat]).
 template_info(gpt_lvm, 'GPT. LVM', [swap, vfat]).
 template_info(gpt_lvm_luks1, 'GPT. LVM. LUKS1', [swap, vfat]).
 template_info(gpt_luks1, 'GPT. LUKS1. One device', [swap, vfat]).
@@ -72,7 +73,7 @@ fs2parttype(_, linux).
 
 % need_boot_part(TemplateType, BootLoader, FileSystem).
 need_boot_part(TT, B, _FS) :-
-	member(B, [rEFInd, limine]),
+	member(B, [rEFInd, limine, syslinux]),
 	member(TT, [gpt_lvm, gpt_lvm_luks1, gpt_luks1, gpt_luks1_lvm]),
 	!.
 need_boot_part(_TT, B, FS) :-
@@ -86,28 +87,58 @@ make_cmd_list(manual, B, [bootloader(B)]) :- !.
 make_cmd_list(gpt_zfsbootmenu, B, [bootloader(B)]) :- !,
 	tui_msgbox('not implemented yet'),
 	true.
+make_cmd_list(gpt_wizard, B, [bootloader(B)| L]) :- !,
+	menu_dev7_checklist_used_light(' Select device(s) to use ', DEV7L),
+	menu_wiz_action(DEV7L, L),
+	true.
 make_cmd_list(TT, B, [bootloader(B), bootloader_dev(DEV3)| L]) :- !,
-	menu_dev7_combo(TT, LN1, SN1, DL1),
+	menu_dev7_combo(TT, DEV7L),
 	menu_root_fs(TT),
-	% Put boot device first.
-	part_name(SN1, 1, D1),
-	partition_set_mbr(TT, B, [d4(LN1, SN1, D1, 1)| DL1], L),
+	maplist(menu_dev7_to_d4, DEV7L, D4L),
+	partition_set_mbr(TT, B, D4L, L),
+	D4L = [d4(LN1, _SN1, _D1, _)| _],
 	lx_make_dev3(LN1, DEV3),
 	true.
 
 % Select devices to use and a boot device.
-menu_dev7_combo(TT, LN1, SN1, DL1) :-
+% Put boot device first.
+menu_dev7_combo(TT, [DEV71| DEV7L]) :-
 	% multi-device templates.
-	memberchk(TT, [gpt_basic, gpt_lvm, gpt_lvm_luks1]), !,
-	menu_dev7_checklist_light(' Select device(s) to use ', DL0),
+	memberchk(TT, [gpt_basic, gpt_wizard, gpt_lvm, gpt_lvm_luks1]), !,
+	menu_dev7_checklist_used_light(' Select device(s) to use ', DL0),
 	menu_dev71_menu(' Select boot device ', DL0, DEV71),
-	lx_dev7_to_ldn_sdn(DEV71, LN1, SN1),
-	findall(d4(LN2, SN2, D2, 1), (member(DEV72, DL0), lx_dev7_to_ldn_sdn(DEV72, LN2, SN2), LN2 \= LN1, part_name(SN2, 1, D2)), DL1),
+	delete(DL0, DEV71, DEV7L),
 	true.
-menu_dev7_combo(_TT, LN1, SN1, []) :-
+menu_dev7_combo(_TT, [DEV71]) :-
 	inst_setting(dev7, available(DL0)),
 	menu_dev71_menu(' Select boot device ', DL0, DEV71),
-	lx_dev7_to_ldn_sdn(DEV71, LN1, SN1),
+
+	true.
+
+% Select devices to use and a boot device.
+% Put boot device first.
+menu_dev4_combo(TT, [D4| D4L1]) :-
+	% multi-device templates.
+	memberchk(TT, [gpt_basic, gpt_wizard, gpt_lvm, gpt_lvm_luks1]), !,
+	menu_dev7_checklist_used_light(' Select device(s) to use ', DL0),
+	maplist(menu_dev7_to_d4, DL0, D4L),
+	menu_dev4_boot_dev(D4L, D4),
+	delete(D4L, D4, D4L1),
+	true.
+menu_dev4_combo(_TT, [D4]) :-
+	inst_setting(dev7, available(DL0)),
+	maplist(menu_dev7_to_d4, DL0, D4L),
+	menu_dev4_boot_dev(D4L, D4),
+	true.
+
+menu_dev4_boot_dev(D4L, D4) :-
+	menu_d41_menu(' Select boot device ', D4L, SD),
+	menu_sdn_to_d4(D4L, SD, D4),
+	true.
+
+menu_dev7_to_d4(DEV7, d4(LN, SN, D, 1)) :-
+	lx_dev7_to_ldn_sdn(DEV7, LN, SN),
+	part_name(SN, 1, D),
 	true.
 
 enable_template(TT, B) :-
@@ -118,6 +149,7 @@ enable_template(TT, B) :-
 
 % p4(PartType, device, create/keep, size)
 % fs4(FileSystem, Label, MountPoint, [device_list])
+% TT - template type
 % N - partition number.
 % B - bootloader.
 % P - partition.
@@ -130,8 +162,15 @@ partition_set_mbr(TT, B, [d4(D, SN, _SDN, N)| T], [p4(bios_boot, bd1([PD, D]), k
 	inst_setting(mbr_size, MBR_SZ),
 	N1 is N + 1,
 	part_name(SN, N1, SD1),
-	partition_set_efi(TT, B, [d4(D, SN, SD1, N1)| T], L).
+	partition_set_boot(TT, B, [d4(D, SN, SD1, N1)| T], L).
 
+partition_set_efi(TT, syslinux, [d4(D, SN, _SDN, N)| T], [p4(efi_system, bd1([PD, D]), create, ESP_SZ), fs4(vfat, efi, '/boot', [PD])| L]) :-
+	part_name(D, N, PD),
+	inst_setting(esp_size, ESP_SZ),
+	N1 is N + 1,
+	part_name(SN, N1, SD1),
+	% !!! skip partition_set_boot
+	partition_set_template(TT, [d4(D, SN, SD1, N1)| T], L).
 partition_set_efi(TT, B, [d4(D, SN, _SDN, N)| T], [p4(efi_system, bd1([PD, D]), create, ESP_SZ), fs4(vfat, efi, '/boot/efi', [PD])| L]) :-
 	part_name(D, N, PD),
 	inst_setting(esp_size, ESP_SZ),
@@ -160,7 +199,6 @@ partition_set_template(gpt_lvm, DL, L) :- !,
 	inst_setting(fs_info, info('/', FS)),
 	append(P4L, [bdev(lvm, vg(VG, PDL, [lv(LV, SZ)])), fs4(FS, void, '/', [LVM_PD])], L),
 	true.
-
 partition_set_template(gpt_lvm_luks1, DL, L) :- !,
 	inst_setting(lvm, lv(VG, LV, SZ)),
 	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
@@ -170,7 +208,6 @@ partition_set_template(gpt_lvm_luks1, DL, L) :- !,
 	inst_setting(fs_info, info('/', FS)),
 	append(P4L, [bdev(lvm, vg(VG, PDL, [lv(LV, SZ)])), bdev(luks, luks(luks1, LVM_PD)), fs4(FS, void, '/', [LUKS_PD])], L),
 	true.
-
 partition_set_template(gpt_luks1, [d4(D, _SN, SDN, N)| _T], [p4(linux_luks, bd1([PD, D]), create, ''), bdev(luks, luks(luks1, PD)), fs4(FS, void, '/', [LUKS_PD])]) :- !,
 	part_name(D, N, PD),
 	luks_dev_name(SDN, LUKS_PD),
@@ -209,6 +246,55 @@ partition_set_template(_, DL, L) :-
 	inst_setting(fs_info, info('/', FS)),
 	fs_to_p4l_pdl(FS, DL, P4L, PDL),
 	append(P4L, [fs4(FS, void, '/', PDL)], L),
+	true.
+
+% DCL - device combo list.
+menu_wiz_action([], []) :- !.
+menu_wiz_action(DCL, L) :-
+	dialog_msg(menu, MENULABEL),
+	M = [
+		  make_lvm_vg
+		, make_luks
+		, make_part
+		, bootloader_dev
+	],
+	maplist(menu_tag, M, ML),
+	% tui_msgbox(ookk),
+	tui_menu_tag(ML, MENULABEL, [title(' Select Action ')], Tag),
+	action_info(A, Tag, _),
+	wiz_cmd(A, DCL, L),
+	true.
+
+% DCL - device combo list.
+% DC: dev7, p4, luks, lvm_vg
+wiz_cmd(make_lvm_vg, DCL, [bdev(lvm, vg(VG, _PDL, [lv(LV, SZ)]))| L]) :- !,
+	menu_dev_combo_checklist2(' Select VG Device(s) ', DCL, [], VGL),
+	tui_inputbox('Volume Group Name:', '', [], VG),
+	LV = void,
+	SZ = '',
+	% maplist(d4_to_p4_pd(linux_lvm), DL, P4L, PDL),
+	subtract(DCL, VGL, DCL2),
+	menu_wiz_action(DCL2, L),
+	true.
+wiz_cmd(make_luks, DCL, L) :- !,
+	% LD - luks device
+	menu_dev_combo_menu(' Select LUKS Device ', DCL, none, LD),
+	% LDN - luks device name
+	tui_inputbox('LUKS Dev Name:', '', [], LDN),
+	menu_password_for('LUKS', luks(LDN)),
+	format_to_atom(LUKS_PD, '/dev/mapper/~w', [LDN]),
+	delete(DCL, LD, DCL2),
+	menu_wiz_action([luks(LUKS_PD, LDN)| DCL2], L),
+	true.
+wiz_cmd(make_part, DCL, [p4(linux_luks, bd1([_PD, _D]), create, '')| L]) :- !,
+	menu_dev_combo_menu(' Select Partition Device ', DCL, none, PD),
+	delete(DCL, PD, DCL2),
+	menu_wiz_action([d4(_D, _SN, _SDN, _N)| DCL2], L),
+	true.
+wiz_cmd(bootloader_dev, DCL, [bootloader_dev(DEV3)| L]) :- !,
+	menu_dev_combo_menu(' Select Bootloader Device ', DCL, none, PD),
+	lx_make_dev3(PD, DEV3),
+	menu_wiz_action(DCL, L),
 	true.
 
 fs_to_p4l_pdl(btrfs, DL, P4L, PDL) :- !,

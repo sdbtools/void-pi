@@ -176,13 +176,6 @@ lx_fiter_disk_wwn([H|T], ID) :-
 	), !.
 lx_fiter_disk_wwn([H], H).
 
-lx_dev_info_cciss(D, dev4(D, DA, GB, DSSZ)) :-
-	os_shell_number('cat /sys/block/cciss\\\\!~w/size', [D], DSZ),
-	os_shell_number('cat /sys/block/cciss\\\\!~w/queue/hw_sector_size', [D], DSSZ),
-	GB is DSZ * DSSZ / 1024 / 1024 /1024,
-	atom_concat('/dev/cciss/', D, DA),
-	true.
-
 % D - device short name
 % DA - device full name
 % GB - device size in GB
@@ -294,13 +287,13 @@ lx_dev7_to_sdn(dev7(_LN,SN,_TYPE,_RO,_RM,_SIZE,_SSZ), SN).
 lx_dev7_to_ldn_sdn(dev7(LN,SN,_TYPE,_RO,_RM,_SIZE,_SSZ), LN, SN).
 
 % Short device name to dev7
-lx_sdn_to_dev7(SDN, L, DEV7) :-
+lx_sdn_to_dev7(L, SDN, DEV7) :-
 	member(DEV7, L),
 	DEV7 = dev7(_LN,SDN,_TYPE,_RO,_RM,_SIZE,_SSZ),
 	!.
 
 % Long device name to dev7
-lx_ldn_to_dev7(LDN, L, DEV7) :-
+lx_ldn_to_dev7(L, LDN, DEV7) :-
 	member(DEV7, L),
 	DEV7 = dev7(LDN,_SD,_TYPE,_RO,_RM,_SIZE,_SSZ),
 	!.
@@ -415,18 +408,6 @@ lx_part_info_raid(L3) :-
 	true.
 lx_part_info_raid([]).
 
-lx_part_info_cciss_(P, part_info(bd1([PA, '/dev/cciss']), FS, FSS, Type)) :-
-	atom_concat('/dev/cciss/', P, PA),
-	lx_part_info_fs(PA, FS, FSS, Type),
-	true.
-
-lx_part_info_cciss(L3) :-
-	os_shell_lines('ls /dev/cciss 2>/dev/null | grep -E \'c[0-9]d[0-9]p[0-9]+\'', L1), !,
-	maplist(lx_part_info_cciss_, L1, L2),
-	subtract(L2, [part_info(_, crypto_LUKS, _, _), part_info(_, 'LVM2_member', _, _)], L3),
-	true.
-lx_part_info_cciss([]).
-
 % LVM
 %         lvs --noheadings | while read lvname vgname perms size; do
 %             echo "/dev/mapper/${vgname}-${lvname}"
@@ -452,9 +433,6 @@ lx_list_part_info_(PL) :-
 lx_list_part_info_(PL) :-
 	% raid
 	lx_part_info_raid(PL).
-lx_list_part_info_(PL) :-
-	% cciss(4) devices
-	lx_part_info_cciss(PL).
 
 % D - device
 % P - prefix

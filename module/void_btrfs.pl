@@ -1,6 +1,8 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
+% https://wiki.archlinux.org/title/Btrfs
+
 create_btrfs_subv(RD) :-
 	inst_setting(btrfs, subv(S, _, _, _)),
 	format_to_atom(SA, '~w/~w', [RD, S]),

@@ -13,7 +13,9 @@ has_root_part(TL) :-
 
 has_efi_system_part(TL) :-
 	% fs4(FileSystem, Label, MountPoint, [device_list])
-	memberchk(fs4(vfat, _Label, '/boot/efi', _DL), TL), !,
+	% memberchk(fs4(vfat, _Label, '/boot/efi', _DL), TL), !,
+	% p4(PartType, device, create/keep, size)
+	memberchk(p4(efi_system, _, _, _), TL), !,
 	true.
 
 has_usr_part(TL) :-
@@ -30,8 +32,7 @@ root_pd(_TL, _PD) :-
 	fail.
 
 boot_pref(TL, '') :-
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	memberchk(fs4(_Name, _Labe1, '/boot', _DL), TL),
+	has_boot_part(TL),
 	!.
 boot_pref(_TL, 'boot/').
 
@@ -208,36 +209,9 @@ mount_fs(FS, D, MP, _RD) :-
 	tui_msgbox2(['mount_fs has failed.', [FS, D, MP]], [sz([6, 40])]),
 	fail.
 
-clean_mnt(RD) :-
-	os_shell2([umount, '--recursive', RD, '2>/dev/nul']),
-	fail.
-clean_mnt(_RD) :-
-	% LVM. Remove volume groups.
-	inst_setting(dev7, used(UL)),
-	member(DEV7, UL),
-	lx_dev7_to_dev3(DEV7, dev3(_D, PL, _TL1)),
-	lvm_pvs(PVL),
-	member(pv(PV,VG), PVL),
-	member(dev_part(PV,_CN,_ET,_SIZE), PL),
-	lvm_vgremove_unsafe(VG),
-	fail.
-clean_mnt(_RD) :-
-	% LVM. Remove physical volumes.
-	inst_setting(dev7, used(UL)),
-	member(DEV7, UL),
-	lx_dev7_to_dev3(DEV7, dev3(_D, PL, _TL1)),
-	lvm_pvs(PVL),
-	member(pv(PV,_VG), PVL),
-	member(dev_part(PV,_CN,_ET,_SIZE), PL),
-	lvm_pvremove(PV),
-	fail.
-clean_mnt(RD) :-
-	% uses_zfs,
-	zpool_list(L),
-	memberchk(zp(PN,_A2,_A3,_A4,_A5,_A6,_A7,_A8,_A9,_A10,RD), L),
-	tui_progressbox_safe([zpool, destroy, '-f', PN, '2>&1'], '', [title(' zpool destroy '), sz([6, 40])]),
-	fail.
-clean_mnt(_).
+umount_mnt(RD) :-
+	os_shell2([umount, '--recursive', RD, '2>/dev/nul']), !.
+umount_mnt(_RD).
 
 % PV - long device name
 clean_mnt_lvm_(pv(PV, VG)) :-

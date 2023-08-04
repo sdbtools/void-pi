@@ -74,7 +74,7 @@ fapassno(_FS, '/', '1').
 fapassno(_FS, _MP, '2').
 
 % Similar to get_mp_list but including swap.
-get_fstab_list(TL, MPL1) :-
+get_fstab_list(TL, [fstab(none, proc, none), fstab(none, tmp, none)| MPL1]) :-
 	% fs4(FileSystem, Label, MountPoint, [device_list])
 	findall(fstab(MP, FS, PD), member(fs4(FS, _Label, MP, [PD| _]), TL), MPL0),
 	sort(MPL0, MPL1),

@@ -19,6 +19,7 @@ bootloader_info(grub2, [
 		, gpt_lvm_luks1
 		, gpt_luks1
 		, gpt_luks1_lvm
+		% , gpt_wizard
 		% , gpt_raid
 		% , gpt_zfsbootmenu
 	]).
@@ -49,12 +50,45 @@ bootloader_info(limine, [
 		, gpt_luks1
 		, gpt_luks1_lvm
 	]).
+bootloader_info(efistub, [
+		  ext2
+		, ext3
+		, ext4
+		, vfat
+	], [
+		  manual
+		, gpt_basic
+		, gpt_lvm
+		, gpt_lvm_luks1
+		, gpt_luks1
+		, gpt_luks1_lvm
+	]).
+bootloader_info(syslinux, [
+		  % btrfs
+		  ext2
+		, ext3
+		, ext4
+		% , f2fs
+		% , swap
+		, vfat
+		, xfs
+	], [
+		  manual
+		, gpt_basic
+		, gpt_lvm
+		, gpt_lvm_luks1
+		, gpt_luks1
+		, gpt_luks1_lvm
+	]).
 bootloader_info(zfsBootMenu, [
 		  zfs
 	], [
 		  gpt_zfsbootmenu
 	]).
 
+% Get bootloader name/dependency
+% target_dep_bootloader(efistub, efibootmgr) :- !. % Already installed.
+target_dep_bootloader(syslinux, syslinux) :- !.
 target_dep_bootloader(limine, limine) :- !.
 target_dep_bootloader(rEFInd, refind) :- !.
 target_dep_bootloader(grub2, GRUB) :-
@@ -77,12 +111,20 @@ set_bootloader(grub2, TL, BD, RD) :- !,
 	grub_install(TL, BD, RD),
 	grub_mkconfig(RD),
 	!.
-set_bootloader(rEFInd, TL, _BD, RD) :-
+set_bootloader(rEFInd, TL, _BD, RD) :- !,
 	refind_install(TL, RD),
 	refind_configure(TL, RD),
 	!.
-set_bootloader(limine, TL, BD, RD) :-
-	limine_install(BD, RD), !,
+set_bootloader(limine, TL, BD, RD) :- !,
+	limine_install(BD, RD),
 	limine_configure(TL, RD),
+	!.
+set_bootloader(efistub, _TL, _BD, _RD) :- !,
+	% efistub_install(BD, RD),
+	% efistub_configure(TL, RD),
+	!.
+set_bootloader(syslinux, TL, BD, RD) :- !,
+	syslinux_install(BD, RD),
+	syslinux_configure(TL, RD),
 	!.
 

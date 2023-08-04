@@ -114,10 +114,10 @@ tui_menu_tag_rc(L, M, UA, A, RC) :-
 	tui_menu3_tag_rc(menu, L, M, UA, OutL, RC),
 	atom_codes(A, OutL).
 
-% N - name
-tui_menu_tag2(N, L, M, UA, A1) :-
+% Tag - menu tag
+tui_menu_tag2(Tag, L, M, UA, A1) :-
 	% get default item
-	( menu_def_item(N, DI) -> true
+	( menu_def_item(Tag, DI) -> true
 	; L = [[DI|_]|_]
 	),
 	tui_menu_tag_rc(L, M, [default-item(DI)|UA], A, RC), !,
@@ -126,10 +126,9 @@ tui_menu_tag2(N, L, M, UA, A1) :-
 	  A1 = A
 	; A1 = RC
 	),
-	% tui_msgbox(A1, [sz([6, 40])]),
 	% set default item
-	retractall(menu_def_item(N, _)),
-	assertz(menu_def_item(N, A1)),
+	retractall(menu_def_item(Tag, _)),
+	assertz(menu_def_item(Tag, A1)),
 	true.
 
 % Vertical form.
