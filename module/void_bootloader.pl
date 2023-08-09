@@ -16,9 +16,9 @@ bootloader_info(grub2, [
 		  manual
 		, gpt_basic
 		, gpt_lvm
-		, gpt_lvm_luks1
-		, gpt_luks1
-		, gpt_luks1_lvm
+		, gpt_lvm_luks
+		, gpt_luks
+		, gpt_luks_lvm
 		% , gpt_wizard
 		% , gpt_raid
 		% , gpt_zfsbootmenu
@@ -33,9 +33,9 @@ bootloader_info(rEFInd, [
 		  manual
 		, gpt_basic
 		, gpt_lvm
-		, gpt_lvm_luks1
-		, gpt_luks1
-		, gpt_luks1_lvm
+		, gpt_lvm_luks
+		, gpt_luks
+		, gpt_luks_lvm
 	]).
 bootloader_info(limine, [
 		  ext2
@@ -46,9 +46,9 @@ bootloader_info(limine, [
 		  manual
 		, gpt_basic
 		, gpt_lvm
-		, gpt_lvm_luks1
-		, gpt_luks1
-		, gpt_luks1_lvm
+		, gpt_lvm_luks
+		, gpt_luks
+		, gpt_luks_lvm
 	]).
 bootloader_info(efistub, [
 		  ext2
@@ -59,16 +59,16 @@ bootloader_info(efistub, [
 		  manual
 		, gpt_basic
 		, gpt_lvm
-		, gpt_lvm_luks1
-		, gpt_luks1
-		, gpt_luks1_lvm
+		, gpt_lvm_luks
+		, gpt_luks
+		, gpt_luks_lvm
 	]).
 bootloader_info(syslinux, [
-		  % btrfs
-		  ext2
+		  btrfs
+		, ext2
 		, ext3
 		, ext4
-		% , f2fs
+		, f2fs
 		% , swap
 		, vfat
 		, xfs
@@ -76,9 +76,9 @@ bootloader_info(syslinux, [
 		  manual
 		, gpt_basic
 		, gpt_lvm
-		, gpt_lvm_luks1
-		, gpt_luks1
-		, gpt_luks1_lvm
+		, gpt_lvm_luks
+		, gpt_luks
+		, gpt_luks_lvm
 	]).
 bootloader_info(zfsBootMenu, [
 		  zfs
@@ -96,8 +96,11 @@ target_dep_bootloader(grub2, GRUB) :-
 	inst_setting(system(arch), ARCH),
 	arch2grub(ARCH, GRUB), !.
 
+get_bootloader(TL, B) :-
+	memberchk(bootloader(B), TL).
+
 set_bootloader(TL, RD) :-
-	memberchk(bootloader(B), TL),
+	get_bootloader(TL, B),
 	memberchk(bootloader_dev(dev3(BD, _, _)), TL),
 	set_bootloader(B, TL, BD, RD), !.
 set_bootloader(_TL, _RD) :-
@@ -127,4 +130,45 @@ set_bootloader(syslinux, TL, BD, RD) :- !,
 	syslinux_install(BD, RD),
 	syslinux_configure(TL, RD),
 	!.
+
+bootloader_kernel_params(TL, [
+		  root=v('UUID', RPID)
+		, init='/sbin/init'
+		, rw
+	]) :-
+	root_pd(TL, ROOT_PD),
+	lx_get_dev_uuid(ROOT_PD, RPID),
+	true.
+bootloader_kernel_params(TL, L) :-
+	% LUKS
+	( memberchk(bdev(luks, luks(_, PD)), TL) ->
+	  lx_get_dev_uuid(PD, PDID),
+	  lx_split_dev(PD, _P, SDN),
+      luks_dev_name_short(SDN, LUKS_PD),
+	  L = ['rd.luks.name'=v(PDID, LUKS_PD)]
+	; L = ['rd.luks'=0]
+	),
+	true.
+bootloader_kernel_params(TL, ['rd.lvm'=0]) :-
+	\+ memberchk(bdev(lvm, _Value), TL),
+	true.
+bootloader_kernel_params(_TL, [
+		  'rd.md'=0
+		, 'rd.dm'=0
+		, loglevel=4
+		, gpt
+		, add_efi_memmap
+		, 'vconsole.unicode'=1
+		, 'vconsole.keymap'=KB
+		, 'locale.LANG'=LC
+		% , 'rd.live.overlay.overlayfs'=1
+	]) :-
+	inst_setting(keymap, KB),
+	inst_setting(locale, LC),
+	true.
+
+bootloader_write_cmdline(TL, S) :-
+	findall(P0, (bootloader_kernel_params(TL, PL0), member(P0, PL0)), AL),
+	os_wcmdl(AL, S),
+	true.
 

@@ -60,7 +60,7 @@ setting_value(luks_info, N) :- !,
 	inst_setting(luks, luks(N)).
 setting_value(bootloader, B) :- !,
 	inst_setting(template(_), TL),
-	( memberchk(bootloader(B), TL)
+	( get_bootloader(TL, B)
 	; B = 'not set'
 	), !.
 setting_value(bootloader_dev, D) :- !,
@@ -210,13 +210,20 @@ menu_dev71_menu(_Title, [D], D) :- !.
 menu_dev71_menu(Title, L, D) :-
 	menu_dev7_menu(Title, L, D).
 
+menu_dev71_menu_used(Title, L, D) :-
+	menu_dev71_menu(Title, L, D),
+	retractall(inst_setting(dev7, used(_))),
+	assertz(inst_setting(dev7, used([D]))).
+
 menu_dev7_checklist_used_light(Title, NL) :-
 	inst_setting(dev7, available(L)),
 	( L = [_] ->
-	  NL = L
+	  NL = L,
+	  retractall(inst_setting(dev7, used(_))),
+	  assertz(inst_setting(dev7, used(NL)))
 	; menu_dev7_checklist_used(Title, L, NL)
 	),
-	true.
+	!.
 
 % L - list of devices to select from.
 menu_d4_checklist(Title, L, DL) :-
@@ -275,18 +282,18 @@ menu_review_opt([mbr_size]) :-
 menu_review_opt([boot_size]) :-
 	inst_setting(fs_info, info('/', FS)),
 	inst_setting(template(TT), TL),
-	memberchk(bootloader(B), TL),
+	get_bootloader(TL, B),
 	need_boot_part(TT, B, FS).
 menu_review_opt([boot_size]) :-
 	inst_setting(template(gpt_raid), _).
 menu_review_opt([lvm_info]) :-
 	inst_setting(template(gpt_lvm), _).
 menu_review_opt([luks_info, luks_passwd]) :-
-	inst_setting(template(gpt_luks1), _).
+	inst_setting(template(gpt_luks), _).
 menu_review_opt([lvm_info, luks_info, luks_passwd]) :-
-	inst_setting(template(gpt_luks1_lvm), _).
+	inst_setting(template(gpt_luks_lvm), _).
 menu_review_opt([lvm_info, luks_info, luks_passwd]) :-
-	inst_setting(template(gpt_lvm_luks1), _).
+	inst_setting(template(gpt_lvm_luks), _).
 
 menu_review :-
 	findall(S0, (menu_review_opt(SL0), member(S0, SL0)), S),
@@ -365,18 +372,18 @@ menu_common_opt([mbr_size]) :-
 menu_common_opt([boot_size]) :-
 	inst_setting(fs_info, info('/', FS)),
 	inst_setting(template(TT), TL),
-	memberchk(bootloader(B), TL),
+	get_bootloader(TL, B),
 	need_boot_part(TT, B, FS).
 menu_common_opt([boot_size]) :-
 	inst_setting(template(gpt_raid), _).
 menu_common_opt([lvm_info]) :-
 	inst_setting(template(gpt_lvm), _).
 menu_common_opt([luks_info, luks_passwd]) :-
-	inst_setting(template(gpt_luks1), _).
+	inst_setting(template(gpt_luks), _).
 menu_common_opt([lvm_info, luks_info, luks_passwd]) :-
-	inst_setting(template(gpt_luks1_lvm), _).
+	inst_setting(template(gpt_luks_lvm), _).
 menu_common_opt([lvm_info, luks_info, luks_passwd]) :-
-	inst_setting(template(gpt_lvm_luks1), _).
+	inst_setting(template(gpt_lvm_luks), _).
 
 menu_common :-
 	findall(M0, (menu_common_opt(ML0), member(M0, ML0)), M),
@@ -425,7 +432,7 @@ cmd_menu(common_settings, _TL) :- !,
 	menu_common,
 	true.
 cmd_menu(template, TL) :- !,
-	memberchk(bootloader(B), TL),
+	get_bootloader(TL, B),
 	menu_template(B),
 	true.
 cmd_menu(keymap, _TL) :- !,

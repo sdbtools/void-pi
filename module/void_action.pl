@@ -104,9 +104,9 @@ make_chroot_inst_pref_chroot(ARCH, P, RD) :-
 
 need_to_remove_pkg(_TL, [dialog, 'xtools-minimal']).
 need_to_remove_pkg(TL, [grub]) :-
-	  % Remove grub if we are using different bootloader.
-	  memberchk(bootloader(BR), TL),
-	  BR \= grub2.
+	% Remove grub if we are using different bootloader.
+	get_bootloader(TL, B),
+	B \= grub2.
 
 % Remove list of packages
 remove_pkg(L, RD) :-
@@ -144,6 +144,11 @@ install_pkg(TL, rootfs, RD) :-
 	% tui_msgbox('install_target_dep'),
 	install_target_dep(TL, RD),
 
+	% efistub-related
+	( \+ get_bootloader(TL, efistub)
+	; efistub_install(RD)
+	),
+
 	% Remove stuff
 	remove_pkg(['base-voidstrap'], RD),
 
@@ -158,7 +163,7 @@ install_pkg(TL, net, RD) :-
 	os_mkdir_p([RD + '/var/db/xbps/keys', RD + '/usr/share']),
 	os_call2([cp, '-a', '/usr/share/xbps.d', RD + '/usr/share/']),
 	os_shell2([cp, '/var/db/xbps/keys/*.plist', RD + '/var/db/xbps/keys']),
-	( memberchk(bootloader(grub2), TL) ->
+	( get_bootloader(TL, grub2) ->
 	  os_mkdir_p(RD + '/boot/grub')
 	; true
 	),
@@ -167,6 +172,11 @@ install_pkg(TL, net, RD) :-
 	dracut_conf(TL, RD),
 
 	install_target_dep(TL, RD),
+
+	% efistub-related
+	( \+ get_bootloader(TL, efistub)
+	; efistub_install(RD)
+	),
 
 	tui_progressbox_safe(['xbps-reconfigure', o(r, RD), '-f', 'base-files', '2>&1'], '', [title(' Reconfigure base-files '), sz(max)]),
 	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-a', '2>&1'], '', [title(' Reconfigure all '), sz(max)]),
@@ -204,9 +214,9 @@ install_pkg(TL, local, RD) :-
 	install_target_dep(TL, RD),
 
 	% efistub-related
-	% tui_progressbox_safe(['xbps-reconfigure', o(r, RD), '-f', 'linux5.19', '2>&1'], '', [title(' Reconfigure Linux '), sz([6, 60])]),
-	% tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-f', 'linux5.19', '2>&1'], '', [title(' Reconfigure Linux '), sz([6, 60])]),
-	% efibootmgr -o 0005,0002,0003,0001,0000,0004
+	( \+ get_bootloader(TL, efistub)
+	; efistub_install(RD)
+	),
 
 	% Remove stuff
 	( HN = hrmpf
@@ -313,16 +323,35 @@ set_sudoers :-
 	tui_msgbox('Setting up of sudoers has failed.'),
 	fail.
 
+% Old code
+% mount_chroot_filesystems(RD) :-
+% 	maplist(mount_chroot_filesystem_rbind(RD), ['/sys', '/dev', '/proc']),
+% 	true.
+
+% New code.
 mount_chroot_filesystems(RD) :-
-	maplist(mount_chroot_filesystem_(RD), ['/sys', '/dev', '/proc']),
+	maplist(mount_chroot_filesystem_none(RD), [m(proc, proc), m(sysfs, sys)]),
+	findall(M, mount_chroot_filesystem_rbind_(M), L),
+	maplist(mount_chroot_filesystem_rbind(RD), L),
 	true.
 
-mount_chroot_filesystem_(RD, D) :-
+mount_chroot_filesystem_rbind(RD, D) :-
 	atom_concat(RD, D, D1),
 	os_mkdir_p(D1),
 	os_call2([mount, '--rbind', D, D1]),
 	% os_call2([mount, '--make-rslave', D1]),
 	true.
+
+mount_chroot_filesystem_none(RD, m(FS, MP)) :-
+	format_to_atom(MP1, '~w/~w', [RD, MP]),
+	os_mkdir_p(MP1),
+	os_call2([mount, '-t', FS, none, MP1]),
+	true.
+
+mount_chroot_filesystem_rbind_('/dev').
+mount_chroot_filesystem_rbind_('/run').
+mount_chroot_filesystem_rbind_('/sys/firmware/efi/efivars') :-
+	inst_setting(system(efi), _).
 
 % Unmount ALL filesystems mounted during installation.
 umount_filesystems(RD) :-
@@ -399,13 +428,13 @@ ensure_passwd :-
 	menu_password_user(U),
 	fail.
 ensure_passwd :-
-	inst_setting(template(gpt_luks1), _),
+	inst_setting(template(gpt_luks), _),
 	U = '$_luks_$',
 	\+ inst_setting_tmp(passwd(U), _),
 	menu_password_luks(U),
 	fail.
 ensure_passwd :-
-	inst_setting(template(gpt_luks1_lvm), _),
+	inst_setting(template(gpt_luks_lvm), _),
 	U = '$_luks_$',
 	\+ inst_setting_tmp(passwd(U), _),
 	menu_password_luks(U),

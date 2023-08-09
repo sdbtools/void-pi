@@ -4,8 +4,23 @@
 % https://wiki.archlinux.org/title/EFISTUB
 % https://mth.st/blog/void-efistub
 
-% efistub_install(_BD, _RD) :-
-% 	true.
+efistub_install(RD) :-
+	efistub_linux_ver(RD, LV),
+	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-f', concat(linux, LV), '2>&1'], '', [title(' Reconfigure Linux '), sz([18, 60])]),
+	atom_concat('Void Linux with kernel ', LV, Name),
+	efibootmgr_get(MgrL),
+	memberchk(boot(Num, Name, _), MgrL),
+	memberchk(order(OL), MgrL),
+	delete(OL, Num, OL1),
+	efibootmgr_set_order([Num|OL1]),
+	true.
+
+efistub_linux_ver(RD, LV) :-
+	os_shell2_codes_line([ls, RD + '/lib/modules/'], KL),
+	split_list_ne(KL, ".", [V1, V2|_]),
+	maplist(codes_atom, [V1, V2], VL),
+	format_to_atom(LV, '~w.~w', VL),
+	true.
 
 efistub_configure(TL, RD) :-
 	atom_concat(RD, '/etc/default/efibootmgr-kernel-hook', CF),
@@ -16,11 +31,12 @@ efistub_configure(TL, RD) :-
 
 efistub_write_cfg(TL, S) :-
 	% fs4(FileSystem, Label, MountPoint, [device_list])
-	member(fs4(vfat, _efi, '/boot/efi', [PD]), TL),
+	member(fs4(vfat, _efi, '/boot', [PD]), TL),
 	parent_dev_name(PD, N, PD0),
 	write(S, 'MODIFY_EFI_ENTRIES="1"'), nl(S),
+	write(S, 'OPTIONS="'), bootloader_write_cmdline(TL, S), write(S, '"'), nl(S),
 	format(S, 'DISK="~w"', [PD0]), nl(S),
-	format(S, 'PART="~w"', [N]), nl(S),
+	format(S, 'PART=~w', [N]), nl(S),
 	true.
 
 parent_dev_name(D, N, PD) :-
@@ -31,3 +47,44 @@ parent_dev_name(D, N, PD) :-
 	; sub_atom(D, 0, _, 1, PD)
 	).
 
+efibootmgr_get(L) :-
+	os_shell_lines_codes(efibootmgr, CL),
+	maplist(efibootmgr_get_, CL, L),
+	true.
+
+efibootmgr_get_(L, timeout(A)) :-
+	append("Timeout: ", L0, L), !,
+	split_list_ne(L0, " ", [L1| _]),
+	atom_codes(A, L1),
+	true.
+efibootmgr_get_(L, current(A)) :-
+	append("BootCurrent: ", L0, L), !,
+	atom_codes(A, L0),
+	true.
+efibootmgr_get_(L, next(A)) :-
+	append("BootNext: ", L0, L), !,
+	atom_codes(A, L0),
+	true.
+efibootmgr_get_(L, order(L2)) :-
+	append("BootOrder: ", L0, L), !,
+	split_list_ne(L0, ",", L1),
+	maplist(codes_atom, L1, L2),
+	true.
+efibootmgr_get_(L, boot(A1, A2, F)) :-
+	% Boot0000*
+	split_list(L, "\t", [L0| _]),
+	split_list(L0, " ", [L1| T]),
+	append("Boot", L11, L1),
+	( append(L12, [0'*], L11),
+	  F = active
+	; L12 = L11,
+	  F = inactive
+	),
+	atom_codes(A1, L12),
+	join(T, " ", L2),
+	flatten(L2, L3),
+	atom_codes(A2, L3),
+	true.
+
+efibootmgr_set_order(L) :-
+	os_call2([efibootmgr, '-o', lc(L)]).

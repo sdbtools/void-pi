@@ -153,14 +153,14 @@ split_tz(TZ, A1, A2) :-
 % , efistub
 % , zfsBootMenu
 menu_bootloader_([grub2 , rEFInd , limine]).
-menu_bootloader_([syslinux]) :-
+menu_bootloader_([syslinux, efistub]) :-
 	inst_setting(system(efi), _),
 	true.
 
 menu_bootloader(TL) :-
 	findall(B, (menu_bootloader_(L0), member(B, L0)), BL),
 	dialog_msg(radiolist, RADIOLABEL),
-	( memberchk(bootloader(OB), TL)
+	( get_bootloader(TL, OB)
 	; OB = none
 	), !,
 	tui_radiolist_tag2(BL, OB, RADIOLABEL, [no-tags, title(' Select a bootloader ')], NB), !,

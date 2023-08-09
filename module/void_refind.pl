@@ -27,6 +27,7 @@ refind_configure(TL, RD) :-
 	close(S),
 	true.
 
+% It is different from bootloader_kernel_params.
 refind_kernel_params(TL, L) :-
 	% Device
 	root_pd(TL, ROOT_PD),
@@ -38,7 +39,7 @@ refind_kernel_params(TL, L) :-
 	true.
 refind_kernel_params(TL, L) :-
 	% LUKS
-	( memberchk(bdev(luks, luks(luks1, PD)), TL) ->
+	( memberchk(bdev(luks, luks(_, PD)), TL) ->
 	  lx_get_dev_uuid(PD, PDID),
 	  lx_split_dev(PD, _P, SDN),
       luks_dev_name_short(SDN, LUKS_PD),

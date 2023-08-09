@@ -53,47 +53,6 @@ syslinux_write_cfg(TL, V, S) :-
 	write(S, 'LABEL Void'), nl(S),
 	write(S, '    LINUX /'), write(S, Pref), write(S, 'vmlinuz-'), write(S, V), nl(S),
 	write(S, '    INITRD /'), write(S, Pref), write(S, 'initramfs-'), write(S, V), write(S, '.img'), nl(S),
-	write(S, '    APPEND '), syslinux_write_cmdline(TL, S), nl(S),
-	true.
-
-syslinux_kernel_params(TL, [
-		  root=v('UUID', RPID)
-		, init='/sbin/init'
-		, rw
-	]) :-
-	root_pd(TL, ROOT_PD),
-	lx_get_dev_uuid(ROOT_PD, RPID),
-	true.
-syslinux_kernel_params(TL, L) :-
-	% LUKS
-	( memberchk(bdev(luks, luks(luks1, PD)), TL) ->
-	  lx_get_dev_uuid(PD, PDID),
-	  lx_split_dev(PD, _P, SDN),
-      luks_dev_name_short(SDN, LUKS_PD),
-	  L = ['rd.luks.name'=v(PDID, LUKS_PD)]
-	; L = ['rd.luks'=0]
-	),
-	true.
-syslinux_kernel_params(TL, ['rd.lvm'=0]) :-
-	\+ memberchk(bdev(lvm, _Value), TL),
-	true.
-syslinux_kernel_params(_TL, [
-		  'rd.md'=0
-		, 'rd.dm'=0
-		, loglevel=4
-		, gpt
-		, add_efi_memmap
-		, 'vconsole.unicode'=1
-		, 'vconsole.keymap'=KB
-		, 'locale.LANG'=LC
-		% , 'rd.live.overlay.overlayfs'=1
-	]) :-
-	inst_setting(keymap, KB),
-	inst_setting(locale, LC),
-	true.
-
-syslinux_write_cmdline(TL, S) :-
-	findall(P0, (syslinux_kernel_params(TL, PL0), member(P0, PL0)), AL),
-	os_wcmdl(AL, S),
+	write(S, '    APPEND '), bootloader_write_cmdline(TL, S), nl(S),
 	true.
 

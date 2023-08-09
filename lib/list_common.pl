@@ -2,6 +2,12 @@
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % S - separator.
+join([H1,H2|T], S, [H1,S|T1]) :- !,
+	join([H2|T], S, T1).
+join([H], _, [H]) :- !.
+join_atoms([], _, []).
+
+% S - separator.
 join_atoms([H1,H2|T], S, T2) :-
 	atom_concat(H1, S, H3),
 	join_atoms([H2|T], S, T1),

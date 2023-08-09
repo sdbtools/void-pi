@@ -45,6 +45,11 @@ write_fstab(tmp, _, _, S) :- !,
 	L = [tmpfs, '/tmp', tmpfs, lc(O), '0 0'],
 	write_fstab_line(L, S),
 	true.
+write_fstab(efivarfs, _, _, S) :- !,
+	O = [defaults],
+	L = [efivarfs, '/sys/firmware/efi/efivars', efivarfs, lc(O), '0 0'],
+	write_fstab_line(L, S),
+	true.
 write_fstab(FS, D, MP, S) :- !,
 	lx_get_dev_uuid(D, U),
 	format(S, '# ~w\n', [D]),
@@ -75,6 +80,18 @@ fapassno(_FS, _MP, '2').
 
 % Similar to get_mp_list but including swap.
 get_fstab_list(TL, [fstab(none, proc, none), fstab(none, tmp, none)| MPL1]) :-
+	% fs4(FileSystem, Label, MountPoint, [device_list])
+	findall(fstab(MP, FS, PD), member(fs4(FS, _Label, MP, [PD| _]), TL), MPL0),
+	sort(MPL0, MPL1),
+	true.
+
+get_fstab_list(TL, L) :-
+	findall(M, (get_fstab_list_(TL, L0), member(M, L0)), L).
+
+get_fstab_list_(_TL, [fstab(none, proc, none), fstab(none, tmp, none)]).
+% get_fstab_list_(TL, [fstab(none, efivarfs, none)]) :-
+% 	get_bootloader(TL, efistub).
+get_fstab_list_(TL, MPL1) :-
 	% fs4(FileSystem, Label, MountPoint, [device_list])
 	findall(fstab(MP, FS, PD), member(fs4(FS, _Label, MP, [PD| _]), TL), MPL0),
 	sort(MPL0, MPL1),

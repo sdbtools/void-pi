@@ -303,7 +303,7 @@ make_cmd(TL, part(D, SPL)) :-
 	true.
 make_cmd(TL, modprobe(FS)) :-
 	% fs4(Name, Label, MountPoint, [DevList])
-	findall(FS0, (member(fs4(FS0, _Label, _MP, _DL), TL), \+ memberchk(FS0, [swap, lvm, luks1, bcachefs])), FSL),
+	findall(FS0, (member(fs4(FS0, _Label, _MP, _DL), TL), \+ memberchk(FS0, [swap, lvm, luks1])), FSL),
 	sort(FSL, SFSL),
 	member(FS, SFSL),
 	true.

@@ -29,18 +29,38 @@ create_keyfile(ROOT_PD, RD) :-
 setup_cryptab(PDL, RD) :-
 	atom_concat(RD, '/etc/crypttab', KF),
 	open(KF, write, S),
-	maplist(setup_cryptab_(S), PDL),
+	setup_cryptab_(S, PDL, RD),
 	close(S),
 	true.
 
-setup_cryptab_(S, PD) :-
+setup_cryptab_(S, [PD], _RD) :-
+	setup_cryptab_kf(S, PD),
+	true.
+setup_cryptab_(S, [PD|T], RD) :-
+	% Download decrypt_keyctl
+	os_mkdir_p(RD + '/lib/cryptsetup/scripts'),
+	% tui_progressbox_safe is causes weird problems.
+	% tui_progressbox_safe([curl, 'https://raw.githubusercontent.com/gebi/keyctl_keyscript/master/decrypt_keyctl', o(o, RD + '/lib/cryptsetup/scripts/decrypt_keyctl')], '', [title(' Downloading decrypt_keyctl '), sz([6, 80])]),
+	tui_progressbox_unsafe([curl, 'https://raw.githubusercontent.com/gebi/keyctl_keyscript/master/decrypt_keyctl', o(o, RD + '/lib/cryptsetup/scripts/decrypt_keyctl')], '', [title(' Downloading decrypt_keyctl '), sz([6, 80])]),
+	os_shell2([chroot, RD, chmod, '711', '/lib/cryptsetup/scripts/decrypt_keyctl']),
+
+	setup_cryptab_ks(S, 'key_1:', PD),
+	maplist(setup_cryptab_ks(S, 'key_1'), T),
+	true.
+
+setup_cryptab_kf(S, PD) :-
 	lx_get_dev_uuid(PD, PUUID),
 	lx_split_dev(PD, _P, SDN),
 	luks_dev_name_short(SDN, LUKS_PD),
-	write(S, LUKS_PD),
-	write(S, ' UUID='),
-	write(S, PUUID),
-	write(S, ' /boot/volume.key luks'),
+	format(S, '~w UUID=~w /boot/volume.key luks', [LUKS_PD, PUUID]),
+	nl(S),
+	true.
+
+setup_cryptab_ks(S, K, PD) :-
+	lx_get_dev_uuid(PD, PUUID),
+	lx_split_dev(PD, _P, SDN),
+	luks_dev_name_short(SDN, LUKS_PD),
+	format(S, '~w UUID=~w ~w luks,keyscript=/lib/cryptsetup/scripts/decrypt_keyctl', [LUKS_PD, PUUID, K]),
 	nl(S),
 	true.
 
@@ -57,7 +77,7 @@ luks_dev_name_short(SDN, LUKS_PD) :-
 	true.
 
 setup_crypt(TL, RD) :-
-	findall(PD, member(bdev(luks, luks(luks1, PD)), TL), PDL),
+	findall(PD, member(bdev(luks, luks(_, PD)), TL), PDL),
 	PDL = [PD| _],
 	% Create the keyfile
 	create_keyfile(PD, RD),

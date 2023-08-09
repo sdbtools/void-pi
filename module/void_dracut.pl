@@ -9,7 +9,7 @@ dracut_conf(TL, RD) :-
 	lx_dracut_conf(VL, K, RD),
 	fail.
 dracut_conf(TL, RD) :-
-	memberchk(bootloader(efistub), TL),
+	get_bootloader(TL, efistub),
 	efistub_configure(TL, RD),
 	fail.
 dracut_conf(_TL, _RD).

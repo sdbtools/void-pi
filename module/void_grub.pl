@@ -59,7 +59,7 @@ grub_config_luks(_TL, [
 	  ]).
 
 grub_linux_cmdline(TL, ['rd.luks.name'=v(PUUID, LUKS_PD)]) :-
-	member(bdev(luks, luks(luks1, PD)), TL),
+	member(bdev(luks, luks(_, PD)), TL),
 	lx_get_dev_uuid(PD, PUUID),
 	lx_split_dev(PD, _P, SDN),
 	luks_dev_name_short(SDN, LUKS_PD),

@@ -4,7 +4,7 @@ Void Linux installer implemented in GNU Prolog.
 
 Last tested | ISO                                                                                | Result
 ----------- | ---------------------------------------------------------------------------------- | ------
-2023-08-03  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
+2023-08-08  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
 2023-06-29  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
 2023-07-25  | [void-live-i686-20230628-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20230628-base.iso) | PASS
 2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
@@ -18,7 +18,7 @@ void-pi is a Void Linux installer similar to [void-installer](https://docs.voidl
 
 It extends void-installer in several ways:
 - provides predefined templates for [BTRFS](https://en.wikipedia.org/wiki/Btrfs), [LVM](https://en.wikipedia.org/wiki/Logical_volume_management), and [LUKS](https://en.wikipedia.org/wiki/Linux_Unified_Key_Setup).
-- supports [rEFInd](https://rodsbooks.com/refind/), [Limine](https://limine-bootloader.org/), and [Syslinux](https://wiki.syslinux.org/wiki/index.php?title=The_Syslinux_Project) boot managers
+- supports [rEFInd](https://rodsbooks.com/refind/), [Limine](https://limine-bootloader.org/), [Syslinux](https://wiki.syslinux.org/wiki/index.php?title=The_Syslinux_Project), and EFISTUB boot managers
 - supports multi-device configurations.
 
 void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
@@ -44,12 +44,14 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
     - if a bootloader doesn't support a file system (or LVM, or LUKS), then installer will create an ext4 `/boot` partition.
 - LUKS
     - LUKS can be used with GRUB, rEFInd, Limine, and Syslinux.
-    - In case of GRUB whole system is located on LUKS, including encrypted `/boot`
-    - In case of rEFInd and Limine installer will create an unencrypted ext4 `/boot` partition.
+    - In case of GRUB whole system is located on LUKS, including encrypted `/boot`. LUKS1 is used because GRUB2 doesn't support LUKS2.
+    - In case of rEFInd and Limine installer will create an unencrypted ext4 `/boot` partition. LUKS2 is used.
 - Syslinux
     - In case of UEFI the kernel and initramfs files are located in the EFI system partition (aka ESP), as Syslinux does not (currently) have the ability to access files outside its own partition.
     - MBR is currently unsupported.
     - IA32 (32-bit) is currently unsupported.
+- EFISTUB
+    - In case of UEFI the kernel and initramfs files are located in the EFI system partition (aka ESP).
 - Multi-device support
     - Multi-device configurations are available with BTRFS and LVM.
 
@@ -58,9 +60,9 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - Manual configuration of everything
 - GPT. Basic
 - GPT. LVM
-- GPT. LVM. LUKS1
-- GPT. LUKS1. One device
-- GPT. LUKS1. LVM. One device
+- GPT. LVM. LUKS
+- GPT. LUKS. One device
+- GPT. LUKS. LVM. One device
 
 ### Default settings
 
@@ -72,7 +74,7 @@ All default settings can be changed via `Common Attrs` sub-menu.
 - keymap: us
 - locale: en_US.UTF-8
 - timezone: America/New_York
-- LUKS mapping name: cryptroot
+- LUKS mapping name: crypt
 - MBR size: 1M
 - ESP size: [550M][550M]
 - Boot partition size: 1G
