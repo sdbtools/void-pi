@@ -18,8 +18,10 @@ void-pi is a Void Linux installer similar to [void-installer](https://docs.voidl
 
 It extends void-installer in several ways:
 - provides predefined templates for [BTRFS](https://en.wikipedia.org/wiki/Btrfs), [LVM](https://en.wikipedia.org/wiki/Logical_volume_management), and [LUKS](https://en.wikipedia.org/wiki/Linux_Unified_Key_Setup).
-- supports [rEFInd](https://rodsbooks.com/refind/), [Limine](https://limine-bootloader.org/), [Syslinux](https://wiki.syslinux.org/wiki/index.php?title=The_Syslinux_Project), and EFISTUB boot managers
+- supports [rEFInd](https://rodsbooks.com/refind/), [Limine](https://limine-bootloader.org/), and [Syslinux](https://wiki.syslinux.org/wiki/index.php?title=The_Syslinux_Project) boot managers
+- supports EFISTUB boot loader
 - supports multi-device configurations.
+- installs and configures additional boot manager and file system related software.
 
 void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 
@@ -34,14 +36,15 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - allows to use an alternative rootdir via `--rootdir` command line argument.
 - all settings can be saved in a file and loaded on startup. File name is controlled via `--config` command line argument.
 - passwords are never saved in files even temporarily.
-- Bootloaders
-    - uses GRUB, rEFInd, Limine, or Syslnux as a bootloader.
+- Boot managers
+    - uses GRUB, rEFInd, Limine, or Syslnux as a boot manager.
+    - uses EFISTUB as a boot loader.
     - GRUB supports fat, btrfs, ext2, ext3, ext4, and xfs file systems.
     - rEFInd supports fat, btrfs, ext2, ext3, and ext4 file systems.
     - rEFInd is configured to use kernel auto detection.
     - Limine supports fat, ext2, ext3, and ext4 file systems.
-    - Syslinux is enabled with UEFI and supports fat, ext2, ext3, ext4, and xfs file systems.
-    - if a bootloader doesn't support a file system (or LVM, or LUKS), then installer will create an ext4 `/boot` partition.
+    - Syslinux is enabled with UEFI and supports fat, btrfs, ext2, ext3, ext4, f2fs, and xfs file systems.
+    - if a boot manager doesn't support a file system (or LVM, or LUKS), then installer will create an ext4 `/boot` partition.
 - LUKS
     - LUKS can be used with GRUB, rEFInd, Limine, and Syslinux.
     - In case of GRUB whole system is located on LUKS, including encrypted `/boot`. LUKS1 is used because GRUB2 doesn't support LUKS2.
@@ -51,9 +54,13 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
     - MBR is currently unsupported.
     - IA32 (32-bit) is currently unsupported.
 - EFISTUB
-    - In case of UEFI the kernel and initramfs files are located in the EFI system partition (aka ESP).
+    - The kernel and initramfs files are located in the EFI system partition (aka ESP).
 - Multi-device support
     - Multi-device configurations are available with BTRFS and LVM.
+- Additional software
+    - [snooze](https://github.com/leahneukirchen/snooze) - run a command at a particular time.
+    - [btrbk](https://github.com/digint/btrbk) - Tool for creating snapshots and remote backups of btrfs subvolumes.
+    - [grub-btrfs](https://github.com/Antynea/grub-btrfs) - improves the grub bootloader by adding a btrfs snapshots sub-menu, allowing the user to boot into snapshots.
 
 ### Templates
 
@@ -78,6 +85,9 @@ All default settings can be changed via `Common Attrs` sub-menu.
 - MBR size: 1M
 - ESP size: [550M][550M]
 - Boot partition size: 1G
+- btrbk: `/mnt/btr_pool`
+    - snapshots are created for @, @opt, @var, @srv, and @home subvolumes.
+    - btrbk is scheduled to run every day
 
 ### Filesystem
 
@@ -108,7 +118,6 @@ Subvolume name    | Mounting point    | Mount options
 `@var-opt`        | `/var/opt`        | `nodev,noexec,nosuid`
 `@var-spool`      | `/var/spool`      | `nodev,noexec,nosuid` + nodatacow
 `@var-tmp`        | `/var/tmp`        | `nodev,noexec,nosuid` + nodatacow
-`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
 
 #### F2FS options
 
@@ -143,13 +152,25 @@ cd void-pi
 gplc --min-size void-pi.pl
 ./void-pi
 ```
+
+### Manually run btrbk
+
+- `sudo btrbk run`
+
+### Manually run grub-btrfs
+
+- `grub-mkconfig -o /boot/grub/grub.cfg`
+
 ## Dependencies
 
-Name      | Provides                | Included in Void ISO?
----       | ---                     | ---
-dialog    | ncurses user input menu | Y
-gptfdisk  | GPT disk partitioning with sgdisk | N
-lz4       | Extremely Fast Compression algorithm | N
+Name       | Provides                | Included in Void ISO?
+---        | ---                     | ---
+dialog     | ncurses user input menu | Y
+gptfdisk   | GPT disk partitioning with sgdisk | N
+lz4        | Extremely Fast Compression algorithm | N
+snooze     | cron replacement | N
+btrbk      | Tool for creating snapshots | N
+grub-btrfs | Add a btrfs snapshots sub-menu to GRUB | N
 
 ## Licensing
 

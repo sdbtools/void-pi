@@ -52,8 +52,8 @@ menu_part_select(TL) :-
 	PIL \= [], !,
 	maplist(part2taglist, PIL, ML1),
 	MT1 = ' Select partition(s) to use ',
-	dialog_msg(menu, MENULABEL),
-	tui_checklist_tag2(ML1, OPL, MENULABEL, [title(MT1)], PLO),
+	dialog_msg(checklist, LABEL),
+	tui_checklist_tag2(ML1, OPL, LABEL, [title(MT1)], PLO),
 	update_part_info2(PIL, OPL, PLO, TL, NTL),
 	retract(inst_setting(template(TN), _)),
 	assertz(inst_setting(template(TN), NTL)),
@@ -152,8 +152,8 @@ split_tz(TZ, A1, A2) :-
 
 % , efistub
 % , zfsBootMenu
-menu_bootloader_([grub2 , rEFInd , limine]).
-menu_bootloader_([syslinux, efistub]) :-
+menu_bootloader_([grub2, limine]).
+menu_bootloader_([rEFInd, syslinux, efistub]) :-
 	inst_setting(system(efi), _),
 	true.
 

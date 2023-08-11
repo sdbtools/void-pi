@@ -302,6 +302,27 @@ menu_review :-
 	tui_menu_tag(SL, MENULABEL, [no-cancel, ok-label('Return'), title(' Current settings ')], _Tag),
 	true.
 
+% IL - input list (previously selected)
+% OL - output list
+menu_soft(B, FS, IL, OL) :-
+	findall(S, soft_info(S, B, FS, _DepL, _Descr), SL),
+	( SL = [] ->
+	  OL = []
+	; maplist(menu_soft_, SL, AL),
+	  dialog_msg(checklist, LABEL),
+	  tui_checklist_tag2(AL, IL, LABEL, [title(' Select Software ')], OL)
+	  % tui_checklist_tag(AL, LABEL, [title(' Select Software ')], OL)
+	),
+	true.
+
+menu_soft_(S, [S, Descr]) :-
+	soft_info(S, _B, _FS, _DepL, Descr), !,
+	true.
+
+menu_soft_soft(B, FS, IL, OL1) :-
+	menu_soft(B, FS, IL, OL),
+	findall(soft(S), member(S, OL), OL1).
+
 % NB - new bootloader.
 menu_template(NB) :-
 	inst_setting(template(OT), _),
@@ -392,8 +413,8 @@ menu_common :-
 	maplist(menu_tag_v, M, ML),
 	tui_menu_tag2(main_common, ML, MENULABEL, [cancel-label('Return'), title(' Common installation settings ')], Tag),
 	action_info(A, Tag, _),
-	inst_setting(template(_), TL),
-	cmd_action(A, TL),
+	inst_setting(template(TT), TL),
+	cmd_action(A,TT, TL),
 	!.
 
 menu_main :-
@@ -418,104 +439,104 @@ menu_main :-
 	maplist(menu_tag, M1, ML),
 	tui_menu_tag2(main, ML, MENULABEL, [extra-button, extra-label('Save'), cancel-label('Exit'), title(' Void Linux installation menu ')], Tag),
 	action_info(A, Tag, _),
-	inst_setting(template(_), TL),
-	cmd_action(A, TL),
+	inst_setting(template(TT), TL),
+	cmd_action(A, TT, TL),
 	true.
 
-cmd_menu(root_fs, TL) :- !,
-	menu_root_fs(TL),
+cmd_menu(root_fs, TT, TL) :- !,
+	menu_root_fs_soft(TT, TL),
 	true.
-cmd_menu(btrfs_opt, _TL) :- !,
+cmd_menu(btrfs_opt, _TT, _TL) :- !,
 	menu_btrfs,
 	true.
-cmd_menu(common_settings, _TL) :- !,
+cmd_menu(common_settings, _TT, _TL) :- !,
 	menu_common,
 	true.
-cmd_menu(template, TL) :- !,
+cmd_menu(template, _TT, TL) :- !,
 	get_bootloader(TL, B),
 	menu_template(B),
 	true.
-cmd_menu(keymap, _TL) :- !,
+cmd_menu(keymap, _TT, _TL) :- !,
 	menu_keymap,
 	true.
-cmd_menu(network, _TL) :- !,
+cmd_menu(network, _TT, _TL) :- !,
 	menu_network,
 	true.
-cmd_menu(source, _TL) :- !,
+cmd_menu(source, _TT, _TL) :- !,
 	menu_pkg_inst_method,
 	true.
-cmd_menu(hostname, _TL) :- !,
+cmd_menu(hostname, _TT, _TL) :- !,
 	menu_setting(hostname),
 	true.
-cmd_menu(locale, _TL) :- !,
+cmd_menu(locale, _TT, _TL) :- !,
 	menu_locale,
 	true.
-cmd_menu(timezone, _TL) :- !,
+cmd_menu(timezone, _TT, _TL) :- !,
 	menu_timezone,
 	true.
-cmd_menu(root_passwd, _TL) :- !,
+cmd_menu(root_passwd, _TT, _TL) :- !,
 	menu_password_user(root),
 	true.
-cmd_menu(user_passwd, _TL) :- !,
+cmd_menu(user_passwd, _TT, _TL) :- !,
 	inst_setting(useraccount, user(UL, _UN, _UGL)),
 	menu_password_user(UL),
 	true.
-cmd_menu(luks_passwd, _TL) :- !,
+cmd_menu(luks_passwd, _TT, _TL) :- !,
 	menu_password_luks('$_luks_$'),
 	true.
-cmd_menu(useraccount, _TL) :- !,
+cmd_menu(useraccount, _TT, _TL) :- !,
 	menu_useraccount_info,
 	true.
-cmd_menu(lvm_info, _TL) :- !,
+cmd_menu(lvm_info, _TT, _TL) :- !,
 	menu_lvm_info,
 	true.
-cmd_menu(luks_info, _TL) :- !,
+cmd_menu(luks_info, _TT, _TL) :- !,
 	menu_luks_info,
 	true.
-cmd_menu(bootloader, TL) :- !,
+cmd_menu(bootloader, _TT, TL) :- !,
 	menu_bootloader(TL),
 	true.
-cmd_menu(bootloader_dev, TL) :- !,
+cmd_menu(bootloader_dev, _TT, TL) :- !,
 	menu_bootloader_dev(TL),
 	true.
-cmd_menu(make_part_manually, _TL) :- !,
+cmd_menu(make_part_manually, _TT, _TL) :- !,
 	menu_part_manually,
 	true.
-cmd_menu(part_select, TL) :- !,
+cmd_menu(part_select, _TT, TL) :- !,
 	menu_part_select(TL),
 	true.
-cmd_menu(filesystem, TL) :- !,
+cmd_menu(filesystem, _TT, TL) :- !,
 	menu_filesystem(TL),
 	true.
-cmd_menu(review, _TL) :- !,
+cmd_menu(review, _TT, _TL) :- !,
 	menu_review,
 	true.
-cmd_menu(mbr_size, _TL) :- !,
+cmd_menu(mbr_size, _TT, _TL) :- !,
 	menu_setting(mbr_size),
 	true.
-cmd_menu(esp_size, _TL) :- !,
+cmd_menu(esp_size, _TT, _TL) :- !,
 	menu_setting(esp_size),
 	true.
-cmd_menu(boot_size, _TL) :- !,
+cmd_menu(boot_size, _TT, _TL) :- !,
 	menu_setting(boot_size),
 	true.
-cmd_menu(save, _TL) :- !,
+cmd_menu(save, _TT, _TL) :- !,
 	menu_save,
 	true.
-cmd_menu(install, TL) :- !,
-	run_install(TL),
+cmd_menu(install, TT, TL) :- !,
+	run_install(TT, TL),
 	true.
-cmd_menu(exit, _TL) :- !,
+cmd_menu(exit, _TT, _TL) :- !,
 	% tui_yesno('Exit installer?', [sz([6, 40])]),
 	true.
 
-cmd_action(install, TL) :- !,
-	cmd_menu(install, TL),
+cmd_action(install, TT, TL) :- !,
+	cmd_menu(install, TT, TL),
 	true.
-cmd_action(exit, TL) :- !,
-	cmd_menu(exit, TL),
+cmd_action(exit, TT, TL) :- !,
+	cmd_menu(exit, TT, TL),
 	true.
-cmd_action(A, TL) :- !,
-	cmd_menu(A, TL),
+cmd_action(A, TT, TL) :- !,
+	cmd_menu(A, TT, TL),
 	fail.
 

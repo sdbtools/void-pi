@@ -36,7 +36,7 @@ boot_pref(TL, '') :-
 	!.
 boot_pref(_TL, 'boot/').
 
-mkfs(zfs, [PD, _], Label, RD) :- !,
+mkfs(zfs, Title, [PD, _], Label, RD) :- !,
 	add_dquote(Label, _LQ),
 	% lx_get_dev_disk_partuuid(PD, PID),
 	lx_split_dev(PD, _Pref, P),
@@ -59,7 +59,7 @@ mkfs(zfs, [PD, _], Label, RD) :- !,
 		zroot,
 		PID,
 		'2>&1'
-		], 'Creating filesystem zfs', [sz([12, 80])]
+		], '', [title(Title), sz([12, 80])]
 	),
 	% export and re-import the pool with a temporary, alternate root path
 	os_shell2([zpool, export, zroot]),
@@ -74,40 +74,40 @@ mkfs(zfs, [PD, _], Label, RD) :- !,
 	% os_shell2([mkdir, '-p', '/mnt/etc/zfs']),
 	% os_shell2([zpool, set, 'cachefile=/mnt/etc/zfs/zpool.cache', zroot]),
 	!.
-mkfs(btrfs, DL, Label, RD) :- !,
-	tui_progressbox_safe(['mkfs.btrfs', o('L', dq(Label)), '-f', DL, '2>&1'], 'Creating filesystem btrfs', [sz([12, 80])]),
-	% tui_programbox_safe(['mkfs.btrfs', '-f', '-L', LQ, DL, '2>&1'], 'Creating filesystem btrfs', [sz([12, 80])]),
+mkfs(btrfs, Title, DL, Label, RD) :- !,
+	tui_progressbox_safe(['mkfs.btrfs', o('L', dq(Label)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
+	% tui_programbox_safe(['mkfs.btrfs', '-f', '-L', LQ, DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	DL = [D| _],
 	create_btrfs_subv(D, RD).
-mkfs(bcachefs, DL, Label, _RD) :- !,
-	tui_progressbox_safe(['mkfs.bcachefs', o('L', dq(Label)), '-f', DL, '2>&1'], 'Creating filesystem bcachefs', [sz([12, 80])]),
+mkfs(bcachefs, Title, DL, Label, _RD) :- !,
+	tui_progressbox_safe(['mkfs.bcachefs', o('L', dq(Label)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(ext2, DL, Label, _RD) :- !,
-	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), '-F', DL, '2>&1'], 'Creating filesystem ext2', [sz([12, 80])]),
+mkfs(ext2, Title, DL, Label, _RD) :- !,
+	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), '-F', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(ext3, DL, Label, _RD) :- !,
-	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), '-j', '-F', DL, '2>&1'], 'Creating filesystem ext3', [sz([12, 80])]),
+mkfs(ext3, Title, DL, Label, _RD) :- !,
+	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), '-j', '-F', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(ext4, DL, Label, _RD) :- !,
-	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), o(t, ext4), '-F', DL, '2>&1'], 'Creating filesystem ext4', [sz([12, 80])]),
-	% tui_programbox_safe(['mke2fs', '-F', '-t', 'ext4', DL, '2>&1'], 'Creating filesystem ext4', [sz([24, 80])]),
+mkfs(ext4, Title, DL, Label, _RD) :- !,
+	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), o(t, ext4), '-F', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
+	% tui_programbox_safe(['mke2fs', '-F', '-t', 'ext4', DL, '2>&1'], '', [title(Title), sz([24, 80])]),
 	true.
-mkfs(f2fs, DL, Label, _RD) :- !,
+mkfs(f2fs, Title, DL, Label, _RD) :- !,
 	( inst_setting(fs_attr(f2fs, _), create(OL))
 	; OL = [encrypt]
 	),
-	% tui_progressbox_safe(['mkfs.f2fs', o(l, dq(Label)), '-f', DL, '2>&1'], 'Creating filesystem f2fs', [sz([12, 80])]),
-	tui_progressbox_safe(['mkfs.f2fs', o(l, dq(Label)), o('O', lc(OL)), '-f', DL, '2>&1'], 'Creating filesystem f2fs', [sz([12, 80])]),
+	% tui_progressbox_safe(['mkfs.f2fs', o(l, dq(Label)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
+	tui_progressbox_safe(['mkfs.f2fs', o(l, dq(Label)), o('O', lc(OL)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(vfat, DL, Label, _RD) :- !,
+mkfs(vfat, Title, DL, Label, _RD) :- !,
 	upper(Label, UL),
-	tui_progressbox_safe(['mkfs.vfat', o('F', '32'), o('n', dq(UL)), DL, '2>&1'], 'Creating filesystem vfat', [sz([12, 80])]),
-	% tui_programbox_safe(['mkfs.vfat', '-F', '32', '-n', dq(UL), DL, '2>&1'], 'Creating filesystem vfat', [sz([12, 80])]),
+	tui_progressbox_safe(['mkfs.vfat', o('F', '32'), o('n', dq(UL)), DL, '2>&1'], '', [title(Title), sz([12, 80])]),
+	% tui_programbox_safe(['mkfs.vfat', '-F', '32', '-n', dq(UL), DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(xfs, DL, Label, _RD) :- !,
-	tui_progressbox_safe(['mkfs.xfs', o('L', dq(Label)), '-f', '-i', 'sparse=0', DL, '2>&1'], 'Creating filesystem xfs', [sz([12, 80])]),
+mkfs(xfs, Title, DL, Label, _RD) :- !,
+	tui_progressbox_safe(['mkfs.xfs', o('L', dq(Label)), '-f', '-i', 'sparse=0', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(swap, [PD| _], _Label, _RD) :- !,
+mkfs(swap, _Title, [PD| _], _Label, _RD) :- !,
 	os_shell2_rc([swapoff, PD, '>/dev/null', '2>&1'], _),
 	( os_shell2l([mkswap, PD, '2>&1']) ->
 	  true
@@ -120,7 +120,7 @@ mkfs(swap, [PD| _], _Label, _RD) :- !,
 	  fail
 	),
 	true.
-mkfs(FS, _, _, _, _RD) :- !,
+mkfs(FS, _Title, _, _, _, _RD) :- !,
 	tui_msgbox2(['Unknown filesystem', FS]),
 	fail.
 
@@ -234,9 +234,4 @@ ensure_lvm(TL) :-
 	tui_msgbox(M, [title(' Ensure LVM ERROR ')]),
 	fail.
 ensure_lvm(_TL).
-
-% MP - mount point
-% FS - file system
-replace_fs(MP, FS, fs4(_, Label, MP, DL), fs4(FS, Label, MP, DL)) :- !.
-replace_fs(_MP, _FS, E, E) :- !.
 

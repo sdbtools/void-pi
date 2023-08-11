@@ -6,12 +6,12 @@ install_deps(Pref, D) :-
 	% tui_progressbox_safe([Pref, 'xbps-install', '-Suy', xbps, '2>&1'], '', [title(' Update xbps '), sz([12, 80])]),
 	% % needed by old versions of xbps-install.
 	% tui_progressbox_safe([Pref, 'xbps-install', '-S', '2>&1'], '', [title(' Synchronize remote repository index files '), sz([6, 80])]),
-	tui_progressbox_safe([Pref, 'xbps-install', '-SyU', D, '2>&1'], '', [title(' Install dependencies '), sz(max)]).
+	tui_progressbox_safe([Pref, 'xbps-install', '-SyU', D, '2>&1'], '', [title(' Install Dependencies '), sz([12, 80])]).
 
 install_deps_chroot(_, [], _) :- !.
 install_deps_chroot(Pref, D, RD) :-
 	% tui_programbox_safe([Pref, 'xbps-install', o(r, RD), '-SyU', D, '2>&1'], '', [title(' Installing base system packages... '), sz(max)]).
-	tui_progressbox_safe([Pref, 'xbps-install', o(r, RD), '-SyU', D, '2>&1'], '', [title(' Installing base system packages... '), sz(max)]).
+	tui_progressbox_safe([Pref, 'xbps-install', o(r, RD), '-SyU', D, '2>&1'], '', [title(' Installing base system packages... '), sz([12, 80])]).
 
 % Detect that we are running void-live ISO.
 is_void_live :-
@@ -108,16 +108,6 @@ need_to_remove_pkg(TL, [grub]) :-
 	get_bootloader(TL, B),
 	B \= grub2.
 
-% Remove list of packages
-remove_pkg(L, RD) :-
-	% find installed packages
-	findall(P0, (member(P0, L), os_call2_rc(['xbps-query', P0], 0)), L0),
-	% find dependencies
-	findall(P2, (member(P1, L0), os_shell2_lines(['xbps-query', '-X', P1], P2L), member(P2, P2L)), L1),
-	append(L1, L0, L3),
-	tui_progressbox_safe(['xbps-remove', o(r, RD), '-Ry', L3, '2>&1'], '', [title(' xbps-remove '), sz([12, 80])]),
-	true.
-
 install_pkg(TL, rootfs, RD) :-
 	% N = 'void-x86_64-ROOTFS-20221001.tar.xz',
 	working_directory(PWD),
@@ -150,7 +140,7 @@ install_pkg(TL, rootfs, RD) :-
 	),
 
 	% Remove stuff
-	remove_pkg(['base-voidstrap'], RD),
+	soft_remove_pkg_list(['base-voidstrap'], RD),
 
 	tui_progressbox_safe(['xbps-reconfigure', o(r, RD), '-f', 'base-files', '2>&1'], '', [title(' Reconfigure base-files '), sz(max)]),
 	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-a', '2>&1'], '', [title(' Reconfigure all '), sz(max)]),
@@ -222,7 +212,7 @@ install_pkg(TL, local, RD) :-
 	( HN = hrmpf
 	; % Remove temporary packages from target
 	  findall(P, (need_to_remove_pkg(TL, PL0), member(P, PL0)), PL),
-	  remove_pkg(PL, RD)
+	  soft_remove_pkg_list(PL, RD)
 	),
 	true.
 
@@ -365,10 +355,22 @@ umount_filesystems(RD) :-
 	fail.
 umount_filesystems(_RD).
 
+% Old code.
+% wipe_disk(D) :-
+% 	os_shell2_lines([wipefs, '--noheadings', D], L),
+% 	( L = []
+% 	; os_shell2([wipefs, '--all', '--force', D, '2>&1', '1>/dev/null']),
+% 	  wipe_disk(D)
+% 	),
+% 	!.
+
 wipe_disk(D) :-
 	os_shell2_lines([wipefs, '--noheadings', D], L),
-	( L = []
-	; os_shell2([wipefs, '-a', D, '2>&1', '1>/dev/null']),
+	( L = [] ->
+	  % os_shell2([sgdisk, '-Zo', D])
+	  format_to_atom(Title, ' Cleaning Device ~w ', [D]),
+	  tui_progressbox_safe([sgdisk, '-Zo', D, '2>&1'], '', [title(Title), sz([6, 40])])
+	; os_shell2([wipefs, '--all', '--force', D, '2>&1', '1>/dev/null']),
 	  wipe_disk(D)
 	),
 	!.
@@ -407,54 +409,49 @@ wipe_dev(ET, D, _CN) :- !,
 wipe_dev_part(linux_lvm, D) :-
 	% tui_msgbox(D),
 	lvm_pvremove(D),
-	wipe_disk(D).
-wipe_dev_part(_T, D) :-
-	wipe_disk(D).
+	% wipe_disk(D),
+	true.
+wipe_dev_part(_T, _D) :-
+	% wipe_disk(D),
+	true.
 
 part2taglist(part_info(bd1([PD| _]), _FS, FSS, _Type), [PD, FSS]).
 
-ensure_settings(TL) :-
+ensure_settings(TT, TL) :-
 	% S = [partition, bootloader_dev, keymap, network, source, hostname, locale, timezone, passwd, useraccount],
 	S = [bootloader_dev, keymap, network, source, hostname, locale, timezone, passwd, useraccount],
-	maplist(ensure_setting(TL), S).
+	maplist(ensure_setting(TT, TL), S).
 
-ensure_passwd :-
+ensure_passwd(_TT) :-
 	\+ inst_setting_tmp(passwd(root), _),
 	menu_password_user(root),
 	fail.
-ensure_passwd :-
+ensure_passwd(_TT) :-
 	inst_setting(useraccount, user(U, _, _)),
 	\+ inst_setting_tmp(passwd(U), _),
 	menu_password_user(U),
 	fail.
-ensure_passwd :-
-	inst_setting(template(gpt_luks), _),
+ensure_passwd(TT) :-
+	memberchk(TT, [gpt_lvm_luks, gpt_luks, gpt_luks_lvm]),
 	U = '$_luks_$',
 	\+ inst_setting_tmp(passwd(U), _),
 	menu_password_luks(U),
 	fail.
-ensure_passwd :-
-	inst_setting(template(gpt_luks_lvm), _),
-	U = '$_luks_$',
-	\+ inst_setting_tmp(passwd(U), _),
-	menu_password_luks(U),
-	fail.
-ensure_passwd.
+ensure_passwd(_TT).
 
-ensure_setting(_TL, passwd) :- !,
-	ensure_passwd.
-ensure_setting(TL, bootloader_dev) :- !,
-	inst_setting(template(TT), _),
+ensure_setting(TT, _TL, passwd) :- !,
+	ensure_passwd(TT).
+ensure_setting(TT, TL, bootloader_dev) :- !,
 	ensure_bootloader_dev(TT, TL).
-ensure_setting(_TL, S) :-
+ensure_setting(_TT, _TL, S) :-
 	inst_setting(S, _), !.
-ensure_setting(TL, S) :-
-	cmd_menu(S, TL).
+ensure_setting(TT, TL, S) :-
+	cmd_menu(S, TT, TL).
 
 ensure_bootloader_dev(manual, _TL) :- !.
-ensure_bootloader_dev(_TT, TL) :-
+ensure_bootloader_dev(TT, TL) :-
 	( memberchk(bootloader_dev(_), TL)
-	; cmd_menu(bootloader_dev, TL)
+	; cmd_menu(bootloader_dev, TT, TL)
 	), !.
 
 save_settings(S) :-

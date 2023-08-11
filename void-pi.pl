@@ -47,6 +47,7 @@
 
 :- include('module/void_template.pl').
 :- include('module/void_action.pl').
+:- include('module/void_soft.pl').
 
 :- dynamic([inst_setting/2, inst_setting_tmp/2]).
 
@@ -83,10 +84,10 @@ def_settings :-
 
 	true.
 
-source_dependency_pkg(TL, Distro, DL) :-
-	setof(D, source_dep(TL, Distro, D), DL).
+source_dependency_pkg(TT, TL, Distro, DL) :-
+	setof(D, source_dep(TT, TL, Distro, D), DL).
 
-source_dep(TL, Distro, D) :-
+source_dep(_TT, TL, Distro, D) :-
 	% Collect all used filesystems.
 	% fs4(Name, Label, MountPoint, [DevList])
 	findall(FS, member(fs4(FS, _Label, _MP, _DL), TL), FSL0),
@@ -96,17 +97,16 @@ source_dep(TL, Distro, D) :-
 	source_dep_module(Distro, filesystem(F), DL),
 	member(D, DL),
 	true.
-source_dep(_TL, Distro, D) :-
-	inst_setting(template(T), _),
-	source_dep_module(Distro, template(T), DL),
+source_dep(TT, _TL, Distro, D) :-
+	source_dep_module(Distro, template(TT), DL),
 	member(D, DL),
 	true.
-source_dep(_TL, Distro, D) :-
+source_dep(_TT, _TL, Distro, D) :-
 	inst_setting(source, S),
 	source_dep_module(Distro, inst_method(S), DL),
 	member(D, DL),
 	true.
-source_dep(TL, Distro, D) :-
+source_dep(_TT, TL, Distro, D) :-
 	memberchk(bootloader(B), TL),
 	source_dep_module(Distro, bootloader(B), DL),
 	member(D, DL),
@@ -148,10 +148,10 @@ setup_conf :-
 	setup_sys_disk,
 	true.
 
-setup_install(TL) :-
+setup_install(TT, TL) :-
 	% Install dependencies
 	host_name(HN),
-	( source_dependency_pkg(TL, HN, D) ->
+	( source_dependency_pkg(TT, TL, HN, D) ->
 	  % tui_msgbox2(D),
 	  install_deps([], D)
 	; true
@@ -181,116 +181,92 @@ target_dep(TL, zfs) :-
 	true.
 
 % for tracing.
-% run_cmd(_TL, _RD, CMD) :-
+% run_cmd(_TT, _TL, _RD, CMD) :-
 % 	tui_msgbox_w(CMD),
 % 	fail.
-run_cmd(TL, RD, prepare_to_install) :- !,
-	setup_install(TL),
-	ensure_settings(TL),
+run_cmd(TT, TL, RD, prepare_to_install) :- !,
+	setup_install(TT, TL),
+	ensure_settings(TT, TL),
 	validate_fs(TL),
 	umount_mnt(RD),
 	!.
-run_cmd(_TL, _RD, wipe_dev7(DEV7)) :- !,
+run_cmd(_TT, _TL, _RD, wipe_dev7(DEV7)) :- !,
 	lx_dev7_to_dev3(DEV7, dev3(D, PL, TL1)),
 	( wipe_dev_tree_list(TL1, PL)
 	; tui_msgbox2([wipe_disk, D, has, failed]),
 	  fail
 	),
 	!.
-run_cmd(TL, _RD, ensure_lvm) :- !,
+run_cmd(_TT, TL, _RD, ensure_lvm) :- !,
 	ensure_lvm(TL),
 	!.
-run_cmd(TL, _RD, part(D, PL)) :- !,
+run_cmd(_TT, TL, _RD, part(D, PL)) :- !,
 	( part_sgdisk_pl(TL, D, PL)
 	; tui_msgbox('Disk partitioning has failed.'),
 	  fail
 	),
 	!.
-run_cmd(_TL, _RD, modprobe(FS)) :- !,
+run_cmd(_TT, _TL, _RD, modprobe(FS)) :- !,
 	( os_call2([modprobe, FS])
 	; tui_msgbox2([modprobe, FS, has, failed]),
 	  fail
 	),
 	!.
-run_cmd(_TL, _RD, mkbd(BD, CMD)) :- !, % make block device.
+run_cmd(_TT, _TL, _RD, mkbd(BD, CMD)) :- !, % make block device.
 	mkbd(BD, CMD),
 	!.
-run_cmd(_TL, RD, mkfs(FS, DL, Label)) :- !,
-	mkfs(FS, DL, Label, RD),
+run_cmd(_TT, _TL, RD, mkfs(FS, DL, Label)) :- !,
+	format_to_atom(Title, ' Creating filesystem ~w ', [FS]),
+	mkfs(FS, Title, DL, Label, RD),
 	true.
-run_cmd(_TL, RD, mount(FS, PD, MP)) :- !,
+run_cmd(_TT, _TL, RD, mount(FS, PD, MP)) :- !,
 	mount_fs(FS, PD, MP, RD),
 	true.
-run_cmd(TL, RD, install_pkg(IM)) :- !,
+run_cmd(_TT, TL, RD, install_pkg(IM)) :- !,
 	install_pkg(TL, IM, RD),
-
-	% tui_msgbox('make_fstab'),
 	make_fstab(TL, RD),
-
-	% tui_msgbox('set_keymap'),
 	% set up keymap, locale, timezone, hostname, root passwd and user account.
 	set_keymap(RD),
-
-	% tui_msgbox('set_locale'),
 	set_locale(RD),
-
-	% tui_msgbox('set_timezone'),
 	set_timezone(RD),
-
-	% tui_msgbox('set_hostname'),
 	set_hostname(RD),
-
-	% tui_msgbox('set_rootpassword'),
 	set_rootpassword(RD),
-
-	% tui_msgbox('set_useraccount'),
 	set_useraccount(RD),
-
-	% tui_msgbox('cp /mnt/etc/skel/.[bix]* /mnt/root'),
 	% Copy /etc/skel files for root.
 	os_shell2([cp, RD + '/etc/skel/.[bix]*', RD + '/root']),
-
-	% tui_msgbox('set_network'),
 	% set network
 	set_network(RD),
-
-	% tui_msgbox('set_sudoers'),
 	% set sudoers
 	set_sudoers,
-
 	% clean up polkit rule - it's only useful in live systems
-	( IM = local ->
-	  % tui_msgbox('rm -f /mnt/etc/polkit-1/rules.d/void-live.rules'),
-	  os_rm_f(RD + '/etc/polkit-1/rules.d/void-live.rules')
-	; true
+	( IM \= local
+	; os_rm_f(RD + '/etc/polkit-1/rules.d/void-live.rules')
 	),
-
-	% tui_msgbox('set_bootloader'),
+	% install software.
+	soft_install(TL, RD),
 	% install bootloader.
 	set_bootloader(TL, RD),
-
-	% tui_msgbox('umount_filesystems'),
 	% unmount all filesystems.
 	umount_filesystems(RD),
 	tui_msgbox('Void Linux has been installed successfully!', [sz([6, 40])]),
 	os_call2([clear]),
 	true.
 
-run_cmdl(TL, L) :-
+run_cmdl(TT, TL, L) :-
 	inst_setting(root_dir, RD),
-	maplist(run_cmd(TL, RD), L).
+	maplist(run_cmd(TT, TL, RD), L).
 
-make_cmd(_TL, prepare_to_install).
-make_cmd(_TL, wipe_dev7(DEV7)) :-
-	\+ inst_setting(template(manual), _),
+make_cmd(_TT, _TL, prepare_to_install).
+make_cmd(TT, _TL, wipe_dev7(DEV7)) :-
+	TT \= manual,
 	inst_setting(dev7, used(UL)),
 	member(DEV7, UL),
 	true.
-make_cmd(TL, ensure_lvm) :-
+make_cmd(_TT, TL, ensure_lvm) :-
 	memberchk(bdev(lvm, _), TL),
 	true.
-make_cmd(TL, part(D, SPL)) :-
-	\+ inst_setting(template(manual), _),
+make_cmd(TT, TL, part(D, SPL)) :-
+	TT \= manual,
 	% Find all devices.
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
 	findall(D0, member(p4(_PT0, bd1([_, D0]), _F0, _SZ0), TL), DL0),
@@ -301,32 +277,32 @@ make_cmd(TL, part(D, SPL)) :-
 	findall(PD, member(p4(_PT1, bd1([PD, D]), _CK1, _SZ1), TL), PL0),
 	sort(PL0, SPL),
 	true.
-make_cmd(TL, modprobe(FS)) :-
+make_cmd(_TT, TL, modprobe(FS)) :-
 	% fs4(Name, Label, MountPoint, [DevList])
-	findall(FS0, (member(fs4(FS0, _Label, _MP, _DL), TL), \+ memberchk(FS0, [swap, lvm, luks1])), FSL),
+	findall(FS0, (member(fs4(FS0, _Label, _MP, _DL), TL), \+ memberchk(FS0, [swap, lvm, luks])), FSL),
 	sort(FSL, SFSL),
 	member(FS, SFSL),
 	true.
-make_cmd(TL, mkbd(BD, CMD)) :-
+make_cmd(_TT, TL, mkbd(BD, CMD)) :-
 	member(bdev(BD, CMD), TL),
 	true.
-make_cmd(TL, mkfs(FS, DL, Label)) :-
+make_cmd(_TT, TL, mkfs(FS, DL, Label)) :-
 	% fs4(Name, Label, MountPoint, [DevList])
 	member(fs4(FS, Label, _MP, DL), TL),
 	true.
-make_cmd(TL, mount(FS, PD, MP)) :-
+make_cmd(_TT, TL, mount(FS, PD, MP)) :-
 	get_mp_list(TL, MPL),
 	member(MP, MPL),
 	% fs4(Name, Label, MountPoint, [DevList])
 	member(fs4(FS, _Label, MP, [PD| _]), TL),
 	true.
-make_cmd(_TL, install_pkg(IM)) :-
+make_cmd(_TT, _TL, install_pkg(IM)) :-
 	inst_setting(source, IM),
 	true.
 
-run_install(TL) :-
-	findall(C, make_cmd(TL, C), CL),
-	run_cmdl(TL, CL),
+run_install(TT, TL) :-
+	findall(C, make_cmd(TT, TL, C), CL),
+	run_cmdl(TT, TL, CL),
 	true.
 
 do_install :-

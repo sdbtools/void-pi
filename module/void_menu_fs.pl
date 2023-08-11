@@ -172,3 +172,27 @@ menu_root_fs(TT) :-
 	assertz(inst_setting(fs_info, info('/', NFS))),
 	true.
 
+% MP - mount point
+% FS - file system
+replace_fs(MP, FS, fs4(_, Label, MP, DL), fs4(FS, Label, MP, DL)) :- !.
+replace_fs(_MP, _FS, E, E) :- !.
+
+% Select root fs and software.
+menu_root_fs_soft(TT, TL) :-
+	inst_setting(fs_info, info('/', OFS)),
+	menu_select_fs(TT, OFS, NFS),
+	( OFS = NFS
+	; findall(C, (member(C, TL), C \= soft(_)), TL1),
+	  maplist(replace_fs('/', NFS), TL1, TL2),
+	  get_bootloader(TL2, B),
+	  menu_soft_soft(B, NFS, [], SL),
+	  append(TL2, SL, TL3),
+
+	  retractall(inst_setting(template(TT), _)),
+	  assertz(inst_setting(template(TT), TL3)),
+
+	  retractall(inst_setting(fs_info, info('/', _))),
+	  assertz(inst_setting(fs_info, info('/', NFS)))
+	),
+	!.
+

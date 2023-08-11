@@ -68,6 +68,14 @@ write_fstab_btrfs(D, U, S) :-
 	L = ['UUID'=U, MP, btrfs, lc(O), '0 0'],
 	write_fstab_line(L, S),
 	fail.
+write_fstab_btrfs(D, U, S) :-
+	format(S, '# ~w\n', [D]),
+	O = [subvolid=5, noatime],
+	% MP = '/.snapshots',
+	MP = '/mnt/btr_pool',
+	L = ['UUID'=U, MP, btrfs, lc(O), '0 0'],
+	write_fstab_line(L, S),
+	fail.
 write_fstab_btrfs(_, _, _).
 
 write_fstab_line(L, S) :-
