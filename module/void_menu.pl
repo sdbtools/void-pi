@@ -280,8 +280,8 @@ menu_review_opt(S) :-
 menu_review_opt([mbr_size]) :-
 	\+ inst_setting(system(efi), _).
 menu_review_opt([boot_size]) :-
-	inst_setting(fs_info, info('/', FS)),
 	inst_setting(template(TT), TL),
+	root_fs(TL, FS),
 	get_bootloader(TL, B),
 	need_boot_part(TT, B, FS).
 menu_review_opt([boot_size]) :-
@@ -323,16 +323,16 @@ menu_soft_soft(B, FS, IL, OL1) :-
 	menu_soft(B, FS, IL, OL),
 	findall(soft(S), member(S, OL), OL1).
 
+% OB - old bootloader.
 % NB - new bootloader.
-menu_template(NB) :-
-	inst_setting(template(OT), _),
-	bootloader_info(NB, _, TL0),
+menu_template(OT, OB, NB) :-
+	bootloader_info(NB, _, TL0, _),
 	( TL0 = [NT]
 	; maplist(template_to_menu, TL0, TL),
-	  dialog_msg(radiolist, RADIOLABEL),
-	  tui_radiolist_tag2(TL, OT, RADIOLABEL, [no-tags, title(' Choose configuration ')], NT)
+	  dialog_msg(radiolist, LABEL),
+	  tui_radiolist_tag2(TL, OT, LABEL, [no-tags, title(' Choose configuration ')], NT)
 	),
-	switch_template(OT, NT, NB),
+	switch_template(OT, NT, OB, NB),
 	true.
 
 template_to_menu(T, [T, Descr]) :-
@@ -391,8 +391,8 @@ menu_common_opt(M) :-
 menu_common_opt([mbr_size]) :-
 	\+ inst_setting(system(efi), _).
 menu_common_opt([boot_size]) :-
-	inst_setting(fs_info, info('/', FS)),
 	inst_setting(template(TT), TL),
+	root_fs(TL, FS),
 	get_bootloader(TL, B),
 	need_boot_part(TT, B, FS).
 menu_common_opt([boot_size]) :-
@@ -418,8 +418,7 @@ menu_common :-
 	!.
 
 menu_main :-
-	dialog_msg(menu, MENULABEL),
-	repeat,
+	dialog_msg(menu, LABEL),
 	M = [
 		  bootloader
 		, template
@@ -432,12 +431,13 @@ menu_main :-
 		, review
 		, install
 	],
+	repeat,
 	( inst_setting(template(manual), _) ->
 	  subtract(M, [root_fs], M1)
 	; subtract(M, [bootloader_dev, make_part_manually, part_select, filesystem], M1)
 	),
 	maplist(menu_tag, M1, ML),
-	tui_menu_tag2(main, ML, MENULABEL, [extra-button, extra-label('Save'), cancel-label('Exit'), title(' Void Linux installation menu ')], Tag),
+	tui_menu_tag2(main, ML, LABEL, [extra-button, extra-label('Save'), cancel-label('Exit'), title(' Void Linux installation menu ')], Tag),
 	action_info(A, Tag, _),
 	inst_setting(template(TT), TL),
 	cmd_action(A, TT, TL),
@@ -452,9 +452,9 @@ cmd_menu(btrfs_opt, _TT, _TL) :- !,
 cmd_menu(common_settings, _TT, _TL) :- !,
 	menu_common,
 	true.
-cmd_menu(template, _TT, TL) :- !,
-	get_bootloader(TL, B),
-	menu_template(B),
+cmd_menu(template, TT, TL) :- !,
+	get_bootloader(TL, OB),
+	menu_template(TT, OB, OB),
 	true.
 cmd_menu(keymap, _TT, _TL) :- !,
 	menu_keymap,
@@ -493,8 +493,8 @@ cmd_menu(lvm_info, _TT, _TL) :- !,
 cmd_menu(luks_info, _TT, _TL) :- !,
 	menu_luks_info,
 	true.
-cmd_menu(bootloader, _TT, TL) :- !,
-	menu_bootloader(TL),
+cmd_menu(bootloader, TT, TL) :- !,
+	menu_bootloader(TT, TL),
 	true.
 cmd_menu(bootloader_dev, _TT, TL) :- !,
 	menu_bootloader_dev(TL),

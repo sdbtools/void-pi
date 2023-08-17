@@ -74,7 +74,9 @@ menu_fs_action(label, PD) :- !,
 menu_fs_action(type, PD) :- !,
 	% fs4(FileSystem, Label, MountPoint, [device_list])
 	inst_setting_tmp(fs, fs4(OFS, Label, MP, [PD| T])), !,
-	menu_select_fs(OFS, NFS),
+	inst_setting(template(TT), TL),
+	get_bootloader(TL, B),
+	menu_select_fs(TT, B, OFS, NFS),
 	retractall(inst_setting_tmp(fs, fs4(_, _, _, [PD| _]))),
 	assertz(inst_setting_tmp(fs, fs4(NFS, Label, MP, [PD| T]))),
 	fail.
@@ -127,20 +129,11 @@ fs_type_to_menu(FST, [FST, Descr]) :-
 	fs_info(FST, Descr),
 	true.
 
-% OFS - old file system
-% NFS - new file system
-menu_select_fs(OFS, NFS) :-
-	inst_setting(template(TT), _),
-	menu_select_fs(TT, OFS, NFS),
-	true.
-
 % It is not supposed to assertz.
 % TT - template name
 % OFS - old file system
 % NFS - new file system
-menu_select_fs(TT, OFS, NFS) :-
-	% bootloader_info(bootloade, supported_fs, supported_template).
-	% bootloader_info(B, FSL, _),
+menu_select_fs(TT, B, OFS, NFS) :-
 	FSL = [
 		  btrfs
 		% , bcachefs
@@ -151,25 +144,31 @@ menu_select_fs(TT, OFS, NFS) :-
 		, swap
 		, vfat
 		, xfs
+		% , zfs
 	],
 	% template_info(name, descr, except_fs).
-	template_info(TT, _Descr, EL),
-	subtract(FSL, EL, ML1),
-	maplist(fs_type_to_menu, ML1, ML),
+	template_info(TT, _Descr, EL1),
+	subtract(FSL, EL1, ML1),
+	% bootloader_info(bootloade, supported_fs, supported_template, except_fs).
+	bootloader_info(B, _FSL, _, EL2),
+	subtract(ML1, EL2, ML2),
+	maplist(fs_type_to_menu, ML2, ML),
 	dialog_msg(radiolist, RADIOLABEL),
 	tui_radiolist_tag2(ML, OFS, RADIOLABEL, [title(' Select the filesystem type ')], NFS),
 	true.
 
-% B - bootloader
 % TT - template name
-menu_root_fs(TT) :-
-	inst_setting(fs_info, info('/', OFS)),
-	menu_select_fs(TT, OFS, NFS),
+menu_root_fs(TT, B, NFS) :-
 	retract(inst_setting(template(TT1), OTL)),
-	maplist(replace_fs('/', NFS), OTL, NTL),
-	assertz(inst_setting(template(TT1), NTL)),
-	retractall(inst_setting(fs_info, info('/', _))),
-	assertz(inst_setting(fs_info, info('/', NFS))),
+	( root_fs(OTL, OFS)
+	; OFS = ext4
+	), !,
+	( menu_select_fs(TT, B, OFS, NFS) ->
+	  maplist(replace_fs('/', NFS), OTL, NTL),
+	  assertz(inst_setting(template(TT1), NTL))
+	; assertz(inst_setting(template(TT1), OTL)),
+	  fail
+	),
 	true.
 
 % MP - mount point
@@ -177,10 +176,10 @@ menu_root_fs(TT) :-
 replace_fs(MP, FS, fs4(_, Label, MP, DL), fs4(FS, Label, MP, DL)) :- !.
 replace_fs(_MP, _FS, E, E) :- !.
 
-% Select root fs and software.
 menu_root_fs_soft(TT, TL) :-
-	inst_setting(fs_info, info('/', OFS)),
-	menu_select_fs(TT, OFS, NFS),
+	root_fs(TL, OFS),
+	get_bootloader(TL, B),
+	menu_select_fs(TT, B, OFS, NFS),
 	( OFS = NFS
 	; findall(C, (member(C, TL), C \= soft(_)), TL1),
 	  maplist(replace_fs('/', NFS), TL1, TL2),
@@ -189,10 +188,7 @@ menu_root_fs_soft(TT, TL) :-
 	  append(TL2, SL, TL3),
 
 	  retractall(inst_setting(template(TT), _)),
-	  assertz(inst_setting(template(TT), TL3)),
-
-	  retractall(inst_setting(fs_info, info('/', _))),
-	  assertz(inst_setting(fs_info, info('/', NFS)))
+	  assertz(inst_setting(template(TT), TL3))
 	),
 	!.
 

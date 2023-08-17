@@ -36,7 +36,7 @@ install_zfs(TL, RD) :-
 	\+ host_name(hrmpf),
 	inst_setting(system(arch), ARCH),
 	make_chroot_inst_pref_chroot(ARCH, Pref, RD),
-	install_deps(Pref, [zfs]),
+	soft_install_deps(Pref, [zfs]),
 	!.
 install_zfs(_TL, _).
 

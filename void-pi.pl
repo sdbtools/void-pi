@@ -11,6 +11,7 @@
 :- include('lib/os_grub.pl').
 :- include('lib/cli_common.pl').
 :- include('lib/unix_common.pl').
+:- include('lib/linux_info.pl').
 :- include('lib/linux_common.pl').
 :- include('lib/linux_dracut.pl').
 :- include('lib/linux_luks.pl').
@@ -38,6 +39,7 @@
 :- include('module/void_refind.pl').
 :- include('module/void_efistub.pl').
 :- include('module/void_syslinux.pl').
+:- include('module/void_gummiboot.pl').
 :- include('module/void_bootloader.pl').
 
 % file systems
@@ -59,12 +61,10 @@
 def_settings :-
 	setup_conf,
 	setup_fs_template,
-	B = grub2,
 	assertz(inst_setting(keymap, us)),
 	assertz(inst_setting(locale, 'en_US.UTF-8')),
 	assertz(inst_setting(timezone, 'America/New_York')),
 	assertz(inst_setting(useraccount, user(void, 'Void User', [wheel, floppy, audio, video, cdrom, optical, kvm, xbuilder]))),
-	assertz(inst_setting(fs_info, info('/', ext4))),
 	assertz(inst_setting(mbr_size, '1M')),
 	assertz(inst_setting(esp_size, '550M')),
 	assertz(inst_setting(boot_size, '1G')),
@@ -80,7 +80,7 @@ def_settings :-
 	assertz(inst_setting(luks, luks(crypt))),
 	assertz(inst_setting(config_file, 'settings.pl')),
 
-	enable_template(manual, B),
+	enable_template(manual, grub2),
 
 	true.
 
@@ -152,8 +152,7 @@ setup_install(TT, TL) :-
 	% Install dependencies
 	host_name(HN),
 	( source_dependency_pkg(TT, TL, HN, D) ->
-	  % tui_msgbox2(D),
-	  install_deps([], D)
+	  soft_install_deps([], D)
 	; true
 	).
 

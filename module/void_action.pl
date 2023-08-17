@@ -1,18 +1,6 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
-install_deps(_, []) :- !.
-install_deps(Pref, D) :-
-	% tui_progressbox_safe([Pref, 'xbps-install', '-Suy', xbps, '2>&1'], '', [title(' Update xbps '), sz([12, 80])]),
-	% % needed by old versions of xbps-install.
-	% tui_progressbox_safe([Pref, 'xbps-install', '-S', '2>&1'], '', [title(' Synchronize remote repository index files '), sz([6, 80])]),
-	tui_progressbox_safe([Pref, 'xbps-install', '-SyU', D, '2>&1'], '', [title(' Install Dependencies '), sz([12, 80])]).
-
-install_deps_chroot(_, [], _) :- !.
-install_deps_chroot(Pref, D, RD) :-
-	% tui_programbox_safe([Pref, 'xbps-install', o(r, RD), '-SyU', D, '2>&1'], '', [title(' Installing base system packages... '), sz(max)]).
-	tui_progressbox_safe([Pref, 'xbps-install', o(r, RD), '-SyU', D, '2>&1'], '', [title(' Installing base system packages... '), sz([12, 80])]).
-
 % Detect that we are running void-live ISO.
 is_void_live :-
 	% os_shell_line('uname -n', 'void-live').
@@ -127,17 +115,12 @@ install_pkg(TL, rootfs, RD) :-
 	% Copy the DNS configuration into the new root so that XBPS can still download new packages inside the chroot.
 	os_mkdir_p(RD + '/etc'), os_call2([cp, '-L', '/etc/resolv.conf', RD + '/etc/']),
 
+	get_bootloader(TL, B),
 	% dracut stuff.
-	% tui_msgbox('dracut_conf'),
-	dracut_conf(TL, RD),
+	dracut_conf(TL, B, RD),
 
-	% tui_msgbox('install_target_dep'),
 	install_target_dep(TL, RD),
-
-	% efistub-related
-	( \+ get_bootloader(TL, efistub)
-	; efistub_install(RD)
-	),
+	setup_bootloader(B, TL, RD),
 
 	% Remove stuff
 	soft_remove_pkg_list(['base-voidstrap'], RD),
@@ -158,15 +141,12 @@ install_pkg(TL, net, RD) :-
 	; true
 	),
 
+	get_bootloader(TL, B),
 	% dracut stuff.
-	dracut_conf(TL, RD),
+	dracut_conf(TL, B, RD),
 
 	install_target_dep(TL, RD),
-
-	% efistub-related
-	( \+ get_bootloader(TL, efistub)
-	; efistub_install(RD)
-	),
+	setup_bootloader(B, TL, RD),
 
 	tui_progressbox_safe(['xbps-reconfigure', o(r, RD), '-f', 'base-files', '2>&1'], '', [title(' Reconfigure base-files '), sz(max)]),
 	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-a', '2>&1'], '', [title(' Reconfigure all '), sz(max)]),
@@ -194,19 +174,15 @@ install_pkg(TL, local, RD) :-
 	% mount required fs
 	mount_chroot_filesystems(RD),
 
+	get_bootloader(TL, B),
 	% dracut stuff.
-	dracut_conf(TL, RD),
+	dracut_conf(TL, B, RD),
 	% DL = [chroot, RD, dracut, '--no-hostonly', '--force', '2>&1'],
 	DL = [chroot, RD, dracut, '--regenerate-all', '--hostonly', '--force', '2>&1'],
 	tui_progressbox_safe(DL, '', [title(' Rebuilding initramfs for target '), sz(max)]),
 
-	% tui_msgbox('install_target_dep'),
 	install_target_dep(TL, RD),
-
-	% efistub-related
-	( \+ get_bootloader(TL, efistub)
-	; efistub_install(RD)
-	),
+	setup_bootloader(B, TL, RD),
 
 	% Remove stuff
 	( HN = hrmpf
@@ -220,7 +196,7 @@ install_target_dep(TL, RD) :-
 	inst_setting(system(arch), ARCH),
 	make_chroot_inst_pref_chroot(ARCH, Pref, RD),
 	( setof(D, target_dep(TL, D), TPL) ->
-	  install_deps(Pref, TPL)
+	  soft_install_deps(Pref, TPL)
 	; true
 	),
 	true.

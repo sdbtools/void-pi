@@ -4,11 +4,12 @@ Void Linux installer implemented in GNU Prolog.
 
 Last tested | ISO                                                                                | Result
 ----------- | ---------------------------------------------------------------------------------- | ------
-2023-08-08  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
+2023-08-17  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
 2023-06-29  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
 2023-07-25  | [void-live-i686-20230628-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20230628-base.iso) | PASS
 2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
 2023-06-29  | [void-live-i686-20210930.iso](https://repo-default.voidlinux.org/live/20210930/void-live-i686-20210930.iso) | PASS
+2023-08-14  | [hrmpf-x86_64-6.1.3_1-20230105.iso ](https://github.com/leahneukirchen/hrmpf/releases/download/v20230105/hrmpf-x86_64-6.1.3_1-20230105.iso) | PASS
 
 ## Description
 
@@ -18,7 +19,7 @@ void-pi is a Void Linux installer similar to [void-installer](https://docs.voidl
 
 It extends void-installer in several ways:
 - provides predefined templates for [BTRFS](https://en.wikipedia.org/wiki/Btrfs), [LVM](https://en.wikipedia.org/wiki/Logical_volume_management), and [LUKS](https://en.wikipedia.org/wiki/Linux_Unified_Key_Setup).
-- supports [rEFInd](https://rodsbooks.com/refind/), [Limine](https://limine-bootloader.org/), and [Syslinux](https://wiki.syslinux.org/wiki/index.php?title=The_Syslinux_Project) boot managers
+- supports [rEFInd](https://rodsbooks.com/refind/), [Limine](https://limine-bootloader.org/), [Syslinux](https://wiki.syslinux.org/wiki/index.php?title=The_Syslinux_Project), and [Gummiboot](https://www.freedesktop.org/wiki/Software/systemd/systemd-boot/) boot managers
 - supports EFISTUB boot loader
 - supports multi-device configurations.
 - installs and configures additional boot manager and file system related software.
@@ -37,13 +38,14 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - all settings can be saved in a file and loaded on startup. File name is controlled via `--config` command line argument.
 - passwords are never saved in files even temporarily.
 - Boot managers
-    - uses GRUB, rEFInd, Limine, or Syslnux as a boot manager.
+    - uses GRUB, rEFInd, Limine, Syslnux, or Gummiboot as a boot manager.
     - uses EFISTUB as a boot loader.
     - GRUB supports fat, btrfs, ext2, ext3, ext4, and xfs file systems.
     - rEFInd supports fat, btrfs, ext2, ext3, and ext4 file systems.
     - rEFInd is configured to use kernel auto detection.
     - Limine supports fat, ext2, ext3, and ext4 file systems.
     - Syslinux is enabled with UEFI and supports fat, btrfs, ext2, ext3, ext4, f2fs, and xfs file systems.
+    - EFISTUB and Gummiboot are enabled with UEFI and support fat, ext2, ext3, ext4, f2fs, and xfs file systems. (btrfs is not supported at this time)
     - if a boot manager doesn't support a file system (or LVM, or LUKS), then installer will create an ext4 `/boot` partition.
 - LUKS
     - LUKS can be used with GRUB, rEFInd, Limine, and Syslinux.
@@ -55,6 +57,10 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
     - IA32 (32-bit) is currently unsupported.
 - EFISTUB
     - The kernel and initramfs files are located in the EFI system partition (aka ESP).
+    - btrfs is not supported.
+- Gummiboot
+    - The kernel and initramfs files are located in the EFI system partition (aka ESP).
+    - btrfs is not supported.
 - Multi-device support
     - Multi-device configurations are available with BTRFS and LVM.
 - Additional software
@@ -118,6 +124,7 @@ Subvolume name    | Mounting point    | Mount options
 `@var-opt`        | `/var/opt`        | `nodev,noexec,nosuid`
 `@var-spool`      | `/var/spool`      | `nodev,noexec,nosuid` + nodatacow
 `@var-tmp`        | `/var/tmp`        | `nodev,noexec,nosuid` + nodatacow
+`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
 
 #### F2FS options
 

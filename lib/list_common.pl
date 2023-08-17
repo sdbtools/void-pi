@@ -20,6 +20,18 @@ join_atoms([H|T], A2) :-
 	atom_concat(H, A1, A2).
 join_atoms([], '').
 
+dedup(IL, OL) :-
+	dedup_(IL, [], OL),
+	true.
+
+dedup_([H|T], L, OL) :-
+	( memberchk(H, L) ->
+	  dedup_(T, L, OL)
+	; dedup_(T, [H|L], OL)
+	).
+dedup_([], L, RL) :-
+	reverse(L, RL).
+
 % SEP - separator.
 write_atoms([H1,H2|T], SEP, S) :- !,
 	write(S, H1), write(S, SEP),

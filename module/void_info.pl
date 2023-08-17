@@ -2,7 +2,7 @@
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 version :-
-	writenl('version 0.10.0').
+	writenl('version 0.11.0').
 
 fs_info(bcachefs, 'Linux Bcachefs (experimental)').
 fs_info(btrfs, 'Oracle\'s Btrfs').
@@ -25,4 +25,10 @@ source_dep_module('void-live', template(gpt_luks_lvm), [lz4]).
 source_dep_module('void-live', template(gpt_lvm_luks), [lz4]).
 source_dep_module('void-live', template(gpt_raid), [mdadm]).
 source_dep_module('void-live', inst_method(rootfs), [xz]).
+
+source_dep_module(hrmpf, filesystem(zfs), [lz4]).
+source_dep_module(hrmpf, filesystem(f2fs), [lz4]).
+source_dep_module(hrmpf, template(gpt_luks), [lz4]).
+source_dep_module(hrmpf, template(gpt_luks_lvm), [lz4]).
+source_dep_module(hrmpf, template(gpt_lvm_luks), [lz4]).
 

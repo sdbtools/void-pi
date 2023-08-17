@@ -387,13 +387,14 @@ tui_tailbox2_unsafe(PL, B, M, SO, UA) :-
 tui_tailbox2_safe(PL, B, M, SO, UA) :-
 	tui_make_box2_cmdlist(B, M, SO, UA, DL),
 	os_shell2_pipe_rc(PL, DL, OA, RC),
-	( RC = 0, !
+	% !!! os_shell2_pipe_rc has to succeed in order to get OA.
+	( RC = 0
 	; os_scmdl(PL, PLA),
 	  format_to_atom(A, '~w\n\n~w', [PLA, OA]),
 	  tui_msgbox(A, [title(' Command has failed ')]),
 	  % tui_programbox_atom(OA, PLA, [title(' Command has failed '), sz(max)]),
 	  fail
-	).
+	), !.
 
 tui_tailbox2_atom(A, B, M, SO, UA) :-
 	tui_make_box2_cmdlist(B, M, SO, UA, DL),

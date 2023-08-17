@@ -31,6 +31,10 @@ root_pd(_TL, _PD) :-
 	tui_msgbox2(['root partition was not found']),
 	fail.
 
+root_fs(TL, FS) :-
+	% fs4(FileSystem, Label, MountPoint, [device_list])
+	memberchk(fs4(FS, _Labe1, '/', _DL), TL).
+
 boot_pref(TL, '') :-
 	has_boot_part(TL),
 	!.

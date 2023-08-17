@@ -64,7 +64,7 @@ refind_kernel_params(_TL, [
 	inst_setting(locale, LC),
 	true.
 refind_kernel_params(TL, L) :-
-	( inst_setting(fs_info, info('/', btrfs)), \+ has_boot_part(TL) ->
+	( root_fs(TL, btrfs), \+ has_boot_part(TL) ->
 	  L = [rootflags=v(subvol, '@'), initrd='@\\boot\\initramfs-%v.img']
 	; boot_pref(TL, Pref),
 	  atom_concat(Pref, 'initramfs-%v.img', BI),

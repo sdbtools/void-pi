@@ -1,18 +1,17 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
-dracut_conf(TL, RD) :-
+dracut_conf(TL, _B, RD) :-
 	member(C, [common, luks, fs(zfs)]),
 	dracut_enable(C, TL),
 	findall(V, (dracut_conf(C, TL, RD, L), member(V, L)), VL),
 	dracut_key(C, K),
 	lx_dracut_conf(VL, K, RD),
 	fail.
-dracut_conf(TL, RD) :-
-	get_bootloader(TL, efistub),
+dracut_conf(TL, efistub, RD) :-
 	efistub_configure(TL, RD),
 	fail.
-dracut_conf(_TL, _RD).
+dracut_conf(_TL, _B, _RD).
 
 dracut_enable(luks, TL) :- !,
 	uses_luks(TL).

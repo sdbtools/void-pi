@@ -1,7 +1,7 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
-% bootloader_info(bootloade, supported_fs, supported_template).
+% bootloader_info(bootloade, supported_fs, supported_template, except_fs).
 bootloader_info(grub2, [
 		  btrfs
 		, ext2
@@ -22,7 +22,7 @@ bootloader_info(grub2, [
 		% , gpt_wizard
 		% , gpt_raid
 		% , gpt_zfsbootmenu
-	]).
+	], []).
 bootloader_info(rEFInd, [
 		  btrfs
 		, ext2
@@ -36,7 +36,7 @@ bootloader_info(rEFInd, [
 		, gpt_lvm_luks
 		, gpt_luks
 		, gpt_luks_lvm
-	]).
+	], []).
 bootloader_info(limine, [
 		  ext2
 		, ext3
@@ -49,7 +49,7 @@ bootloader_info(limine, [
 		, gpt_lvm_luks
 		, gpt_luks
 		, gpt_luks_lvm
-	]).
+	], []).
 bootloader_info(efistub, [
 		  ext2
 		, ext3
@@ -62,6 +62,8 @@ bootloader_info(efistub, [
 		, gpt_lvm_luks
 		, gpt_luks
 		, gpt_luks_lvm
+	], [
+		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
 	]).
 bootloader_info(syslinux, [
 		  btrfs
@@ -79,15 +81,35 @@ bootloader_info(syslinux, [
 		, gpt_lvm_luks
 		, gpt_luks
 		, gpt_luks_lvm
+	], []).
+bootloader_info(gummiboot, [
+		  btrfs
+		, ext2
+		, ext3
+		, ext4
+		, f2fs
+		% , swap
+		, vfat
+		, xfs
+	], [
+		  manual
+		, gpt_basic
+		, gpt_lvm
+		, gpt_lvm_luks
+		, gpt_luks
+		, gpt_luks_lvm
+	], [
+		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
 	]).
 bootloader_info(zfsBootMenu, [
 		  zfs
 	], [
 		  gpt_zfsbootmenu
-	]).
+	], []).
 
 % Get bootloader name/dependency
 % target_dep_bootloader(efistub, efibootmgr) :- !. % Already installed.
+target_dep_bootloader(gummiboot, gummiboot) :- !.
 target_dep_bootloader(syslinux, syslinux) :- !.
 target_dep_bootloader(limine, limine) :- !.
 target_dep_bootloader(rEFInd, refind) :- !.
@@ -129,6 +151,10 @@ set_bootloader(efistub, _TL, _BD, _RD) :- !,
 set_bootloader(syslinux, TL, BD, RD) :- !,
 	syslinux_install(BD, RD),
 	syslinux_configure(TL, RD),
+	!.
+set_bootloader(gummiboot, _TL, _BD, RD) :- !,
+	gummiboot_install(RD),
+	% gummiboot_configure(TL, RD),
 	!.
 
 bootloader_kernel_params(TL, [
@@ -172,3 +198,18 @@ bootloader_write_cmdline(TL, S) :-
 	os_wcmdl(AL, S),
 	true.
 
+reconfig_kernel(RD) :-
+	lx_kernel_ver(RD, LV),
+	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-f', concat(linux, LV), '2>&1'], '', [title(' Reconfigure Linux '), sz([18, 60])]),
+	true.
+
+setup_bootloader(gummiboot, TL, RD) :- !,
+	gummiboot_configure(TL, RD),
+	reconfig_kernel(RD),
+	true.
+setup_bootloader(efistub, _TL, RD) :- !,
+	reconfig_kernel(RD),
+	efistub_install(RD),
+	true.
+setup_bootloader(_B, _TL, _RD) :-
+	true.

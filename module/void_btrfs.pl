@@ -33,7 +33,6 @@ mount_btrfs(BD, RD) :-
 	os_call2([mount, o(o, lc(O)), BD, DA]),
 	fail.
 mount_btrfs(BD, RD) :-
-	% MP = '/.snapshots',
 	MP = '/mnt/btr_pool',
 	atom_concat(RD, MP, DA),
 	os_mkdir_p(DA),

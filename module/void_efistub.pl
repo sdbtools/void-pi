@@ -5,21 +5,13 @@
 % https://mth.st/blog/void-efistub
 
 efistub_install(RD) :-
-	efistub_linux_ver(RD, LV),
-	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-f', concat(linux, LV), '2>&1'], '', [title(' Reconfigure Linux '), sz([18, 60])]),
+	lx_kernel_ver(RD, LV),
 	atom_concat('Void Linux with kernel ', LV, Name),
 	efibootmgr_get(MgrL),
 	memberchk(boot(Num, Name, _), MgrL),
 	memberchk(order(OL), MgrL),
 	delete(OL, Num, OL1),
 	efibootmgr_set_order([Num|OL1]),
-	true.
-
-efistub_linux_ver(RD, LV) :-
-	os_shell2_codes_line([ls, RD + '/lib/modules/'], KL),
-	split_list_ne(KL, ".", [V1, V2|_]),
-	maplist(codes_atom, [V1, V2], VL),
-	format_to_atom(LV, '~w.~w', VL),
 	true.
 
 efistub_configure(TL, RD) :-
