@@ -2,38 +2,40 @@
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 has_boot_part(TL) :-
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	memberchk(fs4(_FS, _Label, '/boot', _DL), TL), !,
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	memberchk(fs5(_FS, _Label, '/boot', _DL, _CK), TL), !,
 	true.
 
 has_root_part(TL) :-
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	memberchk(fs4(_FS, _Label, '/', _DL), TL), !,
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	memberchk(fs5(_FS, _Label, '/', _DL, _CK), TL), !,
 	true.
 
 has_efi_system_part(TL) :-
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	% memberchk(fs4(vfat, _Label, '/boot/efi', _DL), TL), !,
+	get_bootloader(TL, B),
+	get_bootloader_mp(B, MP),
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	member(fs5(vfat, _Label, MP, _DL, _CK), TL),
 	% p4(PartType, device, create/keep, size)
-	memberchk(p4(efi_system, _, _, _), TL), !,
+	% memberchk(p4(efi_system, _, _, _), TL), !,
 	true.
 
 has_usr_part(TL) :-
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	memberchk(fs4(_FS, _Label, '/usr', _DL), TL), !,
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	memberchk(fs5(_FS, _Label, '/usr', _DL, _CK), TL), !,
 	true.
 
 root_pd(TL, PD) :-
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	memberchk(fs4(_FS, _Labe1, '/', [PD| _]), TL),
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	memberchk(fs5(_FS, _Labe1, '/', [PD| _], _CK), TL),
 	!.
 root_pd(_TL, _PD) :-
 	tui_msgbox2(['root partition was not found']),
 	fail.
 
 root_fs(TL, FS) :-
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	memberchk(fs4(FS, _Labe1, '/', _DL), TL).
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	memberchk(fs5(FS, _Labe1, '/', _DL, _CK), TL).
 
 boot_pref(TL, '') :-
 	has_boot_part(TL),
@@ -177,8 +179,8 @@ mk_lvm_lvcreate(VG, lv(LV, _SZ)) :-
 % Get list of mounting points in order in which they should be mounted (except of swap).
 get_mp_list(TL, MPL1) :-
 	% Ignore swap partition
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	findall(MP, (member(fs4(FS, _Label, MP, _DL), TL), FS \= swap), MPL0),
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	findall(MP, (member(fs5(FS, _Label, MP, _DL, _CK), TL), FS \= swap), MPL0),
 	sort(MPL0, MPL1),
 	true.
 

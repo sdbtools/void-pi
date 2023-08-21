@@ -25,10 +25,8 @@ menu_fs_short(PD) :-
 	dialog_msg(menu, MENULABEL),
 	make_tmp_part_rec(PD),
 	repeat,
-	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	inst_setting_tmp(partition, part4(bd1([PD| _]), _, CK, _SZ)),
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| _])),
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	inst_setting_tmp(fs, fs5(FS, Label, MP, [PD| _], CK)),
 	( CK = create ->
 	  FV = yes
 	; FV = no
@@ -64,62 +62,56 @@ menu_fs_action(save, PD) :-
 	tui_msgbox('Settings are saved.'),
 	true.
 menu_fs_action(label, PD) :- !,
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T])), !,
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	inst_setting_tmp(fs, fs5(FS, Label, MP, [PD| T], CK)), !,
 	tui_inputbox('', Label, [title('Label')], A),
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	retractall(inst_setting_tmp(fs, fs4(_, _, _, [PD| _]))),
-	assertz(inst_setting_tmp(fs, fs4(FS, A, MP, [PD| T]))),
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	retractall(inst_setting_tmp(fs, fs5(_, _, _, [PD| _], _))),
+	assertz(inst_setting_tmp(fs, fs5(FS, A, MP, [PD| T], CK))),
 	fail.
 menu_fs_action(type, PD) :- !,
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	inst_setting_tmp(fs, fs4(OFS, Label, MP, [PD| T])), !,
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	inst_setting_tmp(fs, fs5(OFS, Label, MP, [PD| T], CK)), !,
 	inst_setting(template(TT), TL),
 	get_bootloader(TL, B),
 	menu_select_fs(TT, B, OFS, NFS),
-	retractall(inst_setting_tmp(fs, fs4(_, _, _, [PD| _]))),
-	assertz(inst_setting_tmp(fs, fs4(NFS, Label, MP, [PD| T]))),
+	retractall(inst_setting_tmp(fs, fs5(_, _, _, [PD| _], _))),
+	assertz(inst_setting_tmp(fs, fs5(NFS, Label, MP, [PD| T], CK))),
 	fail.
 menu_fs_action(mount_point, PD) :- !,
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T])), !,
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	inst_setting_tmp(fs, fs5(FS, Label, MP, [PD| T], CK)), !,
 	tui_inputbox('', MP, [title('Mount Point')], A),
-	retractall(inst_setting_tmp(fs, fs4( _, _, _, [PD| _]))),
-	assertz(inst_setting_tmp(fs, fs4(FS, Label, A, [PD| T]))),
+	retractall(inst_setting_tmp(fs, fs5( _, _, _, [PD| _], _))),
+	assertz(inst_setting_tmp(fs, fs5(FS, Label, A, [PD| T], CK))),
 	fail.
 menu_fs_action(create, PD) :-
-	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	inst_setting_tmp(partition, part4(bd1([PD| T]), PT, _F, SZ)), !,
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	inst_setting_tmp(fs, fs5(FS, Label, MP, [PD| T], _CK)), !,
 	( tui_yesno('Create file system?', [sz([6, 40])]) ->
 	  FV = create
 	; FV = keep
 	),
-	retractall(inst_setting_tmp(partition, part4(bd1([PD| _]), _, _, _SZ))),
-	assertz(inst_setting_tmp(partition, part4(bd1([PD| T]), PT, FV, SZ))),
+	retractall(inst_setting_tmp(fs, fs5( _, _, _, [PD| _], _))),
+	assertz(inst_setting_tmp(fs, fs5(FS, Label, MP, [PD| T], FV))),
 	fail.
 
 make_tmp_part_rec(PD) :-
-	inst_setting(template(_), TL),
-	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	memberchk(p4(PT, bd1([PD| T1]), CK, SZ), TL),
-	retractall(inst_setting_tmp(partition, part4(bd1([PD| _]), _, _, _))),
-	assertz(inst_setting_tmp(partition, part4(bd1([PD| T1]), PT, CK, SZ))),
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	memberchk(fs4(FS, Label, MP, [PD| T2]), TL),
-	retractall(inst_setting_tmp(fs, fs4( _, _, _, [PD| _]))),
-	assertz(inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T2]))),
+	% We HAVE to get TL here.
+	inst_setting(template(_TT), TL),
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	memberchk(fs5(FS, Label, MP, [PD| T2], CK), TL),
+	retractall(inst_setting_tmp(fs, fs5( _, _, _, [PD| _], _))),
+	assertz(inst_setting_tmp(fs, fs5(FS, Label, MP, [PD| T2], CK))),
 	true.
 
 make_perm_part_rec(PD) :-
 	inst_setting(template(TT), TL),
-	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	inst_setting_tmp(partition, part4(bd1([PD| T1]), PT, CK, SZ)), !,
-	maplist(replace_element(p4(_, bd1([PD| _]), _, _), p4(PT, bd1([PD| T1]), CK, SZ)), TL, TL1),
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	inst_setting_tmp(fs, fs4(FS, Label, MP, [PD| T2])),
-	maplist(replace_element(fs4( _, _, _, [PD| _]), fs4(FS, Label, MP, [PD| T2])), TL1, TL2),
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	inst_setting_tmp(fs, fs5(FS, Label, MP, [PD| T2], CK)),
+	maplist(replace_element(fs5( _, _, _, [PD| _], _), fs5(FS, Label, MP, [PD| T2], CK)), TL, TL1),
 	retract(inst_setting(template(TT), _)),
-	assertz(inst_setting(template(TT), TL2)),
+	assertz(inst_setting(template(TT), TL1)),
 	true.
 
 replace_element(E1, E2, E1, E2) :- !.
@@ -173,7 +165,7 @@ menu_root_fs(TT, B, NFS) :-
 
 % MP - mount point
 % FS - file system
-replace_fs(MP, FS, fs4(_, Label, MP, DL), fs4(FS, Label, MP, DL)) :- !.
+replace_fs(MP, FS, fs5(_, Label, MP, DL, CK), fs5(FS, Label, MP, DL, CK)) :- !.
 replace_fs(_MP, _FS, E, E) :- !.
 
 menu_root_fs_soft(TT, TL) :-

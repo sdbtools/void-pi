@@ -71,7 +71,7 @@ update_part_info2(PIL, OPL, PLO, IL, OL) :-
 % KL - list of partitions to keep.
 keep_part_(KL, p4(_PT, bd1([PD| _]), _CK, _SZ)) :- !,
 	memberchk(PD, KL).
-keep_part_(KL, fs4(_, _, _, [PD| _])) :- !,
+keep_part_(KL, fs5(_, _, _, [PD| _], _)) :- !,
 	memberchk(PD, KL).
 keep_part_(_KL, _).
 
@@ -79,7 +79,7 @@ keep_part_(_KL, _).
 add_part_(PIL, SL, [PD| T], IL, OL) :-
 	memberchk(PD, SL), !,
 	add_part_(PIL, SL, T, IL, OL).
-add_part_(PIL, SL, [PD| T], IL, [p4(linux, BD1, keep, SZ), fs4(FS, '', '', [PD])| OL]) :-
+add_part_(PIL, SL, [PD| T], IL, [p4(linux, BD1, keep, SZ), fs5(FS, '', '', [PD], keep)| OL]) :-
 	member(part_info(BD1, FS, SZ, _Type), PIL),
 	BD1 = bd1([PD| _]), !,
 	add_part_(PIL, SL, T, IL, OL).
@@ -188,7 +188,7 @@ menu_bootloader_dev(TL) :-
 
 replace_bootloader_dev(none, NSN, L, TL, NTL) :- !,
 	% add
-	lx_sdn_to_dev7(NSN, L, DEV7),
+	lx_sdn_to_dev7(L, NSN, DEV7),
 	lx_dev7_to_dev3(DEV7, DEV3),
 	NTL = [bootloader_dev(DEV3)| TL].
 replace_bootloader_dev(_, none, _L, TL, NTL) :- !,
@@ -196,7 +196,7 @@ replace_bootloader_dev(_, none, _L, TL, NTL) :- !,
 	findall(E, (member(E, TL), E \= bootloader_dev(_)), NTL).
 replace_bootloader_dev(_, NSN, L, TL, NTL) :-
 	% replace
-	lx_sdn_to_dev7(NSN, L, DEV7),
+	lx_sdn_to_dev7(L, NSN, DEV7),
 	lx_dev7_to_dev3(DEV7, DEV3),
 	maplist(replace_element(bootloader_dev(_), bootloader_dev(DEV3)), TL, NTL).
 

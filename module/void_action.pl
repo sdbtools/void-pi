@@ -52,7 +52,9 @@ validate_fs(TL) :-
 	% EFI
 	( inst_setting(system(efi), _) ->
 	  ( has_efi_system_part(TL)
-	  ; tui_msgbox('ERROR: The EFI System Partition has not yet been configured, please create it as FAT32, mountpoint /boot/efi and at least with 100MB of size.'),
+	  ; get_bootloader(TL, B),
+		get_bootloader_mp(B, MP),
+		tui_msgbox2(['ERROR: The EFI System Partition has not yet been configured, please create it as FAT32, mountpoint', MP, 'and at least with 100MB of size.']),
 	    fail
 	  ), !
 	; true

@@ -89,8 +89,8 @@ source_dependency_pkg(TT, TL, Distro, DL) :-
 
 source_dep(_TT, TL, Distro, D) :-
 	% Collect all used filesystems.
-	% fs4(Name, Label, MountPoint, [DevList])
-	findall(FS, member(fs4(FS, _Label, _MP, _DL), TL), FSL0),
+	% fs5(Name, Label, MountPoint, [DevList], create/keep)
+	findall(FS, member(fs5(FS, _Label, _MP, _DL, _CK), TL), FSL0),
 	sort(FSL0, FSL),
 	% tui_msgbox2(PTL),
 	member(F, FSL),
@@ -277,8 +277,8 @@ make_cmd(TT, TL, part(D, SPL)) :-
 	sort(PL0, SPL),
 	true.
 make_cmd(_TT, TL, modprobe(FS)) :-
-	% fs4(Name, Label, MountPoint, [DevList])
-	findall(FS0, (member(fs4(FS0, _Label, _MP, _DL), TL), \+ memberchk(FS0, [swap, lvm, luks])), FSL),
+	% fs5(Name, Label, MountPoint, [DevList], create/keep)
+	findall(FS0, (member(fs5(FS0, _Label, _MP, _DL, _CK), TL), \+ memberchk(FS0, [swap, lvm, luks])), FSL),
 	sort(FSL, SFSL),
 	member(FS, SFSL),
 	true.
@@ -286,14 +286,14 @@ make_cmd(_TT, TL, mkbd(BD, CMD)) :-
 	member(bdev(BD, CMD), TL),
 	true.
 make_cmd(_TT, TL, mkfs(FS, DL, Label)) :-
-	% fs4(Name, Label, MountPoint, [DevList])
-	member(fs4(FS, Label, _MP, DL), TL),
+	% fs5(Name, Label, MountPoint, [DevList], create/keep)
+	member(fs5(FS, Label, _MP, DL, create), TL),
 	true.
 make_cmd(_TT, TL, mount(FS, PD, MP)) :-
 	get_mp_list(TL, MPL),
 	member(MP, MPL),
-	% fs4(Name, Label, MountPoint, [DevList])
-	member(fs4(FS, _Label, MP, [PD| _]), TL),
+	% fs5(Name, Label, MountPoint, [DevList], create/keep)
+	member(fs5(FS, _Label, MP, [PD| _], _CK), TL),
 	true.
 make_cmd(_TT, _TL, install_pkg(IM)) :-
 	inst_setting(source, IM),

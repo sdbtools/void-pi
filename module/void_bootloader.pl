@@ -1,6 +1,9 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
+% List of boot managers which require mounting of EFI partition to /boot.
+bootloader_boot_efi([syslinux, efistub, gummiboot]).
+
 % bootloader_info(bootloade, supported_fs, supported_template, except_fs).
 bootloader_info(grub2, [
 		  btrfs
@@ -128,6 +131,14 @@ set_bootloader(TL, RD) :-
 set_bootloader(_TL, _RD) :-
 	tui_msgbox('Setting up of a bootloader has failed.'),
 	fail.
+
+% Get bootloader mount point.
+get_bootloader_mp(B, MP) :-
+	bootloader_boot_efi(BL),
+	( memberchk(B, BL) ->
+	  MP = '/boot'
+	; MP = '/boot/efi'
+	).
 
 % set_bootloader(template_list, bootloader, bootloader_dev, root_dir)
 set_bootloader(_, _TL, none, _RD) :- !.

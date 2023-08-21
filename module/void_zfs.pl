@@ -4,8 +4,8 @@
 % Installing Void on a ZFS Root - https://docs.voidlinux.org/installation/guides/zfs.html
 
 uses_zfs(TL) :-
-	% fs4(Name, Label, MountPoint, [DevList])
-	memberchk(fs4(zfs, _, _, _), TL),
+	% fs5(Name, Label, MountPoint, [DevList], create/keep)
+	memberchk(fs5(zfs, _, _, _, _), TL),
 	!.
 
 make_zfs_pool_cmd(MP, DS, AL, [zfs, create, '-o', MPA|T]) :-

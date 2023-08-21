@@ -22,8 +22,8 @@ efistub_configure(TL, RD) :-
 	true.
 
 efistub_write_cfg(TL, S) :-
-	% fs4(FileSystem, Label, MountPoint, [device_list])
-	member(fs4(vfat, _efi, '/boot', [PD]), TL),
+	% fs5(FileSystem, Label, MountPoint, [device_list], _CK)
+	member(fs5(vfat, _efi, '/boot', [PD], _CK), TL),
 	parent_dev_name(PD, N, PD0),
 	write(S, 'MODIFY_EFI_ENTRIES="1"'), nl(S),
 	write(S, 'OPTIONS="'), bootloader_write_cmdline(TL, S), write(S, '"'), nl(S),

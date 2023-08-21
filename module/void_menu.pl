@@ -70,8 +70,8 @@ setting_value(bootloader_dev, D) :- !,
 	), !.
 setting_value(root_fs, FS) :- !,
 	inst_setting(template(_), TL),
-	% fs4(Name, Label, MountPoint, [DevList])
-	( memberchk(fs4(FS, _Label, '/', _DL), TL)
+	% fs5(Name, Label, MountPoint, [DevList], create/keep)
+	( memberchk(fs5(FS, _Label, '/', _DL, _CK), TL)
 	; FS = 'not set'
 	), !.
 setting_value(S, V1) :-
