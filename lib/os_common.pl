@@ -212,9 +212,11 @@ os_shell_pipe_rc(C1, C2, OA, RC) :-
 	close(SI),
 	close(SO),
 	close(SE),
-	close(WS),
+	close(WS, [force(true)]),
 	close_output_atom_stream(AS, OA),
-	wait(Pid, RC),
+	( wait(Pid, RC)
+	; RC = -12345
+	),
 	!.
 
 % Pipe input stream to a command.

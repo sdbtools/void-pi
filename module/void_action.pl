@@ -28,17 +28,6 @@ part_sgdisk_pl(TL, D, PL) :-
 	tui_progressbox_safe([sgdisk, '--zap-all', '--clear', '--mbrtogpt', SGPL, D], '', [title(MA), sz([6, 60])]),
 	true.
 
-% Partitions which should be created explicitly.
-% PT - partition type
-% explicit_part(PT, FS, MP).
-explicit_part(bios_boot, _, _) :- !.
-explicit_part(efi_system, vfat, '/boot/efi') :- !.
-
-mount_boot_efi(ED, RD) :-
-	atom_concat(RD, '/boot/efi', DA),
-	os_mkdir_p(DA),
-	os_call2([mount, '-o', 'rw,noatime', ED, DA]).
-
 validate_fs(TL) :-
 	( has_root_part(TL)
 	; tui_msgbox('ERROR: the mount point for the root filesystem (/) has not yet been configured.'),
@@ -321,6 +310,19 @@ mount_chroot_filesystem_rbind_('/run').
 mount_chroot_filesystem_rbind_('/sys/firmware/efi/efivars') :-
 	inst_setting(system(efi), _).
 
+% mount --rbind /dev/ /mnt/dev/
+% mount --rbind /sys/ /mnt/sys/
+% mount --rbind /proc/ /mnt/proc/
+% mount --rbind /run/ /mnt/run/
+% mount --make-rslave /mnt/dev/
+% mount --make-rslave /mnt/sys/
+% mount --make-rslave /mnt/proc/
+% mount --make-rslave /mnt/run/
+
+% mount --rbind /sys /mnt/sys && mount --make-rslave /mnt/sys
+% mount --rbind /dev /mnt/dev && mount --make-rslave /mnt/dev
+% mount --rbind /proc /mnt/proc && mount --make-rslave /mnt/proc
+
 % Unmount ALL filesystems mounted during installation.
 umount_filesystems(RD) :-
 	% ??? swap ???
@@ -369,7 +371,7 @@ wipe_dev_tree(PL, tree(NAME, L)) :-
 wipe_dev(crypt(_UUID), _D, name(SNAME,_KNAME,_DL)) :- !,
 	lx_luks_close(SNAME),
 	true.
-wipe_dev(part3(PARTTYPE,_PARTUUID,_UUID), D, _CN) :- !,
+wipe_dev(part4(PARTTYPE,_PARTUUID,_UUID,_FSTYPE), D, _CN) :- !,
 	wipe_dev_part(PARTTYPE, D),
 	true.
 wipe_dev(disk, D, _CN) :- !,
@@ -392,8 +394,6 @@ wipe_dev_part(linux_lvm, D) :-
 wipe_dev_part(_T, _D) :-
 	% wipe_disk(D),
 	true.
-
-part2taglist(part_info(bd1([PD| _]), _FS, FSS, _Type), [PD, FSS]).
 
 ensure_settings(TT, TL) :-
 	% S = [partition, bootloader_dev, keymap, network, source, hostname, locale, timezone, passwd, useraccount],

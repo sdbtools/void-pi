@@ -12,12 +12,12 @@ has_root_part(TL) :-
 	true.
 
 has_efi_system_part(TL) :-
+	% p4(PartType, device, create/keep, size)
+	memberchk(p4(sys_efi, _, _, _), TL),
 	get_bootloader(TL, B),
 	get_bootloader_mp(B, MP),
 	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
-	member(fs5(vfat, _Label, MP, _DL, _CK), TL),
-	% p4(PartType, device, create/keep, size)
-	% memberchk(p4(efi_system, _, _, _), TL), !,
+	memberchk(fs5(vfat, _Label, MP, _DL, _CK), TL),
 	true.
 
 has_usr_part(TL) :-
@@ -228,9 +228,7 @@ clean_mnt_lvm_(pv(PV, VG)) :-
 	fail.
 
 ensure_lvm(TL) :-
-	lx_list_dev7_disk(DL),
-	member(dev7(D,_SNAME,_TYPE,_RO,_RM,_SIZE1,_SSZ), DL),
-	lx_list_dev_part(D, PL),
+	lx_list_dev_part(PL),
 	member(bdev(lvm, vg(VG, _, LVL)), TL),
 	member(lv(LV, _SZ), LVL),
 	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),

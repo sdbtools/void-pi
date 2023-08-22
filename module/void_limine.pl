@@ -9,9 +9,9 @@ limine_install(BD, RD) :-
 	  inst_setting(system(arch), ARCH),
 	  arch2limine(ARCH, BL),
 	  os_call2([cp, '-f', RD + '/usr/share/limine/' + BL, RD + '/boot/efi/EFI/BOOT/' + BL])
-	; tui_progressbox_safe([chroot, RD, 'limine-deploy', BD, '2>&1'], '', [title(' Deploying Limine '), sz([6, 60])]),
-	  os_call2([cp, '-f', RD + '/usr/share/limine/limine.sys', RD + '/boot/limine/limine.sys'])
-	).
+	; tui_progressbox_safe([chroot, RD, 'limine', 'bios-install', BD, '2>&1'], '', [title(' Installing Limine '), sz([6, 60])]),
+	  os_call2([cp, '-f', RD + '/usr/share/limine/limine-bios.sys', RD + '/boot/limine/limine-bios.sys'])
+	), !.
 
 arch2limine('x86_64', 'BOOTX64.EFI').
 arch2limine('x86_64-musl', 'BOOTX64.EFI').

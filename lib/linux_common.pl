@@ -205,6 +205,19 @@ lx_list_dev7_disk(DL) :-
 	findall(D, (member(D, L), D=dev7(_NAME,_SNAME,disk,_RO,_RM,_SIZE,_SSZ)), DL),
 	true.
 
+% List all available partitions.
+lx_list_part(PL) :-
+	findall(P, (lx_list_dev_part([_| PL0]), member(P, PL0)), PL),
+	true.
+
+% It supposed to be used with backtracking.
+lx_list_dev_part(PL) :-
+	lx_list_dev7_disk(DL),
+	member(DEV7, DL),
+	lx_dev7_to_ldn(DEV7, D),
+	lx_list_dev_part(D, PL),
+	true.
+
 % PL - linear list of a device and all sub-devices.
 lx_list_dev_part(D, PL) :-
 	% lsblk -prn -o NAME,KNAME,TYPE,SIZE
@@ -235,9 +248,9 @@ lx_list_dev_part_(IL, dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)) :-
 	lx_dev_part_parents(NAME, DL),
 	true.
 
-lx_dev_part_type(part, NAME, part3(TYPE,PARTUUID,UUID)) :- !,
-	os_shell2_codes_line(['lsblk -dnr -o PARTUUID,UUID,PARTTYPE', NAME], CL),
-	split_atom(" ", CL, [PARTUUID,UUID,PARTTYPE]),
+lx_dev_part_type(part, NAME, part4(TYPE,PARTUUID,UUID,FSTYPE)) :- !,
+	os_shell2_codes_line(['lsblk -dnr -o PARTUUID,UUID,PARTTYPE,FSTYPE', NAME], CL),
+	split_atom(" ", CL, [PARTUUID,UUID,PARTTYPE,FSTYPE]),
 	part_type_guid(PARTTYPE, TYPE, _),
 	true.
 lx_dev_part_type(crypt, NAME, crypt(UUID)) :- !,
@@ -306,10 +319,6 @@ lx_ldn_to_dev7(L, LDN, DEV7) :-
 	DEV7 = dev7(LDN,_SD,_TYPE,_RO,_RM,_SIZE,_SSZ),
 	!.
 
-lx_dev_to_part(dev7(NAME,SNAME,_TYPE,_RO,_RM,_SIZE,_SSZ), L1) :-
-	lx_part_info_disk_base(SNAME, NAME, L1),
-	true.
-
 lx_dev_part_tree(D, PL, OL) :-
 	% dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)
 	lx_dev_part_tree_1(D, PL, [tree(D, [])], OL),
@@ -348,99 +357,6 @@ lx_dev_part_tree_3([H|T], [tree(H, L)]) :-
 memberchk2(V, [V|T], [], T) :- !.
 memberchk2(V, [H|T], [H|PL], SL) :-
 	memberchk2(V, T, PL, SL), !.
-
-lx_part_info_fs(DA, FS, FSS, Type) :-
-	atom_concat('lsblk -nfr ', DA, P2),
-	os_shell_atom_list(P2, L1),
-	( L1 = [_, FS|_]
-	; FS = none
-	), !,
-	atom_concat('lsblk -nr ', DA, P3),
-	os_shell_atom_list(P3, L2),
-	( L2 = [_, _, _, FSS, _, Type|_]
-	; FSS = unknown,
-	  Type = unknown
-	),
-	!.
-
-% DA - base device name
-% P1 - raw partition name
-% PD - full partition name
-lx_part_info_disk_(DP, DA, P, part_info(bd1([PD, DA]), FS, FSS, Type)) :-
-	atom_codes(P, PCL),
-	split_list_ne(PCL, "/", SL),
-	SL = [_, _, _, PL],
-	atom_codes(P1, PL),
-	atom_concat(DP, P1, PD),
-	lx_part_info_fs(PD, FS, FSS, Type),
-	true.
-
-% Get list of partitions for a device.
-% D - device
-% DA - device full name ??? Is it really necessary ???
-lx_part_info_disk(D, DA, L) :-
-	format_to_atom(PLA, 'ls -d1 /sys/block/~w/~w* 2>/dev/null', [D, D]),
-	os_shell_lines(PLA, PL),
-	% DP - device prefix.
-	atom_concat(DP, D, DA),
-	maplist(lx_part_info_disk_(DP, DA), PL, L),
-	!.
-
-% Get list of partitions for a device except of LUKS, LVM, and iso9660.
-lx_part_info_disk_base(D, DA, L1) :-
-	lx_part_info_disk(D, DA, L),
-	subtract(L, [part_info(_, iso9660, _, _), part_info(_, crypto_LUKS, _, _), part_info(_, 'LVM2_member', _, _)], L1),
-	!.
-lx_part_info_disk_base(_, _, []).
-
-lx_part_info_mapper_(P, part_info(bd1([PA, '/dev/mapper']), FS, FSS, Type)) :-
-	atom_concat('/dev/mapper/', P, PA),
-	lx_part_info_fs(PA, FS, FSS, Type),
-	true.
-
-lx_part_info_mapper(L2) :-
-	os_shell_lines('ls -1 /dev/mapper', L), !,
-	subtract(L, [control, 'live-base', 'live-rw'], L1),
-	maplist(lx_part_info_mapper_, L1, L2),
-	true.
-lx_part_info_mapper([]).
-
-lx_part_info_raid_(P, part_info(bd1([P, '/dev/md']), FS, FSS, Type)) :-
-	lx_part_info_fs(P, FS, FSS, Type),
-	true.
-
-lx_part_info_raid(L3) :-
-	os_shell_lines('ls -d /dev/md* 2>/dev/null | grep \'[0-9]\'', L1), !,
-	maplist(lx_part_info_raid_, L1, L2),
-	subtract(L2, [part_info(_, crypto_LUKS, _, _), part_info(_, 'LVM2_member', _, _)], L3),
-	true.
-lx_part_info_raid([]).
-
-% LVM
-%         lvs --noheadings | while read lvname vgname perms size; do
-%             echo "/dev/mapper/${vgname}-${lvname}"
-%             echo "size:${size};fstype:lvm"
-%         done
-lx_part_info_lvm(L1) :-
-	file_exists('/sbin/lvs'), !,
-	os_shell_lines('lvs --noheadings', L1), !,
-	true.
-lx_part_info_lvm([]).
-
-lx_list_part_info(PL) :-
-	findall(L, lx_list_part_info_(L), PL0),
-	flatten(PL0, PL).
-
-lx_list_part_info_(PL) :-
-	lx_list_dev7_disk(DL),
-	% ATA/SCSI/SATA
-	maplist(lx_dev_to_part, DL, PL).
-lx_list_part_info_(PL) :-
-	% Device Mapper
-	lx_part_info_mapper(PL).
-lx_list_part_info_(PL) :-
-	% raid
-	lx_part_info_raid(PL).
 
 % D - device
 % P - prefix

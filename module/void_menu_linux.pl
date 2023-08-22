@@ -48,22 +48,24 @@ menu_part_select(TL) :-
 	% OPL - list of already configured partitions.
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
 	findall(PD, member(p4(_PT, bd1([PD| _]), _CK, _SZ), TL), OPL),
-	lx_list_part_info(PIL),
+	lx_list_part(PIL),
 	PIL \= [], !,
 	maplist(part2taglist, PIL, ML1),
 	MT1 = ' Select partition(s) to use ',
 	dialog_msg(checklist, LABEL),
 	tui_checklist_tag2(ML1, OPL, LABEL, [title(MT1)], PLO),
-	update_part_info2(PIL, OPL, PLO, TL, NTL),
+	update_part_info(PIL, OPL, PLO, TL, NTL),
 	retract(inst_setting(template(TN), _)),
 	assertz(inst_setting(template(TN), NTL)),
 	!.
-menu_part_select :-
+menu_part_select(_TL) :-
 	tui_msgbox('There are no partitions available.', [sz([6, 40])]),
 	true.
 
-update_part_info2(_PIL, OPL, OPL, IL, IL) :- !.
-update_part_info2(PIL, OPL, PLO, IL, OL) :-
+part2taglist(dev_part(PD,_,_,SZ), [PD, SZ]).
+
+update_part_info(_PIL, OPL, OPL, IL, IL) :- !.
+update_part_info(PIL, OPL, PLO, IL, OL) :-
 	findall(M, (member(M, IL), keep_part_(PLO, M)), IL1),
 	add_part_(PIL, OPL, PLO, IL1, OL),
 	true.
@@ -79,9 +81,10 @@ keep_part_(_KL, _).
 add_part_(PIL, SL, [PD| T], IL, OL) :-
 	memberchk(PD, SL), !,
 	add_part_(PIL, SL, T, IL, OL).
-add_part_(PIL, SL, [PD| T], IL, [p4(linux, BD1, keep, SZ), fs5(FS, '', '', [PD], keep)| OL]) :-
-	member(part_info(BD1, FS, SZ, _Type), PIL),
-	BD1 = bd1([PD| _]), !,
+add_part_(PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), fs5(FS, '', '', [PD], keep)| OL]) :-
+	% dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)
+	member(dev_part(PD,name(_SNAME,_KNAME,[DL|_]),part4(PT,_PARTUUID,_UUID,FS),SZ), PIL),
+	BD1 = bd1([PD|DL]), !,
 	add_part_(PIL, SL, T, IL, OL).
 add_part_(_PIL, _SL, [], L, L) :-
 	true.

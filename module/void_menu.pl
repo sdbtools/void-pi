@@ -256,10 +256,6 @@ menu_d4_checklist_light(_Title, [D], [D]) :- !.
 menu_d4_checklist_light(Title, L, DL) :-
 	menu_d4_checklist(Title, L, DL).
 
-part2menu_tag(PIL, PD, [PD, FSS]) :-
-	memberchk(part_info(bd1([PD| _]), _FS, FSS, _Type), PIL),
-	true.
-
 menu_review_opt(S) :-
 	S = [
 		  part_use

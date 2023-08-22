@@ -62,7 +62,7 @@ switch_template(OT, NT, _OB, NB) :-
 	!.
 
 fs2parttype(zfs, solaris_root).
-fs2parttype(_, linux).
+fs2parttype(_, linux_data).
 
 % need_boot_part(TemplateType, BootLoader, FileSystem).
 need_boot_part(TT, B, _FS) :-
@@ -150,7 +150,8 @@ enable_template(TT, B) :-
 partition_set_mbr(TT, B, FS, P, L) :-
 	inst_setting(system(efi), _), !,
 	partition_set_efi(TT, B, FS, P, L).
-partition_set_mbr(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(bios_boot, bd1([PD, D]), keep, MBR_SZ)| L]) :-
+partition_set_mbr(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_bios_boot, bd1([PD, D]), create, MBR_SZ)| L]) :-
+	% No filesystem in this case.
 	part_name(D, N, PD),
 	inst_setting(mbr_size, MBR_SZ),
 	N1 is N + 1,
@@ -158,7 +159,7 @@ partition_set_mbr(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(bios_boot, bd1([PD, D]
 	partition_set_boot(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
 
 % mount EFI to /boot instead of /boot/efi
-partition_set_efi(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(efi_system, bd1([PD, D]), create, ESP_SZ), fs5(vfat, efi, '/boot', [PD], create)| L]) :-
+partition_set_efi(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_efi, bd1([PD, D]), create, ESP_SZ), fs5(vfat, efi, '/boot', [PD], create)| L]) :-
 	bootloader_boot_efi(BL),
 	memberchk(B, BL), !,
 	part_name(D, N, PD),
@@ -167,14 +168,14 @@ partition_set_efi(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(efi_system, bd1([PD, D
 	part_name(SN, N1, SD1),
 	% !!! skip partition_set_boot
 	partition_set_template(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
-partition_set_efi(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(efi_system, bd1([PD, D]), create, ESP_SZ), fs5(vfat, efi, '/boot/efi', [PD], create)| L]) :-
+partition_set_efi(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_efi, bd1([PD, D]), create, ESP_SZ), fs5(vfat, efi, '/boot/efi', [PD], create)| L]) :-
 	part_name(D, N, PD),
 	inst_setting(esp_size, ESP_SZ),
 	N1 is N + 1,
 	part_name(SN, N1, SD1),
 	partition_set_boot(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
 
-partition_set_boot(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(linux, bd1([PD, D]), create, BOOT_SZ), fs5(ext4, boot, '/boot', [PD], create)| L]) :-
+partition_set_boot(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(linux_data, bd1([PD, D]), create, BOOT_SZ), fs5(ext4, boot, '/boot', [PD], create)| L]) :-
 	need_boot_part(TT, B, FS), !,
 	part_name(D, N, PD),
 	inst_setting(boot_size, BOOT_SZ),

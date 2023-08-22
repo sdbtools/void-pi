@@ -4,13 +4,13 @@
 menu_filesystem(TL) :-
 	% do not try to edit swap partition.
 	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
-	findall(PD, (member(p4(PT, bd1([PD| _]), _CK, _SZ), TL), PT \= swap), PL0),
+	findall(PD, (member(p4(PT, bd1([PD| _]), _CK, _SZ), TL), PT \= linux_swap), PL0),
 	( PL0 = [] ->
 	  tui_msgbox('No partitions was selected.'),
 	  fail
 	; sort(PL0, PL1)
 	),
-	lx_list_part_info(PIL),
+	lx_list_part(PIL),
 	maplist(part2menu_tag(PIL), PL1, ML1),
 	MT1 = ' Select the partition to edit ',
 	dialog_msg(menu, MENULABEL),
@@ -18,6 +18,10 @@ menu_filesystem(TL) :-
 	tui_menu_tag2(edit_fs_short, ML1, MENULABEL, [cancel-label('Done'), title(MT1)], PD),
 	menu_fs_short(PD),
 	!.
+
+part2menu_tag(PIL, PD, [PD, SZ]) :-
+	memberchk(dev_part(PD,_,_,SZ), PIL),
+	true.
 
 menu_fs_short(cancel) :- !,
 	true.

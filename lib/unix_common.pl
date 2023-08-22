@@ -6,15 +6,17 @@ ux_user_root :-
 
 % sgdisk -L
 % sfdisk --list-types
-part_typecode(bios_boot, 'EF02').
-part_typecode(efi_system, 'EF00').
+% names should correspond to part_type_guid.
+part_typecode(sys_efi, 'EF00').
+part_typecode(sys_mbr, 'EF01').
+part_typecode(sys_bios_boot, 'EF02').
 part_typecode(solaris_root, 'BF00').
 part_typecode(solaris_boot, 'BF01').
-part_typecode(swap, '8200').
-part_typecode(linux, '8300').
+part_typecode(linux_swap, '8200').
+part_typecode(linux_data, '8300').
 part_typecode(linux_luks, '8309').
-part_typecode(linux_lvm, '8e00').
-part_typecode(linux_raid, 'fd00').
+part_typecode(linux_lvm, '8E00').
+part_typecode(linux_raid, 'FD00').
 
 % Directory to store installation key files and detached headers
 config_dir(instkey, '/boot').

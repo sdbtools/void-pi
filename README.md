@@ -4,12 +4,13 @@ Void Linux installer implemented in GNU Prolog.
 
 Last tested | ISO                                                                                | Result
 ----------- | ---------------------------------------------------------------------------------- | ------
-2023-08-17  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
+2023-08-22  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
 2023-06-29  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
 2023-07-25  | [void-live-i686-20230628-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20230628-base.iso) | PASS
 2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
 2023-06-29  | [void-live-i686-20210930.iso](https://repo-default.voidlinux.org/live/20210930/void-live-i686-20210930.iso) | PASS
 2023-08-14  | [hrmpf-x86_64-6.1.3_1-20230105.iso ](https://github.com/leahneukirchen/hrmpf/releases/download/v20230105/hrmpf-x86_64-6.1.3_1-20230105.iso) | PASS
+2023-08-22  | [void-live-lxqt-unofficial-x86_64-6.3.13_1-20230821.iso](https://voidbuilds.xyz/download/void-live-lxqt-unofficial-x86_64-6.3.13_1-20230821.iso) | PASS
 
 ## Description
 
