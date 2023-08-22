@@ -11,15 +11,6 @@ has_root_part(TL) :-
 	memberchk(fs5(_FS, _Label, '/', _DL, _CK), TL), !,
 	true.
 
-has_efi_system_part(TL) :-
-	% p4(PartType, device, create/keep, size)
-	memberchk(p4(sys_efi, _, _, _), TL),
-	get_bootloader(TL, B),
-	get_bootloader_mp(B, MP),
-	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
-	memberchk(fs5(vfat, _Label, MP, _DL, _CK), TL),
-	true.
-
 has_usr_part(TL) :-
 	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
 	memberchk(fs5(_FS, _Label, '/usr', _DL, _CK), TL), !,

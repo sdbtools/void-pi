@@ -39,9 +39,14 @@ menu_part_soft(S) :-
 	tui_menu_tag(SL, MENULABEL, [title(' Select the software for partitioning ')], S).
 
 menu_part_manually :-
-	menu_dev7_menu(' Select the disk to partition ', dev7(LN,_SN,_TYPE,_RO,_RM,_SIZE,_SSZ)),
+	menu_dev7_menu(' Select the disk to partition ', DEV7),
+	lx_dev7_to_ldn(DEV7, LN),
 	menu_part_soft(S),
 	os_call2([S, LN]),
+	retract(inst_setting(template(TT), TL)),
+	% Remove all selected partitions and file systems.
+	findall(E, (member(E, TL), E \= p4(_, _, _, _), E \= fs5(_, _, _, _, _)), NTL),
+	assertz(inst_setting(template(TT), NTL)),
 	true.
 
 menu_part_select(TL) :-

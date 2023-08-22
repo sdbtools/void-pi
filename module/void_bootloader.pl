@@ -124,9 +124,15 @@ target_dep_bootloader(grub2, GRUB) :-
 get_bootloader(TL, B) :-
 	memberchk(bootloader(B), TL).
 
+get_bootloader_dev3(TL, DEV3) :-
+	memberchk(bootloader_dev(DEV3), TL).
+
+set_bootloader(TL, _RD) :-
+	% Do not install bootloader if a bootloader dev has not been selected.
+	\+ get_bootloader_dev3(TL, _), !.
 set_bootloader(TL, RD) :-
 	get_bootloader(TL, B),
-	memberchk(bootloader_dev(dev3(BD, _, _)), TL),
+	get_bootloader_dev3(TL, dev3(BD, _, _)),
 	set_bootloader(B, TL, BD, RD), !.
 set_bootloader(_TL, _RD) :-
 	tui_msgbox('Setting up of a bootloader has failed.'),
@@ -214,6 +220,9 @@ reconfig_kernel(RD) :-
 	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-f', concat(linux, LV), '2>&1'], '', [title(' Reconfigure Linux '), sz([18, 60])]),
 	true.
 
+setup_bootloader(_B, TL, _RD) :-
+	% Do not setup bootloader if a bootloader dev has not been selected.
+	\+ get_bootloader_dev3(TL, _), !.
 setup_bootloader(gummiboot, TL, RD) :- !,
 	gummiboot_configure(TL, RD),
 	reconfig_kernel(RD),

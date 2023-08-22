@@ -29,26 +29,44 @@ part_sgdisk_pl(TL, D, PL) :-
 	true.
 
 validate_fs(TL) :-
+	( get_bootloader_dev3(TL, _)
+	; tui_yesno('A bootloader device has not been selected. A bootloader will not be installed. Is this what you want?', [title(' WARNING ')])
+	), !,
 	( has_root_part(TL)
-	; tui_msgbox('ERROR: the mount point for the root filesystem (/) has not yet been configured.'),
+	; tui_msgbox('The mount point for the root filesystem (/) has not yet been configured.', [title(' ERROR ')]),
 	  fail
 	), !,
 	% https://arch-general.archlinux.narkive.com/MgF0tcbX/usr-is-not-mounted-this-is-not-supported
 	( \+ has_usr_part(TL)
-	; tui_msgbox('ERROR: /usr mount point has been configured but is not supported, please remove it to continue.'),
+	; tui_msgbox('/usr mount point has been configured but is not supported, please remove it to continue.', [title(' ERROR ')]),
 	  fail
 	), !,
-	% EFI
-	( inst_setting(system(efi), _) ->
-	  ( has_efi_system_part(TL)
-	  ; get_bootloader(TL, B),
-		get_bootloader_mp(B, MP),
-		tui_msgbox2(['ERROR: The EFI System Partition has not yet been configured, please create it as FAT32, mountpoint', MP, 'and at least with 100MB of size.']),
-	    fail
-	  ), !
-	; true
-	),
+	validate_efi(TL),
 	true.
+
+% EFI
+validate_efi(TL) :-
+	inst_setting(system(efi), _), !,
+	% p4(PartType, device, create/keep, size)
+	( memberchk(p4(sys_efi, bd1([PD|_]), _, _), TL)
+	; part_type_guid(UUID, sys_efi, PTN),
+	  format_to_atom(MSG, 'The EFI System Partition has not been selected, please select a partition having type "~w" and UUID ~w and at least with 100MB of size.', [PTN, UUID]),
+	  tui_msgbox(MSG, [title(' ERROR ')]),
+	  fail
+	), !,
+	get_bootloader(TL, B),
+	get_bootloader_mp(B, MP),
+	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
+	( memberchk(fs5(FS, _Label, MP, [PD], _CK), TL)
+	; tui_msgbox2(['The EFI System Partition', PD, 'has not yet been configured, please mount it at', MP], [title(' ERROR ')]),
+	  fail
+	), !,
+	( FS = vfat
+	; tui_msgbox2(['The EFI System Partition', PD, 'has not yet been configured, please create it as FAT32'], [title(' ERROR ')]),
+	  fail
+	), !,
+	true.
+validate_efi(_TL).
 
 parse_rootfs_name(N, ARCH) :-
 	split_rootfs_file_name(N, NL),
@@ -309,19 +327,6 @@ mount_chroot_filesystem_rbind_('/dev').
 mount_chroot_filesystem_rbind_('/run').
 mount_chroot_filesystem_rbind_('/sys/firmware/efi/efivars') :-
 	inst_setting(system(efi), _).
-
-% mount --rbind /dev/ /mnt/dev/
-% mount --rbind /sys/ /mnt/sys/
-% mount --rbind /proc/ /mnt/proc/
-% mount --rbind /run/ /mnt/run/
-% mount --make-rslave /mnt/dev/
-% mount --make-rslave /mnt/sys/
-% mount --make-rslave /mnt/proc/
-% mount --make-rslave /mnt/run/
-
-% mount --rbind /sys /mnt/sys && mount --make-rslave /mnt/sys
-% mount --rbind /dev /mnt/dev && mount --make-rslave /mnt/dev
-% mount --rbind /proc /mnt/proc && mount --make-rslave /mnt/proc
 
 % Unmount ALL filesystems mounted during installation.
 umount_filesystems(RD) :-

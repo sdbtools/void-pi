@@ -2,7 +2,6 @@
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % Installing Void on a ZFS Root - https://docs.voidlinux.org/installation/guides/zfs.html
-% https://openzfs.github.io/openzfs-docs/man/master/8/zpool.8.html#ENVIRONMENT_VARIABLES
 
 uses_zfs(TL) :-
 	% fs5(Name, Label, MountPoint, [DevList], create/keep)
