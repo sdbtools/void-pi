@@ -3,10 +3,10 @@
 
 % https://wiki.archlinux.org/title/Syslinux
 
-syslinux_install(BD, RD) :-
+syslinux_install(TL, BD, RD) :-
 	( inst_setting(system(efi), _) ->
 	  syslinux_install_efi(BD, RD)
-	; syslinux_install_bios(BD, RD)
+	; syslinux_install_bios(TL, BD, RD)
 	).
 
 syslinux_install_efi(BD, RD) :-
@@ -16,13 +16,24 @@ syslinux_install_efi(BD, RD) :-
 	tui_progressbox_safe([efibootmgr, '--create', oo(disk, BD), oo(part, 1), oo(loader, '/EFI/syslinux/syslinux.efi'), oo(label, '"Syslinux"'), '2>&1'], 'efibootmgr', [sz([12, 80])]),
 	true.
 
-syslinux_install_bios(BD, RD) :-
+syslinux_install_bios(TL, BD, RD) :-
+	% Install the boot sector provided by Syslinux.
+	tui_progressbox_safe([dd, bs=440, count=1, conv=notrunc, if=concat(RD, '/usr/lib/syslinux/gptmbr.bin'), of=BD, '2>&1'], '', [sz([6, 60])]),
+
+	lx_get_boot_part(TL, BPD),
+	lx_parent_dev_name(BPD, PN, _PD),
+
+	% Enable the legacy BIOS bootable attribute
+	format_to_atom(A, '--attributes=~w:set:2', [PN]),
+	os_shell2([sgdisk, BD, A]),
+
 	os_mkdir_p(RD + '/boot/syslinux'),
-	os_shell2([cp, '-r', RD + '/usr/lib/syslinux/*.c32', RD + '/boot/syslinux/']),
+	% Use the extlinux command to install the necessary files
 	tui_progressbox_safe([chroot, RD, extlinux, '--install', '/boot/syslinux', '2>&1'], '', [sz([6, 60])]),
-	os_shell2([sgdisk, BD, '--attributes=1:set:2']),
-	% os_shell2([dd, bs=440, count=1, conv=notrunc, if=concat(RD, '/usr/lib/syslinux/gptmbr.bin'), of=BD]),
-	os_shell2([chroot, RD, dd, bs=440, count=1, conv=notrunc, if='/usr/lib/syslinux/gptmbr.bin', of=BD]),
+
+	% Copy modules.
+	os_shell2([cp, RD + '/usr/lib/syslinux/*.c32', RD + '/boot/syslinux']),
+	os_shell2([cp, RD + '/usr/lib/syslinux/memdisk', RD + '/boot/syslinux']),
 	true.
 
 syslinux_configure(TL, RD) :-
@@ -45,10 +56,10 @@ syslinux_configure_(TL, V, CF) :-
 syslinux_write_cfg(TL, V, S) :-
 	( inst_setting(system(efi), _) ->
 	  Pref = ''
-	; Pref = 'boot/'
+	; boot_pref(TL, Pref)
 	),
 	write(S, 'PROMPT 1'), nl(S),
-	write(S, 'TIMEOUT 50'), nl(S),
+	write(S, 'TIMEOUT 30'), nl(S),
 	write(S, 'DEFAULT Void'), nl(S), nl(S),
 	write(S, 'LABEL Void'), nl(S),
 	write(S, '    LINUX /'), write(S, Pref), write(S, 'vmlinuz-'), write(S, V), nl(S),

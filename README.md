@@ -4,7 +4,7 @@ Void Linux installer implemented in GNU Prolog.
 
 Last tested | ISO                                                                                | Result
 ----------- | ---------------------------------------------------------------------------------- | ------
-2023-08-22  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
+2023-08-23  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
 2023-06-29  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
 2023-07-25  | [void-live-i686-20230628-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20230628-base.iso) | PASS
 2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
@@ -45,7 +45,7 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
     - rEFInd supports fat, btrfs, ext2, ext3, and ext4 file systems.
     - rEFInd is configured to use kernel auto detection.
     - Limine supports fat, ext2, ext3, and ext4 file systems.
-    - Syslinux is enabled with UEFI and supports fat, btrfs, ext2, ext3, ext4, f2fs, and xfs file systems.
+    - Syslinux supports fat, ext2, ext3, and ext4 file systems.
     - EFISTUB and Gummiboot are enabled with UEFI and support fat, ext2, ext3, ext4, f2fs, and xfs file systems. (btrfs is not supported at this time)
     - if a boot manager doesn't support a file system (or LVM, or LUKS), then installer will create an ext4 `/boot` partition.
 - LUKS
@@ -54,7 +54,6 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
     - In case of rEFInd and Limine installer will create an unencrypted ext4 `/boot` partition. LUKS2 is used.
 - Syslinux
     - In case of UEFI the kernel and initramfs files are located in the EFI system partition (aka ESP), as Syslinux does not (currently) have the ability to access files outside its own partition.
-    - MBR is currently unsupported.
     - IA32 (32-bit) is currently unsupported.
 - EFISTUB
     - The kernel and initramfs files are located in the EFI system partition (aka ESP).
@@ -100,8 +99,11 @@ All default settings can be changed via `Common Attrs` sub-menu.
 
 #### BIOS boot
 
-- `/dev/sdX1` is the BIOS boot sector (size: 1M)
-- `/dev/sdX2` is the root filesystem (size: remainder)
+- Limine and Syslinux
+    - `/dev/sdX1` is the root filesystem (size: whole device)
+- Grub
+    - `/dev/sdX1` is the BIOS boot sector (size: 1M)
+    - `/dev/sdX2` is the root filesystem (size: remainder)
 
 #### UEFI
 

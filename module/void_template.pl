@@ -131,7 +131,7 @@ menu_dev4_boot_dev(D4L, D4) :-
 
 menu_dev7_to_d4(DEV7, d4(LN, SN, D, 1)) :-
 	lx_dev7_to_ldn_sdn(DEV7, LN, SN),
-	part_name(SN, 1, D),
+	lx_part_name(SN, 1, D),
 	true.
 
 enable_template(TT, B) :-
@@ -150,37 +150,40 @@ enable_template(TT, B) :-
 partition_set_mbr(TT, B, FS, P, L) :-
 	inst_setting(system(efi), _), !,
 	partition_set_efi(TT, B, FS, P, L).
+partition_set_mbr(TT, B, FS, P, L) :-
+	memberchk(B, [syslinux, limine]), !,
+	partition_set_boot(TT, B, FS, P, L).
 partition_set_mbr(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_bios_boot, bd1([PD, D]), create, MBR_SZ)| L]) :-
 	% No filesystem in this case.
-	part_name(D, N, PD),
+	lx_part_name(D, N, PD),
 	inst_setting(mbr_size, MBR_SZ),
 	N1 is N + 1,
-	part_name(SN, N1, SD1),
+	lx_part_name(SN, N1, SD1),
 	partition_set_boot(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
 
 % mount EFI to /boot instead of /boot/efi
 partition_set_efi(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_efi, bd1([PD, D]), create, ESP_SZ), fs5(vfat, efi, '/boot', [PD], create)| L]) :-
 	bootloader_boot_efi(BL),
 	memberchk(B, BL), !,
-	part_name(D, N, PD),
+	lx_part_name(D, N, PD),
 	inst_setting(esp_size, ESP_SZ),
 	N1 is N + 1,
-	part_name(SN, N1, SD1),
+	lx_part_name(SN, N1, SD1),
 	% !!! skip partition_set_boot
 	partition_set_template(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
 partition_set_efi(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_efi, bd1([PD, D]), create, ESP_SZ), fs5(vfat, efi, '/boot/efi', [PD], create)| L]) :-
-	part_name(D, N, PD),
+	lx_part_name(D, N, PD),
 	inst_setting(esp_size, ESP_SZ),
 	N1 is N + 1,
-	part_name(SN, N1, SD1),
+	lx_part_name(SN, N1, SD1),
 	partition_set_boot(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
 
 partition_set_boot(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(linux_data, bd1([PD, D]), create, BOOT_SZ), fs5(ext4, boot, '/boot', [PD], create)| L]) :-
 	need_boot_part(TT, B, FS), !,
-	part_name(D, N, PD),
+	lx_part_name(D, N, PD),
 	inst_setting(boot_size, BOOT_SZ),
 	N1 is N + 1,
-	part_name(SN, N1, SD1),
+	lx_part_name(SN, N1, SD1),
 	partition_set_template(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
 partition_set_boot(TT, B, FS, P, L) :-
 	partition_set_template(TT, B, FS, P, L).
@@ -206,7 +209,7 @@ partition_set_template(gpt_lvm_luks, B, FS, DL, L) :- !,
 	append(P4L, [bdev(lvm, vg(VG, PDL, [lv(LV, SZ)])), bdev(luks, luks(LUKS_T, LVM_PD)), fs5(FS, void, '/', [LUKS_PD], create)| SL], L),
 	true.
 partition_set_template(gpt_luks, B, FS, [d4(D, _SN, SDN, N)| _T], [p4(linux_luks, bd1([PD, D]), create, ''), bdev(luks, luks(LUKS_T, PD)), fs5(FS, void, '/', [LUKS_PD], create)| SL]) :- !,
-	part_name(D, N, PD),
+	lx_part_name(D, N, PD),
 	luks_dev_name(SDN, LUKS_PD),
 	get_luks_type(B, LUKS_T),
 	menu_soft_soft(B, FS, [], SL),
@@ -226,7 +229,7 @@ partition_set_template(gpt_luks, B, FS, [d4(D, _SN, SDN, N)| _T], [p4(linux_luks
 partition_set_template(gpt_luks_lvm, B, FS, [d4(D, _SN, SDN, N)| _T], [p4(linux_luks, bd1([PD, D]), create, ''), bdev(luks, luks(LUKS_T, PD)), bdev(lvm, vg(VG, [LUKS_PD], [lv(LV, SZ)])), fs5(FS, void, '/', [LVM_PD], create)| SL]) :- !,
 	inst_setting(lvm, lv(VG, LV, SZ)),
 	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
-	part_name(D, N, PD),
+	lx_part_name(D, N, PD),
 	luks_dev_name(SDN, LUKS_PD),
 	get_luks_type(B, LUKS_T),
 	menu_soft_soft(B, FS, [], SL),
@@ -309,19 +312,13 @@ fs_to_p4l_pdl(FS, [H| _T], [P4], [PD]) :-
 	true.
 
 d4_to_p4_pd(PT, d4(D, _SN, _SDN, N), p4(PT, bd1([PD, D]), create, ''), PD) :-
-	part_name(D, N, PD),
+	lx_part_name(D, N, PD),
 	true.
 
 d4_to_luks_bdev(LUKS_T, d4(D, _SN, _SDN, N), p4(linux_luks, bd1([PD, D]), create, ''), bdev(luks, luks(LUKS_T, PD))) :-
-	part_name(D, N, PD),
+	lx_part_name(D, N, PD),
 	true.
 
 d4_to_luks_pd(d4(_D, _SN, SDN, _N), LUKS_PD) :-
 	luks_dev_name(SDN, LUKS_PD).
-
-part_name(D, N, PD) :-
-	atom_concat('/dev/nvme', _, D), !,
-	format_to_atom(PD, '~wp~d', [D, N]).
-part_name(D, N, PD) :-
-	format_to_atom(PD, '~w~d', [D, N]).
 

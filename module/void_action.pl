@@ -256,11 +256,11 @@ set_rootpassword(_RD) :-
 on_useradd_rc(0) :- !.
 on_useradd_rc(RC) :-
 	lx_useradd_rc(RC, M), !,
-	tui_msgbox(M),
+	tui_msgbox(M, [title(' useradd ERROR ')]),
 	fail.
 on_useradd_rc(RC) :-
 	number_atom(RC, RCA),
-	tui_msgbox2(['useradd. Unknown error code:', RCA]),
+	tui_msgbox2(['Unknown error code:', RCA], [title(' useradd ERROR ')]),
 	fail.
 
 set_useraccount(RD) :-

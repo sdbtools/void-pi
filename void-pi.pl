@@ -53,11 +53,6 @@
 
 :- dynamic([inst_setting/2, inst_setting_tmp/2]).
 
-% https://wiki.archlinux.org/title/Dm-crypt
-% https://wiki.archlinux.org/title/Dm-crypt/Encrypting_an_entire_system
-% https://wiki.archlinux.org/title/Dm-crypt/System_configuration
-% Stacking LVM volumes: https://access.redhat.com/articles/2106521
-
 def_settings :-
 	setup_conf,
 	setup_fs_template,
@@ -69,12 +64,15 @@ def_settings :-
 	assertz(inst_setting(esp_size, '550M')),
 	assertz(inst_setting(boot_size, '1G')),
 	assertz(inst_setting(root_dir, '/mnt')),
-	% fs_attr(Name, MountPoint)
-	assertz(inst_setting(fs_attr(btrfs, '/'), mount([rw, noatime, 'compress-force'=zstd, space_cache=v2, commit=120]))),
-	assertz(inst_setting(fs_attr(vfat, '/boot'), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
-	assertz(inst_setting(fs_attr(vfat, '/boot/efi'), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
-	assertz(inst_setting(fs_attr(f2fs, '/'), mount([rw, compress_algorithm=lz4, compress_chksum, atgc, gc_merge, lazytime]))),
-	assertz(inst_setting(fs_attr(f2fs, '/'), create([extra_attr, inode_checksum, sb_checksum, compression, encrypt]))),
+	% fs_attr(Name, MountPoint, Bootloader)
+	assertz(inst_setting(fs_attr(btrfs, '/', _), mount([rw, noatime, 'compress-force'=zstd, space_cache=v2, commit=120]))),
+	assertz(inst_setting(fs_attr(vfat, '/boot', _), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
+	assertz(inst_setting(fs_attr(vfat, '/boot/efi', _), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
+	assertz(inst_setting(fs_attr(f2fs, '/', _), mount([rw, compress_algorithm=lz4, compress_chksum, atgc, gc_merge, lazytime]))),
+	assertz(inst_setting(fs_attr(f2fs, '/', _), create([extra_attr, inode_checksum, sb_checksum, compression, encrypt]))),
+	% https://wiki.syslinux.org/wiki/index.php?title=Filesystem#ext
+	assertz(inst_setting(fs_attr(ext4, '/', syslinux), create(['^64bit']))),
+	assertz(inst_setting(fs_attr(ext4, '/boot', syslinux), create(['^64bit']))),
 	assertz(inst_setting(source, local)),
 	assertz(inst_setting(hostname, voidpp)),
 	assertz(inst_setting(lvm, lv(void, void, ''))),
@@ -215,9 +213,10 @@ run_cmd(_TT, _TL, _RD, modprobe(FS)) :- !,
 run_cmd(_TT, _TL, _RD, mkbd(BD, CMD)) :- !, % make block device.
 	mkbd(BD, CMD),
 	!.
-run_cmd(_TT, _TL, RD, mkfs(FS, DL, Label)) :- !,
+run_cmd(_TT, TL, RD, mkfs(FS, DL, Label)) :- !,
 	format_to_atom(Title, ' Creating filesystem ~w ', [FS]),
-	mkfs(FS, Title, DL, Label, RD),
+	get_bootloader(TL, B),
+	mkfs(FS, B, Title, DL, Label, RD),
 	true.
 run_cmd(_TT, _TL, RD, mount(FS, PD, MP)) :- !,
 	mount_fs(FS, PD, MP, RD),

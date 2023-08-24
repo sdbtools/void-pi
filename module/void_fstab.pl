@@ -53,7 +53,7 @@ write_fstab(efivarfs, _, _, S) :- !,
 write_fstab(FS, D, MP, S) :- !,
 	lx_get_dev_uuid(D, U),
 	format(S, '# ~w\n', [D]),
-	( inst_setting(fs_attr(FS, MP), mount(OL))
+	( inst_setting(fs_attr(FS, MP, _), mount(OL))
 	; OL = [rw, noatime]
 	),
 	fapassno(FS, MP, FSPASSNO),

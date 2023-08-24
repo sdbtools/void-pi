@@ -17,7 +17,7 @@ create_btrfs_subv(RD) :-
 create_btrfs_subv(_RD).
 
 create_btrfs_subv(D, RD) :-
-	( inst_setting(fs_attr(btrfs, '/'), mount(AL))
+	( inst_setting(fs_attr(btrfs, '/', _), mount(AL))
 	; AL = [rw, noatime]
 	), !,
 	os_call2([mount, o(o, lc(AL)), D, RD]),

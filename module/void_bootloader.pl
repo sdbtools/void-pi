@@ -69,14 +69,14 @@ bootloader_info(efistub, [
 		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
 	]).
 bootloader_info(syslinux, [
-		  btrfs
-		, ext2
+		  % btrfs
+		  ext2
 		, ext3
 		, ext4
-		, f2fs
+		% , f2fs % Not supported by syslinux
 		% , swap
 		, vfat
-		, xfs
+		% , xfs
 	], [
 		  manual
 		, gpt_basic
@@ -84,7 +84,11 @@ bootloader_info(syslinux, [
 		, gpt_lvm_luks
 		, gpt_luks
 		, gpt_luks_lvm
-	], []).
+	], [
+		  % btrfs % It boots with the current configuration of btrfs + EFI. Doesn't boot with BIOS.
+		% , f2fs % Not supported by syslinux
+		% , xfs % Won't boot with BIOS
+	]).
 bootloader_info(gummiboot, [
 		  btrfs
 		, ext2
@@ -166,7 +170,7 @@ set_bootloader(efistub, _TL, _BD, _RD) :- !,
 	% efistub_configure(TL, RD),
 	!.
 set_bootloader(syslinux, TL, BD, RD) :- !,
-	syslinux_install(BD, RD),
+	syslinux_install(TL, BD, RD),
 	syslinux_configure(TL, RD),
 	!.
 set_bootloader(gummiboot, _TL, _BD, RD) :- !,
@@ -233,3 +237,4 @@ setup_bootloader(efistub, _TL, RD) :- !,
 	true.
 setup_bootloader(_B, _TL, _RD) :-
 	true.
+

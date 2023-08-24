@@ -48,6 +48,31 @@ lx_sys_efi(EFI_TARGET) :-
 	),
 	true.
 
+lx_get_boot_part(TL, PD) :-
+	memberchk(fs5(_FS, _Label, '/boot', [PD], _CK1), TL),
+	memberchk(p4(_, bd1([PD| _]), _CK2, _SZ), TL),
+	!.
+lx_get_boot_part(TL, PD) :-
+	memberchk(fs5(_FS, _Label, '/', [PD], _CK1), TL),
+	memberchk(p4(_, bd1([PD| _]), _CK2, _SZ), TL),
+	!.
+
+% N is atom.
+lx_parent_dev_name(D, N, PD) :-
+	% sub_atom(Atom, Before, Length, After, SubAtom),
+	sub_atom(D, _, 1, 0, N),
+	( atom_concat('/dev/nvme', _, D) ->
+	  sub_atom(D, 0, _, 2, PD)
+	; sub_atom(D, 0, _, 1, PD)
+	).
+
+% N is digit.
+lx_part_name(D, N, PD) :-
+	atom_concat('/dev/nvme', _, D), !,
+	format_to_atom(PD, '~wp~d', [D, N]).
+lx_part_name(D, N, PD) :-
+	format_to_atom(PD, '~w~d', [D, N]).
+
 lx_set_keymap(RD, KM) :-
 	file_exists('/etc/vconsole.conf'), !,
 	format_to_atom(KMA, 's|KEYMAP=.*|KEYMAP=~w|g', [KM]),
@@ -100,9 +125,8 @@ lx_useradd_rc(14, 'can\'t update SELinux user mapping').
 % UN - user name
 % UGL - user group list
 lx_chroot_useradd_rc(RD, UL, UN, UGL, RC) :-
-	join_atoms(UGL, ',', GA),
-	add_dquote(UN, UNQ),
-	CL = [chroot, RD, useradd, '-m', '-G', GA, '-c', UNQ, UL],
+	% There is no need to add quotes here because this is an os_call2_rc.
+	CL = [chroot, RD, useradd, '-m', '-G', lc(UGL), '-c', UN, UL],
 	os_call2_rc(CL, RC).
 
 lx_chroot_useradd(RD, UL, UN, UGL) :-

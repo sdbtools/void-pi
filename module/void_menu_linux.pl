@@ -160,8 +160,8 @@ split_tz(TZ, A1, A2) :-
 
 % , efistub
 % , zfsBootMenu
-menu_bootloader_([grub2, limine]).
-menu_bootloader_([rEFInd, gummiboot, syslinux, efistub]) :-
+menu_bootloader_([grub2, limine, syslinux]).
+menu_bootloader_([rEFInd, gummiboot, efistub]) :-
 	inst_setting(system(efi), _),
 	true.
 

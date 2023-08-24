@@ -1,6 +1,12 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
+% https://wiki.archlinux.org/title/Dm-crypt
+% https://wiki.archlinux.org/title/Dm-crypt/Encrypting_an_entire_system
+% https://wiki.archlinux.org/title/Dm-crypt/System_configuration
+% Stacking LVM volumes: https://access.redhat.com/articles/2106521
+% https://wiki.syslinux.org/wiki/index.php?title=Filesystem#ext
+
 has_boot_part(TL) :-
 	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
 	memberchk(fs5(_FS, _Label, '/boot', _DL, _CK), TL), !,
@@ -33,7 +39,19 @@ boot_pref(TL, '') :-
 	!.
 boot_pref(_TL, 'boot/').
 
-mkfs(zfs, Title, [PD, _], Label, RD) :- !,
+% DAL - default attr list.
+make_fs_attr(FS, B, _DAL, OL) :-
+	inst_setting(fs_attr(FS, _, B), create(AL1)), !,
+	make_fs_attr_(AL1, OL),
+	true.
+make_fs_attr(_FS, _B, DAL, OL) :-
+	make_fs_attr_(DAL, OL),
+	true.
+
+make_fs_attr_([], []) :- !.
+make_fs_attr_(AL, [o('O', lc(AL))]).
+
+mkfs(zfs, _B, Title, [PD, _], Label, RD) :- !,
 	add_dquote(Label, _LQ),
 	% lx_get_dev_disk_partuuid(PD, PID),
 	lx_split_dev(PD, _Pref, P),
@@ -71,40 +89,35 @@ mkfs(zfs, Title, [PD, _], Label, RD) :- !,
 	% os_shell2([mkdir, '-p', '/mnt/etc/zfs']),
 	% os_shell2([zpool, set, 'cachefile=/mnt/etc/zfs/zpool.cache', zroot]),
 	!.
-mkfs(btrfs, Title, DL, Label, RD) :- !,
+mkfs(btrfs, _B, Title, DL, Label, RD) :- !,
 	tui_progressbox_safe(['mkfs.btrfs', o('L', dq(Label)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	% tui_programbox_safe(['mkfs.btrfs', '-f', '-L', LQ, DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	DL = [D| _],
 	create_btrfs_subv(D, RD).
-mkfs(bcachefs, Title, DL, Label, _RD) :- !,
+mkfs(bcachefs, _B, Title, DL, Label, _RD) :- !,
 	tui_progressbox_safe(['mkfs.bcachefs', o('L', dq(Label)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(ext2, Title, DL, Label, _RD) :- !,
+mkfs(ext2, _B, Title, DL, Label, _RD) :- !,
 	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), '-F', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(ext3, Title, DL, Label, _RD) :- !,
+mkfs(ext3, _B, Title, DL, Label, _RD) :- !,
 	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), '-j', '-F', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(ext4, Title, DL, Label, _RD) :- !,
-	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), o(t, ext4), '-F', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	% tui_programbox_safe(['mke2fs', '-F', '-t', 'ext4', DL, '2>&1'], '', [title(Title), sz([24, 80])]),
+mkfs(ext4, B, Title, DL, Label, _RD) :- !,
+	make_fs_attr(ext4, B, [], OL),
+	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), OL, o(t, ext4), '-F', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(f2fs, Title, DL, Label, _RD) :- !,
-	( inst_setting(fs_attr(f2fs, _), create(OL))
-	; OL = [encrypt]
-	),
-	% tui_progressbox_safe(['mkfs.f2fs', o(l, dq(Label)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	tui_progressbox_safe(['mkfs.f2fs', o(l, dq(Label)), o('O', lc(OL)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
+mkfs(f2fs, B, Title, DL, Label, _RD) :- !,
+	make_fs_attr(f2fs, B, [encrypt], OL),
+	tui_progressbox_safe(['mkfs.f2fs', o(l, dq(Label)), OL, '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(vfat, Title, DL, Label, _RD) :- !,
+mkfs(vfat, _B, Title, DL, Label, _RD) :- !,
 	upper(Label, UL),
 	tui_progressbox_safe(['mkfs.vfat', o('F', '32'), o('n', dq(UL)), DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	% tui_programbox_safe(['mkfs.vfat', '-F', '32', '-n', dq(UL), DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(xfs, Title, DL, Label, _RD) :- !,
+mkfs(xfs, _B, Title, DL, Label, _RD) :- !,
 	tui_progressbox_safe(['mkfs.xfs', o('L', dq(Label)), '-f', '-i', 'sparse=0', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(swap, _Title, [PD| _], _Label, _RD) :- !,
+mkfs(swap, _B, _Title, [PD| _], _Label, _RD) :- !,
 	os_shell2_rc([swapoff, PD, '>/dev/null', '2>&1'], _),
 	( os_shell2l([mkswap, PD, '2>&1']) ->
 	  true
@@ -117,7 +130,7 @@ mkfs(swap, _Title, [PD| _], _Label, _RD) :- !,
 	  fail
 	),
 	true.
-mkfs(FS, _Title, _, _, _, _RD) :- !,
+mkfs(FS, _B, _Title, _, _, _, _RD) :- !,
 	tui_msgbox2(['Unknown filesystem', FS]),
 	fail.
 
@@ -197,7 +210,7 @@ mount_fs(FS, D, MP, RD) :-
 	memberchk(FS, [vfat, ext2, ext3, ext4, f2fs, xfs, bcachefs]),
 	atom_concat(RD, MP, MP1),
 	os_mkdir_p(MP1),
-	( inst_setting(fs_attr(FS, MP), mount(OL))
+	( inst_setting(fs_attr(FS, MP, _), mount(OL))
 	; OL = [rw, noatime]
 	),
 	os_shell2([mount, o(t, FS), o(o, lc(OL)), D, MP1, '2>&1']),

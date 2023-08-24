@@ -24,20 +24,12 @@ efistub_configure(TL, RD) :-
 efistub_write_cfg(TL, S) :-
 	% fs5(FileSystem, Label, MountPoint, [device_list], _CK)
 	member(fs5(vfat, _efi, '/boot', [PD], _CK), TL),
-	parent_dev_name(PD, N, PD0),
+	lx_parent_dev_name(PD, N, PD0),
 	write(S, 'MODIFY_EFI_ENTRIES="1"'), nl(S),
 	write(S, 'OPTIONS="'), bootloader_write_cmdline(TL, S), write(S, '"'), nl(S),
 	format(S, 'DISK="~w"', [PD0]), nl(S),
 	format(S, 'PART=~w', [N]), nl(S),
 	true.
-
-parent_dev_name(D, N, PD) :-
-	% sub_atom(Atom, Before, Length, After, SubAtom),
-	sub_atom(D, _, 1, 0, N),
-	( atom_concat('/dev/nvme', _, D) ->
-	  sub_atom(D, 0, _, 2, PD)
-	; sub_atom(D, 0, _, 1, PD)
-	).
 
 efibootmgr_get(L) :-
 	os_shell_lines_codes(efibootmgr, CL),
