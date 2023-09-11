@@ -38,6 +38,7 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - allows to use an alternative rootdir via `--rootdir` command line argument.
 - all settings can be saved in a file and loaded on startup. File name is controlled via `--config` command line argument.
 - passwords are never saved in files even temporarily.
+- max password length is limited to 1024 charaters.
 - Boot managers
     - uses GRUB, rEFInd, Limine, Syslnux, or Gummiboot as a boot manager.
     - uses EFISTUB as a boot loader.

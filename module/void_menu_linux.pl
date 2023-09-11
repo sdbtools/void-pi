@@ -14,7 +14,7 @@ menu_password0(UL, Title) :-
 	( inst_setting_tmp(passwd(UL), UP)
 	; UP = ''
 	),
-	tui_passwordform_v(25, 0, [item('Choose a password:', UP), item('Confirm your password:', UP)], FORMLABEL, [title(Title)], [P1, P2|_]),
+	tui_passwordform_v(25, 1024, [item('Choose a password:', UP), item('Confirm your password:', UP)], FORMLABEL, [title(Title)], [P1, P2|_]),
 	check_password(UL, Title, P1, P2), !,
 	retractall(inst_setting_tmp(passwd(UL), _)),
 	assertz(inst_setting_tmp(passwd(UL), P1)).
