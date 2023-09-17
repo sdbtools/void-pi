@@ -26,6 +26,7 @@
 % menu
 :- include('module/void_menu_linux.pl').
 :- include('module/void_menu_fs.pl').
+:- include('module/void_menu_dev.pl').
 :- include('module/void_menu.pl').
 
 :- include('module/void_luks.pl').
@@ -64,6 +65,7 @@ def_settings :-
 	assertz(inst_setting(esp_size, '550M')),
 	assertz(inst_setting(boot_size, '1G')),
 	assertz(inst_setting(root_dir, '/mnt')),
+	assertz(inst_setting(hostonly, no)),
 	% fs_attr(Name, MountPoint, Bootloader)
 	assertz(inst_setting(fs_attr(btrfs, '/', _), mount([rw, noatime, 'compress-force'=zstd, space_cache=v2, commit=120]))),
 	assertz(inst_setting(fs_attr(vfat, '/boot', _), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
@@ -127,12 +129,29 @@ setup_sys_arch :-
 	assertz(inst_setting(system(arch), ARCH)),
 	true.
 
+setup_sys_bios_efi :-
+	setup_sys_efi,
+	!.
+setup_sys_bios_efi :-
+	setup_sys_bios.
+
 setup_sys_efi :-
 	lx_sys_efi(EFI_TARGET),
 	retractall(inst_setting(system(efi), _)),
 	assertz(inst_setting(system(efi), EFI_TARGET)),
-	!.
-setup_sys_efi.
+	true.
+
+setup_sys_bios :-
+	lx_sys_arch(ARCH),
+	retractall(inst_setting(system(bios), _)),
+	assertz(inst_setting(system(bios), ARCH)),
+	true.
+
+force_sys_efi :-
+	lx_gen_efi(EFI_TARGET),
+	retractall(inst_setting(system(efi), _)),
+	assertz(inst_setting(system(efi), EFI_TARGET)),
+	true.
 
 setup_sys_disk :-
 	lx_list_dev7_disk(L),
@@ -141,7 +160,7 @@ setup_sys_disk :-
 	true.
 
 setup_conf :-
-	setup_sys_efi,
+	setup_sys_bios_efi,
 	setup_sys_arch,
 	setup_sys_kernel,
 	setup_sys_disk,
@@ -244,7 +263,7 @@ run_cmd(_TT, TL, RD, install_pkg(IM)) :- !,
 	% install software.
 	soft_install(TL, RD),
 	% install bootloader.
-	set_bootloader(TL, RD),
+	install_bootloader(TL, RD),
 	% unmount all filesystems.
 	umount_filesystems(RD),
 	tui_msgbox('Void Linux has been installed successfully!', [sz([6, 40])]),

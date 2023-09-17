@@ -6,7 +6,7 @@ ux_user_root :-
 
 % sgdisk -L
 % sfdisk --list-types
-% names should correspond to part_type_guid.
+% names should correspond to os_gpt_part_type.
 part_typecode(sys_efi, 'EF00').
 part_typecode(sys_mbr, 'EF01').
 part_typecode(sys_bios_boot, 'EF02').

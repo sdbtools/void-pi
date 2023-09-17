@@ -60,6 +60,9 @@ switch_template(OT, NT, _OB, NB) :-
 	retractall(inst_setting(template(OT), _)),
 	assertz(inst_setting(template(NT), L)),
 	!.
+switch_template(_OT, _NT, _OB, _NB) :-
+	tui_msgbox('Switching of template has failed.', [title(' ERROR ')]),
+	fail.
 
 fs2parttype(zfs, solaris_root).
 fs2parttype(_, linux_data).
@@ -93,47 +96,6 @@ make_cmd_list(TT, B, [bootloader(B), bootloader_dev(DEV3)| L]) :- !,
 	lx_make_dev3(LN1, DEV3),
 	true.
 
-% Select devices to use and a boot device.
-% Put boot device first.
-menu_dev7_combo(TT, [DEV71| DEV7L]) :-
-	% multi-device templates.
-	% memberchk(TT, [gpt_basic, gpt_wizard, gpt_lvm, gpt_lvm_luks, gpt_luks_lvm]), !,
-	memberchk(TT, [gpt_basic, gpt_wizard, gpt_lvm, gpt_lvm_luks]), !,
-	menu_dev7_checklist_used_light(' Select device(s) to use ', DL0),
-	menu_dev71_menu(' Select boot device ', DL0, DEV71),
-	delete(DL0, DEV71, DEV7L),
-	true.
-menu_dev7_combo(_TT, [DEV71]) :-
-	inst_setting(dev7, available(DL0)),
-	menu_dev71_menu_used(' Select boot device ', DL0, DEV71),
-	true.
-
-% Select devices to use and a boot device.
-% Put boot device first.
-menu_dev4_combo(TT, [D4| D4L1]) :-
-	% multi-device templates.
-	memberchk(TT, [gpt_basic, gpt_wizard, gpt_lvm, gpt_lvm_luks]), !,
-	menu_dev7_checklist_used_light(' Select device(s) to use ', DL0),
-	maplist(menu_dev7_to_d4, DL0, D4L),
-	menu_dev4_boot_dev(D4L, D4),
-	delete(D4L, D4, D4L1),
-	true.
-menu_dev4_combo(_TT, [D4]) :-
-	inst_setting(dev7, available(DL0)),
-	maplist(menu_dev7_to_d4, DL0, D4L),
-	menu_dev4_boot_dev(D4L, D4),
-	true.
-
-menu_dev4_boot_dev(D4L, D4) :-
-	menu_d41_menu(' Select boot device ', D4L, SD),
-	menu_sdn_to_d4(D4L, SD, D4),
-	true.
-
-menu_dev7_to_d4(DEV7, d4(LN, SN, D, 1)) :-
-	lx_dev7_to_ldn_sdn(DEV7, LN, SN),
-	lx_part_name(SN, 1, D),
-	true.
-
 enable_template(TT, B) :-
 	make_cmd_list(TT, B, L),
 	retractall(inst_setting(template(_), _)),
@@ -148,21 +110,30 @@ enable_template(TT, B) :-
 % P - partition.
 % vg(Name, [PhysicalVolumeList], [LogicalVolumeList])
 partition_set_mbr(TT, B, FS, P, L) :-
-	inst_setting(system(efi), _), !,
-	partition_set_efi(TT, B, FS, P, L).
+	inst_setting(system(bios), _), !,
+	partition_set_mbr_1(TT, B, FS, P, L).
 partition_set_mbr(TT, B, FS, P, L) :-
+	partition_set_efi(TT, B, FS, P, L).
+
+partition_set_mbr_1(TT, B, FS, P, L) :-
 	memberchk(B, [syslinux, limine]), !,
-	partition_set_boot(TT, B, FS, P, L).
-partition_set_mbr(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_bios_boot, bd1([PD, D]), create, MBR_SZ)| L]) :-
+	partition_set_efi(TT, B, FS, P, L).
+partition_set_mbr_1(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_bios_boot, bd1([PD, D]), create, MBR_SZ)| L]) :-
 	% No filesystem in this case.
 	lx_part_name(D, N, PD),
 	inst_setting(mbr_size, MBR_SZ),
 	N1 is N + 1,
 	lx_part_name(SN, N1, SD1),
-	partition_set_boot(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
+	partition_set_efi(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
+
+partition_set_efi(TT, B, FS, P, L) :-
+	inst_setting(system(efi), _), !,
+	partition_set_efi_1(TT, B, FS, P, L).
+partition_set_efi(TT, B, FS, P, L) :-
+	partition_set_boot(TT, B, FS, P, L).
 
 % mount EFI to /boot instead of /boot/efi
-partition_set_efi(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_efi, bd1([PD, D]), create, ESP_SZ), fs5(vfat, efi, '/boot', [PD], create)| L]) :-
+partition_set_efi_1(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_efi, bd1([PD, D]), create, ESP_SZ), fs5(vfat, efi, '/boot', [PD], create)| L]) :-
 	bootloader_boot_efi(BL),
 	memberchk(B, BL), !,
 	lx_part_name(D, N, PD),
@@ -171,7 +142,7 @@ partition_set_efi(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_efi, bd1([PD, D]),
 	lx_part_name(SN, N1, SD1),
 	% !!! skip partition_set_boot
 	partition_set_template(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
-partition_set_efi(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_efi, bd1([PD, D]), create, ESP_SZ), fs5(vfat, efi, '/boot/efi', [PD], create)| L]) :-
+partition_set_efi_1(TT, B, FS, [d4(D, SN, _SDN, N)| T], [p4(sys_efi, bd1([PD, D]), create, ESP_SZ), fs5(vfat, efi, '/boot/efi', [PD], create)| L]) :-
 	lx_part_name(D, N, PD),
 	inst_setting(esp_size, ESP_SZ),
 	N1 is N + 1,
@@ -264,7 +235,6 @@ menu_wiz_action(DCL, L) :-
 		, bootloader_dev
 	],
 	maplist(menu_tag, M, ML),
-	% tui_msgbox(ookk),
 	tui_menu_tag(ML, MENULABEL, [title(' Select Action ')], Tag),
 	action_info(A, Tag, _),
 	wiz_cmd(A, DCL, L),

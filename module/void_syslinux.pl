@@ -4,10 +4,12 @@
 % https://wiki.archlinux.org/title/Syslinux
 
 syslinux_install(TL, BD, RD) :-
-	( inst_setting(system(efi), _) ->
-	  syslinux_install_efi(BD, RD)
+	( \+ inst_setting(system(efi), _)
+	; syslinux_install_efi(BD, RD)
+	), !,
+	( \+ inst_setting(system(bios), _)
 	; syslinux_install_bios(TL, BD, RD)
-	).
+	), !.
 
 syslinux_install_efi(BD, RD) :-
 	os_mkdir_p(RD + '/boot/EFI/syslinux'),
@@ -37,7 +39,17 @@ syslinux_install_bios(TL, BD, RD) :-
 	true.
 
 syslinux_configure(TL, RD) :-
-	( inst_setting(system(efi), _) ->
+	( \+ inst_setting(system(efi), _)
+	; syslinux_configure(efi, TL, RD)
+	), !,
+	( \+ inst_setting(system(bios), _)
+	; syslinux_configure(bios, TL, RD)
+	), !,
+	true.
+
+% BE - bios/efi
+syslinux_configure(BE, TL, RD) :-
+	( BE = efi ->
 	  FN = '/boot/EFI/syslinux/syslinux.cfg'
 	; FN = '/boot/syslinux/syslinux.cfg'
 	),
@@ -46,15 +58,16 @@ syslinux_configure(TL, RD) :-
 	atom_concat(P0, '*', P1),
 	os_shell2_line([ls, P1], A0),
 	atom_concat(P0, V, A0),
-	syslinux_configure_(TL, V, CF).
+	syslinux_configure_(BE, TL, V, CF).
 
-syslinux_configure_(TL, V, CF) :-
+syslinux_configure_(BE, TL, V, CF) :-
 	open(CF, write, S),
-	syslinux_write_cfg(TL, V, S),
+	syslinux_write_cfg(BE, TL, V, S),
 	close(S).
 
-syslinux_write_cfg(TL, V, S) :-
-	( inst_setting(system(efi), _) ->
+% BE - bios/efi
+syslinux_write_cfg(BE, TL, V, S) :-
+	( BE = efi ->
 	  Pref = ''
 	; boot_pref(TL, Pref)
 	),

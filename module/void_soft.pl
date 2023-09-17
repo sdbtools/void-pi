@@ -33,6 +33,8 @@ soft_install(_TL, _RD) :-
 soft_update(RD) :-
 	inst_setting(system(arch), ARCH),
 	make_chroot_inst_pref_chroot(ARCH, Pref, RD),
+	% This is mandatory.
+	tui_progressbox_safe([Pref, 'xbps-install', '-uy', xbps, '2>&1'], '', [title(' Update xbps '), sz([12, 80])]),
 	tui_progressbox_safe([Pref, 'xbps-install', '-Suy', '2>&1'], '', [title(' Update Software '), sz(max)]),
 	true.
 
@@ -40,6 +42,8 @@ soft_install_([], _RD) :- !.
 soft_install_(SL, RD) :-
 	inst_setting(system(arch), ARCH),
 	make_chroot_inst_pref_chroot(ARCH, Pref, RD),
+	% This is mandatory.
+	tui_progressbox_safe([Pref, 'xbps-install', '-uy', xbps, '2>&1'], '', [title(' Update xbps '), sz([12, 80])]),
 	tui_progressbox_safe([Pref, 'xbps-install', '-Sy', SL, '2>&1'], '', [title(' Install Software '), sz([12, 80])]),
 	true.
 

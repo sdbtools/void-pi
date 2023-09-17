@@ -23,6 +23,7 @@ It extends void-installer in several ways:
 - supports [rEFInd](https://rodsbooks.com/refind/), [Limine](https://limine-bootloader.org/), [Syslinux](https://wiki.syslinux.org/wiki/index.php?title=The_Syslinux_Project), and [Gummiboot](https://www.freedesktop.org/wiki/Software/systemd/systemd-boot/) boot managers
 - supports EFISTUB boot loader
 - supports multi-device configurations.
+- supports either BIOS or UEFI, or both boot modes.
 - installs and configures additional boot manager and file system related software.
 
 void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
@@ -39,6 +40,10 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - all settings can be saved in a file and loaded on startup. File name is controlled via `--config` command line argument.
 - passwords are never saved in files even temporarily.
 - max password length is limited to 1024 charaters.
+- Boot modes
+    - UEFI
+    - BIOS
+    - both
 - Boot managers
     - uses GRUB, rEFInd, Limine, Syslnux, or Gummiboot as a boot manager.
     - uses EFISTUB as a boot loader.
@@ -82,6 +87,7 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 
 All default settings can be changed via `Common Attrs` sub-menu.
 
+- host-only: no
 - installation source: local
 - host name: voidpp
 - user name: void
@@ -98,7 +104,7 @@ All default settings can be changed via `Common Attrs` sub-menu.
 
 ### Filesystem
 
-#### BIOS boot
+#### BIOS boot mode
 
 - Limine and Syslinux
     - `/dev/sdX1` is the root filesystem (size: whole device)
@@ -106,7 +112,7 @@ All default settings can be changed via `Common Attrs` sub-menu.
     - `/dev/sdX1` is the BIOS boot sector (size: 1M)
     - `/dev/sdX2` is the root filesystem (size: remainder)
 
-#### UEFI
+#### UEFI boot mode
 
 - `/dev/sdX1` is the EFI system partition (size: [550M][550M])
 - `/dev/sdX2` is the root filesystem (size: remainder)

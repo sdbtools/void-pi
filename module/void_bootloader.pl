@@ -131,14 +131,14 @@ get_bootloader(TL, B) :-
 get_bootloader_dev3(TL, DEV3) :-
 	memberchk(bootloader_dev(DEV3), TL).
 
-set_bootloader(TL, _RD) :-
+install_bootloader(TL, _RD) :-
 	% Do not install bootloader if a bootloader dev has not been selected.
 	\+ get_bootloader_dev3(TL, _), !.
-set_bootloader(TL, RD) :-
+install_bootloader(TL, RD) :-
 	get_bootloader(TL, B),
 	get_bootloader_dev3(TL, dev3(BD, _, _)),
-	set_bootloader(B, TL, BD, RD), !.
-set_bootloader(_TL, _RD) :-
+	install_bootloader(B, TL, BD, RD), !.
+install_bootloader(_TL, _RD) :-
 	tui_msgbox('Setting up of a bootloader has failed.'),
 	fail.
 
@@ -150,30 +150,30 @@ get_bootloader_mp(B, MP) :-
 	; MP = '/boot/efi'
 	).
 
-% set_bootloader(template_list, bootloader, bootloader_dev, root_dir)
-set_bootloader(_, _TL, none, _RD) :- !.
-set_bootloader(grub2, TL, BD, RD) :- !,
+% install_bootloader(bootloader, template_list, bootloader_dev, root_dir)
+install_bootloader(_, _TL, none, _RD) :- !.
+install_bootloader(grub2, TL, BD, RD) :- !,
 	grub_configure(TL, RD),
 	grub_install(TL, BD, RD),
 	grub_mkconfig(RD),
 	!.
-set_bootloader(rEFInd, TL, _BD, RD) :- !,
+install_bootloader(rEFInd, TL, _BD, RD) :- !,
 	refind_install(TL, RD),
 	refind_configure(TL, RD),
 	!.
-set_bootloader(limine, TL, BD, RD) :- !,
+install_bootloader(limine, TL, BD, RD) :- !,
 	limine_install(BD, RD),
 	limine_configure(TL, RD),
 	!.
-set_bootloader(efistub, _TL, _BD, _RD) :- !,
+install_bootloader(efistub, _TL, _BD, _RD) :- !,
 	% efistub_install(BD, RD),
 	% efistub_configure(TL, RD),
 	!.
-set_bootloader(syslinux, TL, BD, RD) :- !,
+install_bootloader(syslinux, TL, BD, RD) :- !,
 	syslinux_install(TL, BD, RD),
 	syslinux_configure(TL, RD),
 	!.
-set_bootloader(gummiboot, _TL, _BD, RD) :- !,
+install_bootloader(gummiboot, _TL, _BD, RD) :- !,
 	gummiboot_install(RD),
 	% gummiboot_configure(TL, RD),
 	!.
@@ -237,4 +237,33 @@ setup_bootloader(efistub, _TL, RD) :- !,
 	true.
 setup_bootloader(_B, _TL, _RD) :-
 	true.
+
+replace_bootloader_dev(none, NSN, L, TL, NTL) :- !,
+	% add
+	lx_sdn_to_dev7(L, NSN, DEV7),
+	lx_dev7_to_dev3(DEV7, DEV3),
+	NTL = [bootloader_dev(DEV3)| TL].
+replace_bootloader_dev(_, none, _L, TL, NTL) :- !,
+	% remove
+	findall(E, (member(E, TL), E \= bootloader_dev(_)), NTL).
+replace_bootloader_dev(_, NSN, L, TL, NTL) :-
+	% replace
+	lx_sdn_to_dev7(L, NSN, DEV7),
+	lx_dev7_to_dev3(DEV7, DEV3),
+	maplist(replace_element(bootloader_dev(_), bootloader_dev(DEV3)), TL, NTL).
+
+replace_bootloader(B) :-
+	retract(inst_setting(template(TT), OTL)),
+	replace_bootloader(B, OTL, NTL),
+	assertz(inst_setting(template(TT), NTL)).
+
+% B - new bootloader.
+replace_bootloader(B, TL, NTL) :-
+	maplist(replace_element(bootloader(_), bootloader(B)), TL, NTL).
+
+ensure_bootloader_dev(manual, _TL) :- !.
+ensure_bootloader_dev(TT, TL) :-
+	( memberchk(bootloader_dev(_), TL)
+	; cmd_menu(bootloader_dev, TT, TL)
+	), !.
 

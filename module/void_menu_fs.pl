@@ -3,7 +3,6 @@
 
 menu_filesystem(TL) :-
 	% do not try to edit swap partition.
-	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
 	findall(PD, (member(p4(PT, bd1([PD| _]), _CK, _SZ), TL), PT \= linux_swap), PL0),
 	( PL0 = [] ->
 	  tui_msgbox('No partitions was selected.'),

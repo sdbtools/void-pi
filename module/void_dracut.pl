@@ -28,13 +28,15 @@ dracut_conf(common, _TL, _RD, [
 		, v(omit_dracutmodules, ['dracut-systemd', plymouth, systemd, 'systemd-initrd', usrmount])
 		, v(persistent_policy, 'by-uuid')
 		, v(tmpdir, '/tmp')
-	]) :- !.
+		, v(hostonly, HOSTONLY)
+	]) :- !,
+	inst_setting(hostonly, HOSTONLY),
+	true.
 
 dracut_conf(luks, _TL, _RD, [
 		  v(add_dracutmodules, [crypt])
 		, v(add_drivers, [lz4, lz4hc, xxhash_generic])
 		, v(compress, lz4)
-		, v(hostonly, yes)
 		% , v(kernel_cmdline, ['rd.lvm'=0, 'rd.md'=0, 'rd.dm'=0])
 	]).
 dracut_conf(luks, TL, RD, [v(install_items, ['/boot/volume.key', '/etc/crypttab'])]) :- !,
@@ -53,4 +55,16 @@ dracut_conf(fs(zfs), _TL, _RD, [
 dracut_conf(fs(btrfs), _TL, _RD, [v(add_dracutmodules, [btrfs]), v(add_drivers, [btrfs])]) :- !.
 dracut_conf(fs(cifs), _TL, _RD, [v(add_dracutmodules, [cifs]), v(add_drivers, [cifs])]) :- !.
 dracut_conf(fs(nfs), _TL, _RD, [v(add_dracutmodules, [nfs]), v(add_drivers, [nfs])]) :- !.
+
+dracut_run(RD) :-
+	% DL = [chroot, RD, dracut, '--no-hostonly', '--force', '2>&1'],
+	% DL = [chroot, RD, dracut, '--regenerate-all', '--hostonly', '--force', '2>&1'],
+	DL = [chroot, RD, dracut, '--regenerate-all', '--force', '2>&1'],
+	tui_progressbox_safe(DL, '', [title(' Rebuilding initramfs for target '), sz(max)]),
+	true.
+
+dracut_setup(TL, B, RD) :-
+	dracut_conf(TL, B, RD),
+	dracut_run(RD),
+	true.
 

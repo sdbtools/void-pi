@@ -51,7 +51,6 @@ menu_part_manually :-
 
 menu_part_select(TL) :-
 	% OPL - list of already configured partitions.
-	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
 	findall(PD, member(p4(_PT, bd1([PD| _]), _CK, _SZ), TL), OPL),
 	lx_list_part(PIL),
 	PIL \= [], !,
@@ -88,19 +87,65 @@ add_part_(PIL, SL, [PD| T], IL, OL) :-
 	add_part_(PIL, SL, T, IL, OL).
 add_part_(PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), fs5(FS, '', '', [PD], keep)| OL]) :-
 	% dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)
-	member(dev_part(PD,name(_SNAME,_KNAME,[DL|_]),part4(PT,_PARTUUID,_UUID,FS),SZ), PIL),
+	member(dev_part(PD,name(_SNAME,_KNAME,[DL|_]),part5(_PTTYPE,PT,_PARTUUID,_UUID,FS),SZ), PIL),
 	BD1 = bd1([PD|DL]), !,
 	add_part_(PIL, SL, T, IL, OL).
 add_part_(_PIL, _SL, [], L, L) :-
 	true.
 
+menu_bios_efi(TT, TL) :-
+	findall([M, MT], (member(M, [bios, efi]), boot_info(M, MT)), ML),
+	findall(M, (member(M, [bios, efi]), inst_setting(system(M), _)), OL),
+	dialog_msg(checklist, LABEL),
+	tui_checklist_tag2(ML, OL, LABEL, [title(' Boot via BIOS/EFI ')], NL),
+	( NL \= []
+	; tui_msgbox('No boot method was selected', [title(' ERROR ')]),
+	  fail
+	), !,
+	( OL = NL
+	; retractall(inst_setting(system(bios), _)),
+	  retractall(inst_setting(system(efi), _)),
+	  maplist(menu_bios_efi_, NL),
+
+	  findall(B, (menu_bootloader_(L0), member(B, L0)), BL),
+	  get_bootloader(TL, OB),
+
+	  ( memberchk(OB, BL) ->
+		NB = OB
+	  ; BL = [NB| _],
+	    tui_msgbox2(['Bootloader will be reset to', NB]),
+		replace_bootloader(NB)
+	  ), !,
+
+	  ( TT = manual
+	  ; tui_msgbox('Template will be reset to "Manual"'),
+		switch_template(TT, manual, NB, NB)
+	  )
+	),
+	!.
+
+menu_bios_efi_(bios) :- !,
+	setup_sys_bios.
+menu_bios_efi_(efi) :- !,
+	force_sys_efi.
+
+menu_hostonly :-
+	inst_setting(hostonly, OHO),
+	dialog_msg(radiolist, LABEL),
+	tui_radiolist_tag2([[yes, 'Only for experts. Booting only the local host'], [no, 'Include all drivers']], OHO, LABEL, [title(' Host-only ')], NHO),
+	( OHO = NHO
+	; retractall(inst_setting(hostonly, _)),
+	  assertz(inst_setting(hostonly, NHO))
+	),
+	!.
+
 menu_keymap :-
 	os_shell_lines('find /usr/share/kbd/keymaps/ -type f -iname "*.map.gz" -printf "%f\n" | sed \'s|.map.gz||g\' | sort', KML),
-	dialog_msg(radiolist, RADIOLABEL),
+	dialog_msg(radiolist, LABEL),
 	( inst_setting(keymap, OKM)
 	; OKM = us
 	),
-	tui_radiolist_tag2(KML, OKM, RADIOLABEL, [no-tags, title(' Select your keymap ')], KM), !,
+	tui_radiolist_tag2(KML, OKM, LABEL, [no-tags, title(' Select your keymap ')], KM), !,
 	retractall(inst_setting(keymap, _)),
 	assertz(inst_setting(keymap, KM)).
 
@@ -158,11 +203,23 @@ split_tz(TZ, A1, A2) :-
 	maplist(codes_atom, LL, [A1, A2]),
 	true.
 
-% , efistub
 % , zfsBootMenu
-menu_bootloader_([grub2, limine, syslinux]).
-menu_bootloader_([rEFInd, gummiboot, efistub]) :-
+menu_bootloader_([grub2, syslinux]) :-
+	% grub2 and syslinux cannot be installed for EFI if booted in BIOS mode.
+	( lx_sys_efi(_) ->
+	  true
+	; \+ inst_setting(system(efi), _)
+	),
+	true.
+menu_bootloader_([limine]).
+menu_bootloader_([rEFInd, gummiboot]) :-
 	inst_setting(system(efi), _),
+	\+ inst_setting(system(bios), _),
+	true.
+menu_bootloader_([efistub]) :-
+	% efistub cannot be installed if booted in BIOS mode.
+	lx_sys_efi(_),
+	\+ inst_setting(system(bios), _),
 	true.
 
 menu_bootloader(TT, TL) :-
@@ -193,20 +250,6 @@ menu_bootloader_dev(TL) :-
 	  assertz(inst_setting(template(TT), NTL))
 	),
 	!.
-
-replace_bootloader_dev(none, NSN, L, TL, NTL) :- !,
-	% add
-	lx_sdn_to_dev7(L, NSN, DEV7),
-	lx_dev7_to_dev3(DEV7, DEV3),
-	NTL = [bootloader_dev(DEV3)| TL].
-replace_bootloader_dev(_, none, _L, TL, NTL) :- !,
-	% remove
-	findall(E, (member(E, TL), E \= bootloader_dev(_)), NTL).
-replace_bootloader_dev(_, NSN, L, TL, NTL) :-
-	% replace
-	lx_sdn_to_dev7(L, NSN, DEV7),
-	lx_dev7_to_dev3(DEV7, DEV3),
-	maplist(replace_element(bootloader_dev(_), bootloader_dev(DEV3)), TL, NTL).
 
 split_grp(G, GL) :-
 	atom_chars(G, GC),

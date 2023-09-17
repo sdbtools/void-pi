@@ -2,7 +2,6 @@
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 refind_install(TL, RD) :-
-	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
 	( memberchk(p4(sys_efi, bd1([EFI_PD| _]), _CK, _SZ), TL)
 	; tui_msgbox('efi system partition was not found'),
 	  fail

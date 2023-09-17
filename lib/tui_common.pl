@@ -18,17 +18,17 @@ tui_radiolist_on_off(ON, T, [T, T, I]) :- !,
 	).
 
 tui_checklist_on_off(ONL, [T], [T, T, I]) :- !,
-	( member(T, ONL) ->
+	( memberchk(T, ONL) ->
 	  I = on
 	; I = off
 	).
 tui_checklist_on_off(ONL, [T, V|_], [T, V, I]) :- !,
-	( member(T, ONL) ->
+	( memberchk(T, ONL) ->
 	  I = on
 	; I = off
 	).
 tui_checklist_on_off(ONL, T, [T, T, I]) :- !,
-	( member(T, ONL) ->
+	( memberchk(T, ONL) ->
 	  I = on
 	; I = off
 	).

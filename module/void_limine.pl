@@ -3,15 +3,25 @@
 
 limine_install(BD, RD) :-
 	os_mkdir_p(RD + '/boot/limine'),
+	( \+ inst_setting(system(efi), _)
+	; limine_install_efi(RD)
+	), !,
+	( \+ inst_setting(system(bios), _)
+	; limine_install_bios(BD, RD)
+	), !,
+	true.
 
-	( inst_setting(system(efi), _) ->
-	  os_mkdir_p(RD + '/boot/efi/EFI/BOOT'),
-	  inst_setting(system(arch), ARCH),
-	  arch2limine(ARCH, BL),
-	  os_call2([cp, '-f', RD + '/usr/share/limine/' + BL, RD + '/boot/efi/EFI/BOOT/' + BL])
-	; tui_progressbox_safe([chroot, RD, 'limine', 'bios-install', BD, '2>&1'], '', [title(' Installing Limine '), sz([6, 60])]),
-	  os_call2([cp, '-f', RD + '/usr/share/limine/limine-bios.sys', RD + '/boot/limine/limine-bios.sys'])
-	), !.
+limine_install_efi(RD) :-
+	os_mkdir_p(RD + '/boot/efi/EFI/BOOT'),
+	inst_setting(system(arch), ARCH),
+	arch2limine(ARCH, BL),
+	os_call2([cp, '-f', RD + '/usr/share/limine/' + BL, RD + '/boot/efi/EFI/BOOT/' + BL]),
+	true.
+
+limine_install_bios(BD, RD) :-
+	tui_progressbox_safe([chroot, RD, 'limine', 'bios-install', BD, '2>&1'], '', [title(' Installing Limine '), sz([6, 60])]),
+	os_call2([cp, '-f', RD + '/usr/share/limine/limine-bios.sys', RD + '/boot/limine/limine-bios.sys']),
+	true.
 
 arch2limine('x86_64', 'BOOTX64.EFI').
 arch2limine('x86_64-musl', 'BOOTX64.EFI').

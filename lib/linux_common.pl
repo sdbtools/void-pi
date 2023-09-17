@@ -39,6 +39,7 @@ lx_sys_arch(ARCH) :-
 	),
 	true.
 
+% Check for EFI.
 lx_sys_efi(EFI_TARGET) :-
 	file_exists('/sys/firmware/efi/systab'),
 	os_shell2_number([cat, '/sys/firmware/efi/fw_platform_size'], N),
@@ -47,6 +48,15 @@ lx_sys_efi(EFI_TARGET) :-
 	; EFI_TARGET='i386-efi'
 	),
 	true.
+
+% Generate EFI value.
+lx_gen_efi(EFI_TARGET) :-
+	os_shell_line('uname -m', A0),
+	( A0 ='x86_64' ->
+	  EFI_TARGET = 'x86_64-efi'
+	; EFI_TARGET = 'i386-efi'
+	),
+	!.
 
 lx_get_boot_part(TL, PD) :-
 	memberchk(fs5(_FS, _Label, '/boot', [PD], _CK1), TL),
@@ -272,10 +282,11 @@ lx_list_dev_part_(IL, dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)) :-
 	lx_dev_part_parents(NAME, DL),
 	true.
 
-lx_dev_part_type(part, NAME, part4(TYPE,PARTUUID,UUID,FSTYPE)) :- !,
-	os_shell2_codes_line(['lsblk -dnr -o PARTUUID,UUID,PARTTYPE,FSTYPE', NAME], CL),
-	split_atom(" ", CL, [PARTUUID,UUID,PARTTYPE,FSTYPE]),
-	part_type_guid(PARTTYPE, TYPE, _),
+% PTTYPE: gpt, dos, sun, sgi
+lx_dev_part_type(part, NAME, part5(PTTYPE,TYPE,PARTUUID,UUID,FSTYPE)) :- !,
+	os_shell2_codes_line(['lsblk -dnr -o PTTYPE,PARTUUID,UUID,PARTTYPE,FSTYPE', NAME], CL),
+	split_atom(" ", CL, [PTTYPE,PARTUUID,UUID,PARTTYPE,FSTYPE]),
+	lx_part_type(PTTYPE, PARTTYPE, TYPE),
 	true.
 lx_dev_part_type(crypt, NAME, crypt(UUID)) :- !,
 	os_shell2_atom(['lsblk -dnr -o UUID', NAME], UUID),
@@ -285,6 +296,14 @@ lx_dev_part_type(lvm, NAME, lv(VG,LV)) :-
 	memberchk(lv(VG,LV,NAME), L),
 	true.
 lx_dev_part_type(Type, _NAME, Type).
+
+lx_part_type(gpt, PARTTYPE, TYPE) :- !,
+	os_gpt_part_type(PARTTYPE, TYPE, _),
+	!.
+lx_part_type(dos, PARTTYPE, TYPE) :- !,
+	os_mbr_part_type(PARTTYPE, [t4(TYPE, _, _, _)|_]),
+	!.
+lx_part_type(_, _PARTTYPE, unknown).
 
 % dependency
 lx_dev_part_parents(NAME, OLL) :-

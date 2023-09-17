@@ -7,7 +7,6 @@ is_void_live :-
 	host_name('void-live').
 
 make_sgdisk_par(TL, [PD|T], N, [A1, A2|T1]) :-
-	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
 	memberchk(p4(PT, bd1([PD| _]), _CK, SZ), TL),
 	part_typecode(PT, PTC),
 	( T = [] ->
@@ -49,7 +48,7 @@ validate_efi(TL) :-
 	inst_setting(system(efi), _), !,
 	% p4(PartType, device, create/keep, size)
 	( memberchk(p4(sys_efi, bd1([PD|_]), _, _), TL)
-	; part_type_guid(UUID, sys_efi, PTN),
+	; os_gpt_part_type(UUID, sys_efi, PTN),
 	  format_to_atom(MSG, 'The EFI System Partition has not been selected, please select a partition having type "~w" and UUID ~w and at least with 100MB of size.', [PTN, UUID]),
 	  tui_msgbox(MSG, [title(' ERROR ')]),
 	  fail
@@ -185,10 +184,7 @@ install_pkg(TL, local, RD) :-
 
 	get_bootloader(TL, B),
 	% dracut stuff.
-	dracut_conf(TL, B, RD),
-	% DL = [chroot, RD, dracut, '--no-hostonly', '--force', '2>&1'],
-	DL = [chroot, RD, dracut, '--regenerate-all', '--hostonly', '--force', '2>&1'],
-	tui_progressbox_safe(DL, '', [title(' Rebuilding initramfs for target '), sz(max)]),
+	dracut_setup(TL, B, RD),
 
 	install_target_dep(TL, RD),
 	setup_bootloader(B, TL, RD),
@@ -298,16 +294,8 @@ set_sudoers :-
 	tui_msgbox('Setting up of sudoers has failed.'),
 	fail.
 
-% Old code
-% mount_chroot_filesystems(RD) :-
-% 	maplist(mount_chroot_filesystem_rbind(RD), ['/sys', '/dev', '/proc']),
-% 	true.
-
-% New code.
 mount_chroot_filesystems(RD) :-
-	maplist(mount_chroot_filesystem_none(RD), [m(proc, proc), m(sysfs, sys)]),
-	findall(M, mount_chroot_filesystem_rbind_(M), L),
-	maplist(mount_chroot_filesystem_rbind(RD), L),
+	maplist(mount_chroot_filesystem_rbind(RD), ['/sys', '/dev', '/proc']),
 	true.
 
 mount_chroot_filesystem_rbind(RD, D) :-
@@ -323,11 +311,6 @@ mount_chroot_filesystem_none(RD, m(FS, MP)) :-
 	os_call2([mount, '-t', FS, none, MP1]),
 	true.
 
-mount_chroot_filesystem_rbind_('/dev').
-mount_chroot_filesystem_rbind_('/run').
-mount_chroot_filesystem_rbind_('/sys/firmware/efi/efivars') :-
-	inst_setting(system(efi), _).
-
 % Unmount ALL filesystems mounted during installation.
 umount_filesystems(RD) :-
 	% ??? swap ???
@@ -339,15 +322,6 @@ umount_filesystems(RD) :-
 	tui_progressbox_safe([zpool, export, '-f', PN, '2>&1'], '', [title(' export zpool '), sz([6, 40])]),
 	fail.
 umount_filesystems(_RD).
-
-% Old code.
-% wipe_disk(D) :-
-% 	os_shell2_lines([wipefs, '--noheadings', D], L),
-% 	( L = []
-% 	; os_shell2([wipefs, '--all', '--force', D, '2>&1', '1>/dev/null']),
-% 	  wipe_disk(D)
-% 	),
-% 	!.
 
 wipe_disk(D) :-
 	os_shell2_lines([wipefs, '--noheadings', D], L),
@@ -376,7 +350,7 @@ wipe_dev_tree(PL, tree(NAME, L)) :-
 wipe_dev(crypt(_UUID), _D, name(SNAME,_KNAME,_DL)) :- !,
 	lx_luks_close(SNAME),
 	true.
-wipe_dev(part4(PARTTYPE,_PARTUUID,_UUID,_FSTYPE), D, _CN) :- !,
+wipe_dev(part5(_PTTYPE,PARTTYPE,_PARTUUID,_UUID,_FSTYPE), D, _CN) :- !,
 	wipe_dev_part(PARTTYPE, D),
 	true.
 wipe_dev(disk, D, _CN) :- !,
@@ -430,12 +404,6 @@ ensure_setting(_TT, _TL, S) :-
 	inst_setting(S, _), !.
 ensure_setting(TT, TL, S) :-
 	cmd_menu(S, TT, TL).
-
-ensure_bootloader_dev(manual, _TL) :- !.
-ensure_bootloader_dev(TT, TL) :-
-	( memberchk(bootloader_dev(_), TL)
-	; cmd_menu(bootloader_dev, TT, TL)
-	), !.
 
 save_settings(S) :-
 	inst_setting(N, V),
