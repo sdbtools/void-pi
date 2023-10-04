@@ -56,29 +56,35 @@ grub_config([
 		  v('GRUB_DEFAULT', 0, '')
 		, v('GRUB_TIMEOUT', 5, '')
 		, v('GRUB_DISTRIBUTOR', 'Void', '')
-	]).
-
-grub_config_luks(TL, [
-		  v('GRUB_ENABLE_CRYPTODISK', y, '')
-		, v('GRUB_CMDLINE_LINUX_DEFAULT', V, 'Generic settings')
 		, v('GRUB_DISABLE_OS_PROBER', true, '')
 		% , v('GRUB_DISABLE_RECOVERY', true, '')
 		% , v('GRUB_TERMINAL_INPUT', console, '')
 		% , v('GRUB_TERMINAL_OUTPUT', console, '')
 		% , v('', '', '')
+	]).
+
+grub_config_luks(TL, [
+		  v('GRUB_ENABLE_CRYPTODISK', y, '')
+		, v('GRUB_CMDLINE_LINUX_DEFAULT', V, 'Generic settings')
 	  ]) :-
 	uses_luks(TL), !,
-	findall(M, (grub_linux_cmdline(TL, L), member(M, L)), VL),
+	findall(M, (grub_linux_cmdline_luks(TL, L), member(M, L)), VL),
 	os_scmdl(VL, V).
-grub_config_luks(_TL, ['rd.luks'=0, v('GRUB_CMDLINE_LINUX_DEFAULT', 'loglevel=4', '')]).
+grub_config_luks(_TL, [
+		  v('GRUB_CMDLINE_LINUX_DEFAULT', V, 'Generic settings')
+	]) :-
+	VL = ['rd.luks'=0, loglevel=4],
+	os_scmdl(VL, V).
 
-grub_linux_cmdline(TL, ['rd.luks.name'=v(PUUID, LUKS_PD)]) :-
+grub_linux_cmdline_luks(TL, ['rd.luks.name'=v(PUUID, LUKS_PD)]) :-
 	member(bdev(luks, luks(_, PD)), TL),
 	lx_get_dev_uuid(PD, PUUID),
 	lx_split_dev(PD, _P, SDN),
 	luks_dev_name_short(SDN, LUKS_PD),
 	true.
-grub_linux_cmdline(_TL, [loglevel=4, slub_debug='FZ', slab_nomerge=1, pti=on, mce=0, 'printk.time'=1]).
+grub_linux_cmdline_luks(_TL, ['rd.auto'=1]) :-
+	inst_setting(hostonly, no).
+grub_linux_cmdline_luks(_TL, [loglevel=4, slub_debug='FZ', slab_nomerge=1, pti=on, mce=0, 'printk.time'=1]).
 
 grub_configure(TL, RD) :-
 	% Configure grub.

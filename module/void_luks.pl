@@ -33,6 +33,13 @@ setup_cryptab(PDL, RD) :-
 	close(S),
 	true.
 
+setup_cryptab_none(PD, RD) :-
+	atom_concat(RD, '/etc/crypttab', KF),
+	open(KF, write, S),
+	setup_cryptab_kf_none(S, PD),
+	close(S),
+	true.
+
 setup_cryptab_(S, [PD], _RD) :-
 	setup_cryptab_kf(S, PD),
 	true.
@@ -53,6 +60,14 @@ setup_cryptab_kf(S, PD) :-
 	lx_split_dev(PD, _P, SDN),
 	luks_dev_name_short(SDN, LUKS_PD),
 	format(S, '~w UUID=~w /boot/volume.key luks', [LUKS_PD, PUUID]),
+	nl(S),
+	true.
+
+setup_cryptab_kf_none(S, PD) :-
+	lx_get_dev_uuid(PD, PUUID),
+	lx_split_dev(PD, _P, SDN),
+	luks_dev_name_short(SDN, LUKS_PD),
+	format(S, '~w UUID=~w none luks', [LUKS_PD, PUUID]),
 	nl(S),
 	true.
 
@@ -83,5 +98,12 @@ setup_crypt(TL, RD) :-
 	create_keyfile(PD, RD),
 	% Setup crypttab
 	setup_cryptab(PDL, RD),
+	true.
+
+setup_crypt_none(TL, RD) :-
+	findall(PD, member(bdev(luks, luks(_, PD)), TL), PDL),
+	PDL = [PD| _],
+	% Setup crypttab
+	setup_cryptab_none(PD, RD),
 	true.
 

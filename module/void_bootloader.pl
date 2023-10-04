@@ -178,21 +178,28 @@ install_bootloader(gummiboot, _TL, _BD, RD) :- !,
 	% gummiboot_configure(TL, RD),
 	!.
 
-bootloader_kernel_params(TL, [
-		  root=v('UUID', RPID)
-		, init='/sbin/init'
-		, rw
-	]) :-
+/* Old code. */
+bootloader_kernel_params(TL, [root=v('UUID', RPID)]) :-
 	root_pd(TL, ROOT_PD),
 	lx_get_dev_uuid(ROOT_PD, RPID),
 	true.
+/* DO NOT delete. New code. It doesn't work with Limine and gpt_luks template
+bootloader_kernel_params(TL, L) :-
+	% Device
+	root_pd(TL, ROOT_PD),
+	( atom_concat('/dev/mapper/', _, ROOT_PD) ->
+	  L = [root=ROOT_PD]
+	; lx_get_dev_uuid(ROOT_PD, RPID),
+	  L = [root=v('UUID', RPID)]
+	),
+	lx_get_dev_uuid(ROOT_PD, RPID),
+	true.
+*/
+bootloader_kernel_params(_TL, [init='/sbin/init', rw]).
 bootloader_kernel_params(TL, L) :-
 	% LUKS
-	( memberchk(bdev(luks, luks(_, PD)), TL) ->
-	  lx_get_dev_uuid(PD, PDID),
-	  lx_split_dev(PD, _P, SDN),
-      luks_dev_name_short(SDN, LUKS_PD),
-	  L = ['rd.luks.name'=v(PDID, LUKS_PD)]
+	( uses_luks(TL) ->
+	  bootloader_kernel_params_luks(TL, L)
 	; L = ['rd.luks'=0]
 	),
 	true.
@@ -204,7 +211,6 @@ bootloader_kernel_params(_TL, [
 		, 'rd.dm'=0
 		, loglevel=4
 		, gpt
-		, add_efi_memmap
 		, 'vconsole.unicode'=1
 		, 'vconsole.keymap'=KB
 		, 'locale.LANG'=LC
@@ -213,6 +219,15 @@ bootloader_kernel_params(_TL, [
 	inst_setting(keymap, KB),
 	inst_setting(locale, LC),
 	true.
+
+bootloader_kernel_params_luks(TL, ['rd.luks.name'=v(PUUID, LUKS_PD)]) :-
+	member(bdev(luks, luks(_, PD)), TL),
+	lx_get_dev_uuid(PD, PUUID),
+	lx_split_dev(PD, _P, SDN),
+	luks_dev_name_short(SDN, LUKS_PD),
+	true.
+bootloader_kernel_params_luks(_TL, ['rd.auto'=1]) :-
+	inst_setting(hostonly, no).
 
 bootloader_write_cmdline(TL, S) :-
 	findall(P0, (bootloader_kernel_params(TL, PL0), member(P0, PL0)), AL),

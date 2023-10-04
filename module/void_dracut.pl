@@ -41,8 +41,10 @@ dracut_conf(luks, _TL, _RD, [
 	]).
 dracut_conf(luks, TL, RD, [v(install_items, ['/boot/volume.key', '/etc/crypttab'])]) :- !,
 	% In case of a dedicated boot partition we do not need a key-file.
-	\+ has_boot_part(TL),
-	setup_crypt(TL, RD).
+	( has_boot_part(TL) ->
+	  setup_crypt_none(TL, RD)
+	; setup_crypt(TL, RD)
+	).
 
 dracut_conf(lvm, _TL, _RD, [v(add_dracutmodules, [lvm]), v(add_drivers, [lvm])]) :- !.
 dracut_conf(mdraid, _TL, _RD, [v(add_dracutmodules, [mdraid]), v(add_drivers, [mdraid])]) :- !.

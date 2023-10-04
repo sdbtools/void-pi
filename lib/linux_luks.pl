@@ -10,7 +10,7 @@ lx_luks_dev_name(N, LUKS_PD) :-
 	true.
 
 lx_luks_format(Type, PD, PWD) :-
-	CL = [cryptsetup, '--type', Type, '--key-file=-', '--force-password', luksFormat, PD],
+	CL = [cryptsetup, '--type', Type, '--key-file=-', '--force-password', luksFormat, PD, '2>&1', '1>/dev/null'],
 	os_scmdl(CL, CA),
 	popen(CA, write, WS), !,
 	write(WS, PWD), % no nl(WS) should be here.

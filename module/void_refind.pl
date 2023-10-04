@@ -38,11 +38,8 @@ refind_kernel_params(TL, L) :-
 	true.
 refind_kernel_params(TL, L) :-
 	% LUKS
-	( memberchk(bdev(luks, luks(_, PD)), TL) ->
-	  lx_get_dev_uuid(PD, PDID),
-	  lx_split_dev(PD, _P, SDN),
-      luks_dev_name_short(SDN, LUKS_PD),
-	  L = ['rd.luks.name'=v(PDID, LUKS_PD)]
+	( uses_luks(TL) ->
+	  bootloader_kernel_params_luks(TL, L)
 	; L = ['rd.luks'=0]
 	),
 	true.
@@ -54,7 +51,6 @@ refind_kernel_params(_TL, [
 		, 'rd.dm'=0
 		, loglevel=4
 		, gpt
-		, add_efi_memmap
 		, 'vconsole.unicode'=1
 		, 'vconsole.keymap'=KB
 		, 'locale.LANG'=LC
