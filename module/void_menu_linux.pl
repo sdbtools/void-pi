@@ -45,8 +45,20 @@ menu_part_manually :-
 	os_call2([S, LN]),
 	retract(inst_setting(template(TT), TL)),
 	% Remove all selected partitions and file systems.
-	findall(E, (member(E, TL), E \= p4(_, _, _, _), E \= fs5(_, _, _, _, _)), NTL),
+	findall(E, (member(E, TL), E \= p4(_, _, _, _), E \= fs7(_, _, _, _, _, _, _)), NTL),
 	assertz(inst_setting(template(TT), NTL)),
+	true.
+
+menu_part_tmpl(OTN, NTN) :-
+	findall([TN, TD], (inst_setting(part_tmpl(TN), _), part_tmpl_info(TN, TD)), TL),
+	dialog_msg(radiolist, LABEL),
+	tui_radiolist_tag2(TL, OTN, LABEL, [title(' Select partition template ')], NTN),
+	true.
+
+menu_part_tmpl_btrfs(OTN, NTN) :-
+	findall([TN, TD], (inst_setting(part_tmpl_btrfs(TN), _), part_tmpl_info_btrfs(TN, TD)), TL),
+	dialog_msg(radiolist, LABEL),
+	tui_radiolist_tag2(TL, OTN, LABEL, [title(' Select partition template ')], NTN),
 	true.
 
 menu_part_select(TL) :-
@@ -77,7 +89,7 @@ update_part_info(PIL, OPL, PLO, IL, OL) :-
 % KL - list of partitions to keep.
 keep_part_(KL, p4(_PT, bd1([PD| _]), _CK, _SZ)) :- !,
 	memberchk(PD, KL).
-keep_part_(KL, fs5(_, _, _, [PD| _], _)) :- !,
+keep_part_(KL, fs7(_, _, _, [PD| _], _, _, _)) :- !,
 	memberchk(PD, KL).
 keep_part_(_KL, _).
 
@@ -85,7 +97,7 @@ keep_part_(_KL, _).
 add_part_(PIL, SL, [PD| T], IL, OL) :-
 	memberchk(PD, SL), !,
 	add_part_(PIL, SL, T, IL, OL).
-add_part_(PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), fs5(FS, '', '', [PD], keep)| OL]) :-
+add_part_(PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), fs7(FS, '', '', [PD], _CAL, _MOL, keep)| OL]) :-
 	% dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)
 	member(dev_part(PD,name(_SNAME,_KNAME,[DL|_]),part5(_PTTYPE,PT,_PARTUUID,_UUID,FS),SZ), PIL),
 	BD1 = bd1([PD|DL]), !,

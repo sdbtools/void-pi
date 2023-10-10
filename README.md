@@ -4,7 +4,7 @@ Void Linux installer implemented in GNU Prolog.
 
 Last tested | ISO                                                                                | Result
 ----------- | ---------------------------------------------------------------------------------- | ------
-2023-08-23  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
+2023-10-10  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
 2023-06-29  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
 2023-07-25  | [void-live-i686-20230628-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20230628-base.iso) | PASS
 2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
@@ -20,6 +20,7 @@ void-pi is a Void Linux installer similar to [void-installer](https://docs.voidl
 
 It extends void-installer in several ways:
 - provides predefined templates for [BTRFS](https://en.wikipedia.org/wiki/Btrfs), [LVM](https://en.wikipedia.org/wiki/Logical_volume_management), and [LUKS](https://en.wikipedia.org/wiki/Linux_Unified_Key_Setup).
+- provides predefined partitioning templates.
 - supports [rEFInd](https://rodsbooks.com/refind/), [Limine](https://limine-bootloader.org/), [Syslinux](https://wiki.syslinux.org/wiki/index.php?title=The_Syslinux_Project), and [Gummiboot](https://www.freedesktop.org/wiki/Software/systemd/systemd-boot/) boot managers
 - supports EFISTUB boot loader
 - supports multi-device configurations.
@@ -32,7 +33,8 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 
 - completely emulates `void-installer`.
 - install from Void ISO or network.
-- predefined templates for BTRFS, LVM, and LUKS.
+- predefined templates for LVM, LUKS, and combinations of them.
+- predefined partitioning templates.
 - selected devices will be automatically cleaned up.
 - TUI dynamically changes depending on selected template.
 - uses `/mnt` for chroot by default.
@@ -83,6 +85,45 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - GPT. LUKS. One device
 - GPT. LUKS. LVM. One device
 
+### Partitioning Templates
+
+#### BTRFS
+void-pi creates the following Btrfs subvolumes with a [flat layout][flat layout]:
+- root
+Subvolume name    | Mounting point    | Mount options
+---               | ---               | ---
+`@`               | `/`               |
+`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
+- root_home
+Subvolume name    | Mounting point    | Mount options
+---               | ---               | ---
+`@`               | `/`               |
+`@home`           | `/home`           | `nodev,nosuid`
+`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
+- max
+Subvolume name    | Mounting point    | Mount options
+---               | ---               | ---
+`@`               | `/`               |
+`@home`           | `/home`           | `nodev,nosuid`
+`@opt`            | `/opt`            | `nodev`
+`@srv`            | `/srv`            | `nodev,noexec,nosuid` + [nodatacow][nodatacow]
+`@var`            | `/var`            | `nodev,noexec,nosuid`
+`@var-cache-xbps` | `/var/cache/xbps` | `nodev,noexec,nosuid`
+`@var-lib-ex`     | `/var/lib/ex`     | `nodev,noexec,nosuid` + nodatacow
+`@var-log`        | `/var/log`        | `nodev,noexec,nosuid` + nodatacow
+`@var-opt`        | `/var/opt`        | `nodev,noexec,nosuid`
+`@var-spool`      | `/var/spool`      | `nodev,noexec,nosuid` + nodatacow
+`@var-tmp`        | `/var/tmp`        | `nodev,noexec,nosuid` + nodatacow
+`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
+
+#### All other
+
+- root
+    - `/` (size: whole device)
+- root_home
+    - `/` (size: 20GB)
+    - `/home` (size: remainder)
+
 ### Default settings
 
 All default settings can be changed via `Common Attrs` sub-menu.
@@ -102,7 +143,7 @@ All default settings can be changed via `Common Attrs` sub-menu.
     - snapshots are created for @, @opt, @var, @srv, and @home subvolumes.
     - btrbk is scheduled to run every day
 
-### Filesystem
+### Partitioning
 
 #### BIOS boot mode
 
@@ -116,25 +157,6 @@ All default settings can be changed via `Common Attrs` sub-menu.
 
 - `/dev/sdX1` is the EFI system partition (size: [550M][550M])
 - `/dev/sdX2` is the root filesystem (size: remainder)
-
-#### BTRFS layout
-
-void-pi creates the following Btrfs subvolumes with a [flat layout][flat layout]:
-
-Subvolume name    | Mounting point    | Mount options
----               | ---               | ---
-`@`               | `/`               |
-`@home`           | `/home`           | `nodev,nosuid`
-`@opt`            | `/opt`            | `nodev`
-`@srv`            | `/srv`            | `nodev,noexec,nosuid` + [nodatacow][nodatacow]
-`@var`            | `/var`            | `nodev,noexec,nosuid`
-`@var-cache-xbps` | `/var/cache/xbps` | `nodev,noexec,nosuid`
-`@var-lib-ex`     | `/var/lib/ex`     | `nodev,noexec,nosuid` + nodatacow
-`@var-log`        | `/var/log`        | `nodev,noexec,nosuid` + nodatacow
-`@var-opt`        | `/var/opt`        | `nodev,noexec,nosuid`
-`@var-spool`      | `/var/spool`      | `nodev,noexec,nosuid` + nodatacow
-`@var-tmp`        | `/var/tmp`        | `nodev,noexec,nosuid` + nodatacow
-`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
 
 #### F2FS options
 

@@ -15,7 +15,7 @@ action_info(keymap, 'Keyboard', 'Set system keyboard').
 action_info(locale, 'Locale', 'Set system locale').
 action_info(timezone, 'Timezone', 'Set system time zone').
 action_info(useraccount, 'User Account', 'Set primary user name and password').
-action_info(luks_info, 'LUKS Mapping Name', 'Set LUKS Mapping Name').
+action_info(luks_info, 'LUKS Mapping Name', 'Set LUKS mapping name').
 action_info(bootloader_dev, 'Bootloader Dev', 'Select disk to install bootloader').
 action_info(bootloader, 'Bootloader', 'Set bootloader application').
 action_info(network, 'Network', 'Set up the network').
@@ -28,20 +28,22 @@ action_info(root_passwd, 'Root Password', 'Set system root password').
 action_info(user_passwd, 'User Password', 'Set user password').
 action_info(luks_passwd, 'LUKS Password', 'Set LUKS password').
 action_info(btrfs_opt, 'Btrfs', 'Btrfs as root options').
-action_info(root_fs, 'Root FS', 'Set Root File System').
-action_info(mbr_size, 'MBR Size', 'Set MBR Size').
-action_info(esp_size, 'ESP Size', 'Set EFI System Partition Size').
-action_info(boot_size, 'Boot Size', 'Set Boot Partition Size').
+action_info(root_fs, 'Root FS', 'Set root file system').
+action_info(mbr_size, 'MBR Size', 'Set MBR size').
+action_info(esp_size, 'ESP Size', 'Set EFI system partition size').
+action_info(boot_size, 'Boot Size', 'Set boot partition size').
 action_info(lvm_info, 'LVM Info', 'Set LVM info').
-action_info(make_lvm_vg, 'VG', 'Create LVM Volume Group').
-action_info(make_lvm_lv, 'LV', 'Create LVM Logical Volume').
-action_info(make_luks, 'LUKS', 'Create LUKS Device').
-action_info(make_part, 'Partition', 'Create Partition').
+action_info(make_lvm_vg, 'VG', 'Create LVM volume group').
+action_info(make_lvm_lv, 'LV', 'Create LVM logical volume').
+action_info(make_luks, 'LUKS', 'Create LUKS device').
+action_info(make_part_wiz, 'Partition Wizard', 'Create partition').
+action_info(make_part_tmpl, 'Partition Template', 'Select partition template').
 action_info(make_part_manually, 'Partition', 'Manually partition disk(s)').
 action_info(part_select, 'Select Part', 'Select partition(s) to use').
 action_info(part_use, 'Partitions', 'Partitions to use during installation').
 action_info(bios_efi, 'BIOS/EFI', 'Support either BIOS or EFI, or both').
 action_info(hostonly, 'Host-only', 'Install only what is needed for booting the local host').
+action_info(soft, 'Software', 'Select software to install').
 
 boot_info(bios, 'Old BIOS boot method').
 boot_info(efi, 'New EFI boot method').
@@ -72,8 +74,8 @@ setting_value(TL, bootloader_dev, D) :- !,
 	; D = 'not set'
 	), !.
 setting_value(TL, root_fs, FS) :- !,
-	% fs5(Name, Label, MountPoint, [DevList], create/keep)
-	( memberchk(fs5(FS, _Label, '/', _DL, _CK), TL)
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	( memberchk(fs7(FS, _Label, '/', _DL, _CAL, _MOL, _CK), TL)
 	; FS = 'not set'
 	), !.
 setting_value(_TL, S, V1) :-
@@ -126,10 +128,12 @@ menu_soft(B, FS, IL, OL) :-
 	findall(S, soft_info(S, B, FS, _DepL, _Descr), SL),
 	( SL = [] ->
 	  OL = []
-	; maplist(menu_soft_, SL, AL),
+	; findall(SD, (member(S, SL), menu_soft_(S, SD)), AL),
 	  dialog_msg(checklist, LABEL),
-	  tui_checklist_tag2(AL, IL, LABEL, [title(' Select Software ')], OL)
-	  % tui_checklist_tag(AL, LABEL, [title(' Select Software ')], OL)
+	  tui_checklist_tag2(AL, IL, LABEL, [title(' Select Software ')], OL1),
+	  % tui_checklist_tag(AL, LABEL, [title(' Select Software ')], OL1),
+	  findall(soft(S), member(S, OL1), OL2),
+	  OL = [state(soft, ctx_soft(FS, B))|OL2]
 	),
 	true.
 
@@ -137,9 +141,49 @@ menu_soft_(S, [S, Descr]) :-
 	soft_info(S, _B, _FS, _DepL, Descr), !,
 	true.
 
-menu_soft_soft(B, FS, IL, OL1) :-
-	menu_soft(B, FS, IL, OL),
-	findall(soft(S), member(S, OL), OL1).
+menu_edit_main(C, TT, TL) :-
+	% tui_msgbox_w(TL),
+	menu_edit_main(TL, C, TT, TL, NTL),
+	retractall(inst_setting(template(TT), _)),
+	assertz(inst_setting(template(TT), NTL)),
+	true.
+
+menu_edit_main([state(root_fs, CTX)|T], root_fs, TT, _TL, [state(root_fs, ctx_rfs(PTT, NFS, B, DL))|L]) :- !,
+	CTX = ctx_rfs(PTT, OFS, B, DL),
+	menu_select_fs(TT, B, OFS, NFS),
+	( OFS = NFS ->
+	  L = T
+	; ( memberchk(state(make_part_tmpl, ctx_part(_PTT, _B, _FS, TN, _DL)), T)
+	  ; TN = root
+	  ), !,
+	  fs_to_fsl(PTT, NFS, TN, B, DL, L0),
+	  menu_edit_soft(NFS, T, B, SL),
+	  append(L0, SL, L)
+	), !,
+	true.
+menu_edit_main([state(make_part_tmpl, CTX)|T], make_part_tmpl, _TT, _TL, OL) :- !,
+	CTX = ctx_part(PTT, B, FS, OTN, DL),
+	menu_part_tmpl(OTN, NTN),
+	( OTN = NTN ->
+	  OL = [state(make_part_tmpl, CTX)|T]
+	; fs_to_fsl_6(PTT, FS, NTN, B, DL, L0),
+	  menu_edit_soft(FS, T, B, SL),
+	  append(L0, SL, OL)
+	), !,
+	true.
+menu_edit_main([state(soft, ctx_soft(FS, B))|T], soft, _TT, _TL, SL) :- !,
+	% root_fs(TL, FS),
+	menu_edit_soft(FS, T, B, SL),
+	true.
+menu_edit_main([H|T], C, TT, TL, [H|NTL]) :-
+	% tui_msgbox_w(H),
+	menu_edit_main(T, C, TT, TL, NTL).
+menu_edit_main([], _C, _TT, _TL, []).
+
+menu_edit_soft(FS, L, B, SL) :-
+	findall(S, member(soft(S), L), OSL),
+	menu_soft(B, FS, OSL, SL),
+	true.
 
 % OB - old bootloader.
 % NB - new bootloader.
@@ -149,7 +193,7 @@ menu_template(OT, OB, NB) :-
 	; maplist(template_to_menu, TL0, TL),
 	  dialog_msg(radiolist, LABEL),
 	  tui_radiolist_tag2(TL, OT, LABEL, [no-tags, title(' Choose configuration ')], NT)
-	),
+	), !,
 	switch_template(OT, NT, OB, NB),
 	true.
 
@@ -205,8 +249,9 @@ menu_common_opt(_TT, _TL, M) :-
 		, root_passwd
 		, useraccount
 		, user_passwd
-		, esp_size
 	].
+menu_common_opt(_TT, _TL, [esp_size]) :-
+	inst_setting(system(efi), _).
 menu_common_opt(_TT, _TL, [mbr_size]) :-
 	inst_setting(system(bios), _).
 menu_common_opt(TT, TL, [boot_size]) :-
@@ -230,35 +275,28 @@ menu_common(TT, TL) :-
 	cmd_action(A,TT1, TL1),
 	!.
 
+menu_main_info(_TT, _TL, [bios_efi, bootloader, template]).
+% menu_main_info(TT, _TL, [root_fs]) :-
+% 	TT \= manual.
+menu_main_info(manual, _TL, [bootloader_dev, make_part_manually, part_select, filesystem]).
+menu_main_info(_TT, TL, [ST]) :-
+	member(state(ST, _), TL).
+menu_main_info(_TT, _TL, [common_settings, review, install]).
+
 menu_main :-
 	dialog_msg(menu, LABEL),
-	M = [
-		  bios_efi
-		, bootloader
-		, template
-		, root_fs
-		, bootloader_dev
-		, make_part_manually
-		, part_select
-		, filesystem
-		, common_settings
-		, review
-		, install
-	],
 	repeat,
-	( inst_setting(template(manual), _) ->
-	  subtract(M, [root_fs], M1)
-	; subtract(M, [bootloader_dev, make_part_manually, part_select, filesystem], M1)
-	),
+	inst_setting(template(TT), TL),
+	findall(MI, (menu_main_info(TT, TL, MIL), member(MI, MIL)), M1),
+
 	maplist(menu_tag, M1, ML),
 	tui_menu_tag2(main, ML, LABEL, [extra-button, extra-label('Save'), cancel-label('Exit'), title(' Void Linux installation menu ')], Tag),
 	action_info(A, Tag, _),
-	inst_setting(template(TT), TL),
 	cmd_action(A, TT, TL),
 	true.
 
 cmd_menu(root_fs, TT, TL) :- !,
-	menu_root_fs_soft(TT, TL),
+	menu_edit_main(root_fs, TT, TL),
 	true.
 cmd_menu(btrfs_opt, _TT, _TL) :- !,
 	menu_btrfs,
@@ -321,6 +359,12 @@ cmd_menu(bootloader_dev, _TT, TL) :- !,
 	true.
 cmd_menu(make_part_manually, _TT, _TL) :- !,
 	menu_part_manually,
+	true.
+cmd_menu(make_part_tmpl, TT, TL) :- !,
+	menu_edit_main(make_part_tmpl, TT, TL),
+	true.
+cmd_menu(soft, TT, TL) :- !,
+	menu_edit_main(soft, TT, TL),
 	true.
 cmd_menu(part_select, _TT, TL) :- !,
 	menu_part_select(TL),

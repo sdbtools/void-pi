@@ -361,8 +361,7 @@ tui_make_box3_cmdlist(B, M, SO, UA, DL) :-
 	tui_merge_args(DEFA, UA, MA),
 	tui_make_args3(MA, SZA, TAL),
 	add_dquote(M, M1),
-	atom_concat('--', B, BA),
-	DL = [dialog, '--stdout', TAL, BA, M1, SZA, SO].
+	DL = [dialog, '--stdout', TAL, oo(B), M1, SZA, SO].
 
 tui_box3(B, M, SO, UA, OutL, RA) :-
 	tui_make_box3_cmdlist(B, M, SO, UA, DL),
@@ -376,8 +375,7 @@ tui_make_box2_cmdlist(B, M, SO, UA, DL) :-
 	tui_merge_args(DEFA, UA, MA),
 	tui_make_args2(MA, SZA, TAL),
 	add_dquote(M, M1),
-	atom_concat('--', B, BA),
-	DL = [dialog, '--stdout', TAL, BA, M1, SZA, SO].
+	DL = [dialog, '--stdout', TAL, oo(B), M1, SZA, SO].
 
 tui_tailbox2_unsafe(PL, B, M, SO, UA) :-
 	tui_make_box2_cmdlist(B, M, SO, UA, DL),
@@ -422,8 +420,7 @@ tui_spawn(B, PO, SO, UA, RC) :-
 	tui_def_args(B, DEFA),
 	tui_merge_args(DEFA, UA, MA),
 	tui_make_args2(MA, SZA, TAL),
-	atom_concat('--', B, BA),
-	DA = [TAL, BA, PO, SZA, SO],
+	DA = [TAL, oo(B), PO, SZA, SO],
 	os_ccmdl(DA, AL),
 	spawn(dialog, AL, RC).
 

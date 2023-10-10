@@ -55,8 +55,8 @@ validate_efi(TL) :-
 	), !,
 	get_bootloader(TL, B),
 	get_bootloader_mp(B, MP),
-	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
-	( memberchk(fs5(FS, _Label, MP, [PD], _CK), TL)
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	( memberchk(fs7(FS, _Label, MP, [PD], _CAL, _MOL, _CK), TL)
 	; tui_msgbox2(['The EFI System Partition', PD, 'has not yet been configured, please mount it at', MP], [title(' ERROR ')]),
 	  fail
 	), !,
@@ -337,7 +337,7 @@ wipe_disk(D) :-
 % TL - tree list.
 % PL - partition list.
 wipe_dev_tree_list(TL, PL) :-
-	maplist(wipe_dev_tree(PL), TL).
+	forall(member(T, TL), wipe_dev_tree(PL, T)).
 
 wipe_dev_tree(PL, tree(NAME, L)) :-
 	wipe_dev_tree_list(L, PL),
@@ -356,8 +356,9 @@ wipe_dev(part5(_PTTYPE,PARTTYPE,_PARTUUID,_UUID,_FSTYPE), D, _CN) :- !,
 wipe_dev(disk, D, _CN) :- !,
 	wipe_disk(D),
 	true.
-wipe_dev(lv(VG,_LV), _D, _CN) :- !,
-	lvm_vgremove_unsafe(VG),
+wipe_dev(lv(VG,LV), _D, _CN) :- !,
+	% lvm_vgremove_unsafe(VG),
+	lvm_lvremove_unsafe(VG, LV),
 	% wipe_disk(D),
 	true.
 wipe_dev(ET, D, _CN) :- !,
@@ -366,8 +367,7 @@ wipe_dev(ET, D, _CN) :- !,
 	fail.
 
 wipe_dev_part(linux_lvm, D) :-
-	% tui_msgbox(D),
-	lvm_pvremove(D),
+	lvm_pvremove_unsafe(D),
 	% wipe_disk(D),
 	true.
 wipe_dev_part(_T, _D) :-

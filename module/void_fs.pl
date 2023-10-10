@@ -8,31 +8,35 @@
 % https://wiki.syslinux.org/wiki/index.php?title=Filesystem#ext
 
 has_boot_part(TL) :-
-	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
-	memberchk(fs5(_FS, _Label, '/boot', _DL, _CK), TL), !,
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	memberchk(fs7(_FS, _Label, '/boot', _DL, _CAL, _MOL, _CK), TL), !,
 	true.
 
 has_root_part(TL) :-
-	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
-	memberchk(fs5(_FS, _Label, '/', _DL, _CK), TL), !,
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	memberchk(fs7(_FS, _Label, '/', _DL, _CAL, _MOL, _CK), TL), !,
+	true.
+has_root_part(TL) :-
+	member(fs5_multi(btrfs, _Label, _DL, PTL, _CK), TL),
+	memberchk(subv(_Name, '/', _MOL, _), PTL), !,
 	true.
 
 has_usr_part(TL) :-
-	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
-	memberchk(fs5(_FS, _Label, '/usr', _DL, _CK), TL), !,
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	memberchk(fs7(_FS, _Label, '/usr', _DL, _CAL, _MOL, _CK), TL), !,
 	true.
 
 root_pd(TL, PD) :-
-	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
-	memberchk(fs5(_FS, _Labe1, '/', [PD| _], _CK), TL),
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	memberchk(fs7(_FS, _Labe1, '/', [PD| _], _CAL, _MOL, _CK), TL),
 	!.
 root_pd(_TL, _PD) :-
 	tui_msgbox2(['root partition was not found']),
 	fail.
 
 root_fs(TL, FS) :-
-	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
-	memberchk(fs5(FS, _Labe1, '/', _DL, _CK), TL).
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	memberchk(fs7(FS, _Labe1, '/', _DL, _CAL, _MOL, _CK), TL).
 
 boot_pref(TL, '') :-
 	has_boot_part(TL),
@@ -89,10 +93,6 @@ mkfs(zfs, _B, Title, [PD, _], Label, RD) :- !,
 	% os_shell2([mkdir, '-p', '/mnt/etc/zfs']),
 	% os_shell2([zpool, set, 'cachefile=/mnt/etc/zfs/zpool.cache', zroot]),
 	!.
-mkfs(btrfs, _B, Title, DL, Label, RD) :- !,
-	tui_progressbox_safe(['mkfs.btrfs', o('L', dq(Label)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	DL = [D| _],
-	create_btrfs_subv(D, RD).
 mkfs(bcachefs, _B, Title, DL, Label, _RD) :- !,
 	tui_progressbox_safe(['mkfs.bcachefs', o('L', dq(Label)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
 	true.
@@ -119,18 +119,31 @@ mkfs(xfs, _B, Title, DL, Label, _RD) :- !,
 	true.
 mkfs(swap, _B, _Title, [PD| _], _Label, _RD) :- !,
 	os_shell2_rc([swapoff, PD, '>/dev/null', '2>&1'], _),
-	( os_shell2l([mkswap, PD, '2>&1']) ->
-	  true
+	( os_shell2l([mkswap, PD, '2>&1'])
 	; tui_msgbox('ERROR: failed to create swap'),
 	  fail
-	),
-	( os_shell2l([swapon, PD, '2>&1']) ->
-	  true
+	), !,
+	( os_shell2l([swapon, PD, '2>&1'])
 	; tui_msgbox('ERROR: failed to activate swap'),
 	  fail
-	),
+	), !,
 	true.
 mkfs(FS, _B, _Title, _, _, _, _RD) :- !,
+	tui_msgbox2(['Unknown filesystem', FS]),
+	fail.
+
+mkfs_multi(btrfs, Title, DL, PTL, Label, RD) :- !,
+	tui_progressbox_safe(['mkfs.btrfs', o('L', dq(Label)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
+	( inst_setting(fs_attr(btrfs, '/', _), mount(AL))
+	; AL = [rw, noatime]
+	), !,
+	DL = [D| _],
+	os_call2([mount, o(o, lc(AL)), D, RD]),
+	% create_btrfs_subv(RD),
+	mkfs_multi_btrfs(PTL, RD),
+	os_call2([umount, RD]),
+	true.
+mkfs_multi(FS, _Title, _DL, _PTL, _Label, _RD) :- !,
 	tui_msgbox2(['Unknown filesystem', FS]),
 	fail.
 
@@ -183,8 +196,8 @@ mk_lvm_lvcreate(VG, lv(LV, _SZ)) :-
 % Get list of mounting points in order in which they should be mounted (except of swap).
 get_mp_list(TL, MPL1) :-
 	% Ignore swap partition
-	% fs5(FileSystem, Label, MountPoint, [device_list], create/keep)
-	findall(MP, (member(fs5(FS, _Label, MP, _DL, _CK), TL), FS \= swap), MPL0),
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	findall(MP, (member(fs7(FS, _Label, MP, _DL, _CAL, _MOL, _CK), TL), FS \= swap), MPL0),
 	sort(MPL0, MPL1),
 	true.
 
@@ -194,9 +207,9 @@ mount_fs(swap, _D, _MP, _RD) :-
 % Ignore empty mount point.
 mount_fs(_FS, _D, '', _RD) :-
 	!.
-mount_fs(btrfs, D, _MP, RD) :-
-	mount_btrfs(D, RD),
-	!.
+% mount_fs(btrfs, D, _MP, RD) :-
+% 	mount_btrfs(D, RD),
+% 	!.
 mount_fs(zfs, _D, _MP, _RD) :-
 	% tui_msgbox2([before, zfs, mount, 'zroot/ROOT/void']),
 	% % Mount the ZFS hierarchy
@@ -219,10 +232,18 @@ mount_fs(FS, D, MP, _RD) :-
 	tui_msgbox2(['mount_fs has failed.', [FS, D, MP]], [sz([6, 40])]),
 	fail.
 
+mount_fs_multi(btrfs, D, PTL, RD) :-
+	mount_btrfs_muli(D, PTL, RD),
+	!.
+mount_fs_multi(FS, D, _PTL, _RD) :-
+	tui_msgbox2(['mount_fs_multi has failed.', FS, D], [sz([6, 40])]),
+	fail.
+
 umount_mnt(RD) :-
 	os_shell2([umount, '--recursive', RD, '2>/dev/nul']), !.
 umount_mnt(_RD).
 
+/* Does not seem to be needed
 % PV - long device name
 clean_mnt_lvm_(pv(PV, VG)) :-
 	lvm_pvremove_unsafe(VG, PV),
@@ -230,8 +251,11 @@ clean_mnt_lvm_(pv(PV, VG)) :-
 clean_mnt_lvm_(pv(PV, VG)) :-
 	tui_msgbox2(['Removing of PV ', PV, 'from VG', VG, 'has failed.']),
 	fail.
+*/
 
+% vg(Name, [PhysicalVolumeList], [LogicalVolumeList])
 ensure_lvm(TL) :-
+	% Check for already tacken VG-LV pairs.
 	lx_list_dev_part(PL),
 	member(bdev(lvm, vg(VG, _, LVL)), TL),
 	member(lv(LV, _SZ), LVL),
@@ -239,7 +263,19 @@ ensure_lvm(TL) :-
 	member(dev_part(LVM_PD,_,_,_), PL), !,
 	PL = [dev_part(D2,_,_,_)| _],
 	format_to_atom(M, 'LVM device ~w (VG: ~w, LV: ~w) already exists on the device ~w', [LVM_PD, VG, LV, D2]),
-	tui_msgbox(M, [title(' Ensure LVM ERROR ')]),
+	tui_msgbox(M, [title(' Ensure LVM ERROR ')]), !,
 	fail.
-ensure_lvm(_TL).
+ensure_lvm(TL) :-
+	% Check for already tacken VG.
+	findall(VG1, member(bdev(lvm, vg(VG1, _, _LVL)), TL), VGL),
+	sort(VGL, SVGL),
+	lvm_pvs(L),
+	member(VG, SVGL),
+	memberchk(pv(PV, VG), L),
+	format_to_atom(M, 'Volume group called "~w" already exists on the device ~w', [VG, PV]),
+	tui_msgbox(M, [title(' Ensure LVM ERROR ')]), !,
+	fail.
+ensure_lvm(_TL) :-
+	% halt,
+	true.
 

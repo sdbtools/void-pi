@@ -5,8 +5,8 @@
 % https://openzfs.github.io/openzfs-docs/man/master/8/zpool.8.html#ENVIRONMENT_VARIABLES
 
 uses_zfs(TL) :-
-	% fs5(Name, Label, MountPoint, [DevList], create/keep)
-	memberchk(fs5(zfs, _, _, _, _), TL),
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	memberchk(fs7(zfs, _, _, _, _, _, _), TL),
 	!.
 
 make_zfs_pool_cmd(MP, DS, AL, [zfs, create, '-o', MPA|T]) :-

@@ -66,20 +66,28 @@ def_settings :-
 	assertz(inst_setting(boot_size, '1G')),
 	assertz(inst_setting(root_dir, '/mnt')),
 	assertz(inst_setting(hostonly, no)),
+
 	% fs_attr(Name, MountPoint, Bootloader)
 	assertz(inst_setting(fs_attr(btrfs, '/', _), mount([rw, noatime, 'compress-force'=zstd, space_cache=v2, commit=120]))),
 	assertz(inst_setting(fs_attr(vfat, '/boot', _), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
 	assertz(inst_setting(fs_attr(vfat, '/boot/efi', _), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
 	assertz(inst_setting(fs_attr(f2fs, '/', _), mount([rw, compress_algorithm=lz4, compress_chksum, atgc, gc_merge, lazytime]))),
+	assertz(inst_setting(fs_attr(tmp, _, _), mount([defaults, nosuid, nodev]))),
+	assertz(inst_setting(fs_attr(proc, _, _), mount([nodev, noexec, nosuid, hidepid=2, gid=proc]))),
+	assertz(inst_setting(fs_attr(efivarfs, _, _), mount([defaults]))),
+	assertz(inst_setting(fs_attr(swap, _, _), mount([defaults]))),
+
 	assertz(inst_setting(fs_attr(f2fs, '/', _), create([extra_attr, inode_checksum, sb_checksum, compression, encrypt]))),
 	% https://wiki.syslinux.org/wiki/index.php?title=Filesystem#ext
 	assertz(inst_setting(fs_attr(ext4, '/', syslinux), create(['^64bit']))),
 	assertz(inst_setting(fs_attr(ext4, '/boot', syslinux), create(['^64bit']))),
+
 	assertz(inst_setting(source, local)),
 	assertz(inst_setting(hostname, voidpp)),
 	assertz(inst_setting(lvm, lv(void, void, ''))),
 	assertz(inst_setting(luks, luks(crypt))),
 	assertz(inst_setting(config_file, 'settings.pl')),
+	assertz(inst_setting(part(root), [])),
 
 	enable_template(manual, grub2),
 
@@ -90,8 +98,8 @@ source_dependency_pkg(TT, TL, Distro, DL) :-
 
 source_dep(_TT, TL, Distro, D) :-
 	% Collect all used filesystems.
-	% fs5(Name, Label, MountPoint, [DevList], create/keep)
-	findall(FS, member(fs5(FS, _Label, _MP, _DL, _CK), TL), FSL0),
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	findall(FS, member(fs7(FS, _Label, _MP, _DL, _CAL, _MOL, _CK), TL), FSL0),
 	sort(FSL0, FSL),
 	% tui_msgbox2(PTL),
 	member(F, FSL),
@@ -237,6 +245,13 @@ run_cmd(_TT, TL, RD, mkfs(FS, DL, Label)) :- !,
 	get_bootloader(TL, B),
 	mkfs(FS, B, Title, DL, Label, RD),
 	true.
+run_cmd(_TT, _TL, RD, mkfs_multi(FS, DL, PTL, Label)) :- !,
+	format_to_atom(Title, ' Creating filesystem ~w ', [FS]),
+	mkfs_multi(FS, Title, DL, PTL, Label, RD),
+	true.
+run_cmd(_TT, _TL, RD, mount_multi(FS, D, PTL)) :- !,
+	mount_fs_multi(FS, D, PTL, RD),
+	true.
 run_cmd(_TT, _TL, RD, mount(FS, PD, MP)) :- !,
 	mount_fs(FS, PD, MP, RD),
 	true.
@@ -296,23 +311,29 @@ make_cmd(TT, TL, part(D, SPL)) :-
 	sort(PL0, SPL),
 	true.
 make_cmd(_TT, TL, modprobe(FS)) :-
-	% fs5(Name, Label, MountPoint, [DevList], create/keep)
-	findall(FS0, (member(fs5(FS0, _Label, _MP, _DL, _CK), TL), \+ memberchk(FS0, [swap, lvm, luks])), FSL),
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	findall(FS0, (member(fs7(FS0, _Label, _MP, _DL, _CAL, _MOL, _CK), TL), \+ memberchk(FS0, [swap, lvm, luks])), FSL),
 	sort(FSL, SFSL),
 	member(FS, SFSL),
 	true.
 make_cmd(_TT, TL, mkbd(BD, CMD)) :-
 	member(bdev(BD, CMD), TL),
 	true.
+make_cmd(_TT, TL, mkfs_multi(FS, DL, PTL, Label)) :-
+	member(fs5_multi(FS, Label, DL, PTL, create), TL),
+	true.
 make_cmd(_TT, TL, mkfs(FS, DL, Label)) :-
-	% fs5(Name, Label, MountPoint, [DevList], create/keep)
-	member(fs5(FS, Label, _MP, DL, create), TL),
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	member(fs7(FS, Label, _MP, DL, _CAL, _MOL, create), TL),
+	true.
+make_cmd(_TT, TL, mount_multi(FS, D, PTL)) :-
+	member(fs5_multi(FS, _Label, [D|_], PTL, create), TL),
 	true.
 make_cmd(_TT, TL, mount(FS, PD, MP)) :-
 	get_mp_list(TL, MPL),
 	member(MP, MPL),
-	% fs5(Name, Label, MountPoint, [DevList], create/keep)
-	member(fs5(FS, _Label, MP, [PD| _], _CK), TL),
+	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
+	member(fs7(FS, _Label, MP, [PD| _], _CAL, _MOL, _CK), TL),
 	true.
 make_cmd(_TT, _TL, install_pkg(IM)) :-
 	inst_setting(source, IM),
