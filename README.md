@@ -89,18 +89,24 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 
 #### BTRFS
 void-pi creates the following Btrfs subvolumes with a [flat layout][flat layout]:
+
 - root
+
 Subvolume name    | Mounting point    | Mount options
 ---               | ---               | ---
 `@`               | `/`               |
 `@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
+
 - root_home
+
 Subvolume name    | Mounting point    | Mount options
 ---               | ---               | ---
 `@`               | `/`               |
 `@home`           | `/home`           | `nodev,nosuid`
 `@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
+
 - max
+
 Subvolume name    | Mounting point    | Mount options
 ---               | ---               | ---
 `@`               | `/`               |
