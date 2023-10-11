@@ -179,7 +179,7 @@ partition_set_efi_1(TT, B, FS, [d4(D, SN, _SDN, N)| T], [
 		p4(sys_efi, bd1([PD, D]), create, ESP_SZ),
 		fs7(vfat, efi, MP, [PD], [], MOL, create)| L]
 		) :-
-	MOL = '/boot/efi',
+	MP = '/boot/efi',
 	get_mol(FS, MP, MOL),
 	lx_part_name(D, N, PD),
 	inst_setting(esp_size, ESP_SZ),
