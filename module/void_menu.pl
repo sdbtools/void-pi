@@ -163,7 +163,7 @@ menu_edit_main([state(root_fs, CTX)|T], root_fs, TT, _TL, [state(root_fs, ctx_rf
 	true.
 menu_edit_main([state(make_part_tmpl, CTX)|T], make_part_tmpl, _TT, _TL, OL) :- !,
 	CTX = ctx_part(PTT, B, FS, OTN, DL),
-	menu_part_tmpl(OTN, NTN),
+	menu_part_tmpl(FS, OTN, NTN),
 	( OTN = NTN ->
 	  OL = [state(make_part_tmpl, CTX)|T]
 	; fs_to_fsl_6(PTT, FS, NTN, B, DL, L0),

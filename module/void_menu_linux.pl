@@ -49,14 +49,8 @@ menu_part_manually :-
 	assertz(inst_setting(template(TT), NTL)),
 	true.
 
-menu_part_tmpl(OTN, NTN) :-
-	findall([TN, TD], (inst_setting(part_tmpl(TN), _), part_tmpl_info(TN, TD)), TL),
-	dialog_msg(radiolist, LABEL),
-	tui_radiolist_tag2(TL, OTN, LABEL, [title(' Select partition template ')], NTN),
-	true.
-
-menu_part_tmpl_btrfs(OTN, NTN) :-
-	findall([TN, TD], (inst_setting(part_tmpl_btrfs(TN), _), part_tmpl_info_btrfs(TN, TD)), TL),
+menu_part_tmpl(FS, OTN, NTN) :-
+	findall([TN, TD], (part_tmpl(FS, TN, _), part_tmpl_info(FS, TN, TD)), TL),
 	dialog_msg(radiolist, LABEL),
 	tui_radiolist_tag2(TL, OTN, LABEL, [title(' Select partition template ')], NTN),
 	true.

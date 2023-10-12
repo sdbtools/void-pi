@@ -19,6 +19,11 @@ part_tmpl_info_btrfs(root, 'Single root subvolume').
 part_tmpl_info_btrfs(root_home, 'Root + home subvolumes').
 part_tmpl_info_btrfs(max, 'Max complexity').
 
+part_tmpl_info(btrfs, Name, Descr) :- !,
+	part_tmpl_info_btrfs(Name, Descr).
+part_tmpl_info(_FS, Name, Descr) :-
+	part_tmpl_info(Name, Descr).
+
 setup_fs_template :-
 	% dataset(name, mount_point, mount_attrs)
 	assertz(inst_setting(zfs, dataset('ROOT', 'none', ['canmount=off']))),
@@ -71,6 +76,11 @@ setup_fs_template :-
 		])),
 
 	true.
+
+part_tmpl(btrfs, Name, L) :- !,
+	inst_setting(part_tmpl_btrfs(Name), L).
+part_tmpl(_FS, Name, L) :-
+	inst_setting(part_tmpl(Name), L).
 
 % OT - old template
 % NT - new template
@@ -163,12 +173,13 @@ partition_set_efi(TT, B, FS, DL, L) :-
 % mount EFI to /boot instead of /boot/efi
 partition_set_efi_1(TT, B, FS, [d4(D, SN, _SDN, N)| T], [
 		p4(sys_efi, bd1([PD, D]), create, ESP_SZ),
-		fs7(vfat, efi, MP, [PD], [], MOL, create)| L]
+		fs7(EFI_FS, efi, MP, [PD], [], MOL, create)| L]
 		) :-
 	bootloader_boot_efi(BL),
 	memberchk(B, BL), !,
+	EFI_FS = vfat,
 	MP = '/boot',
-	get_mol(FS, MP, MOL),
+	get_mol(EFI_FS, MP, MOL),
 	lx_part_name(D, N, PD),
 	inst_setting(esp_size, ESP_SZ),
 	N1 is N + 1,
@@ -177,10 +188,11 @@ partition_set_efi_1(TT, B, FS, [d4(D, SN, _SDN, N)| T], [
 	partition_set_template(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
 partition_set_efi_1(TT, B, FS, [d4(D, SN, _SDN, N)| T], [
 		p4(sys_efi, bd1([PD, D]), create, ESP_SZ),
-		fs7(vfat, efi, MP, [PD], [], MOL, create)| L]
+		fs7(EFI_FS, efi, MP, [PD], [], MOL, create)| L]
 		) :-
+	EFI_FS = vfat,
 	MP = '/boot/efi',
-	get_mol(FS, MP, MOL),
+	get_mol(EFI_FS, MP, MOL),
 	lx_part_name(D, N, PD),
 	inst_setting(esp_size, ESP_SZ),
 	N1 is N + 1,
@@ -189,11 +201,12 @@ partition_set_efi_1(TT, B, FS, [d4(D, SN, _SDN, N)| T], [
 
 partition_set_boot(TT, B, FS, [d4(D, SN, _SDN, N)| T], [
 		p4(linux_data, bd1([PD, D]), create, BOOT_SZ),
-		fs7(ext4, boot, MP, [PD], [], MOL, create)| L]
+		fs7(BOOT_FS, boot, MP, [PD], [], MOL, create)| L]
 		) :-
 	need_boot_part(TT, B, FS), !,
+	BOOT_FS = ext4,
 	MP = '/boot',
-	get_mol(FS, MP, MOL),
+	get_mol(BOOT_FS, MP, MOL),
 	lx_part_name(D, N, PD),
 	inst_setting(boot_size, BOOT_SZ),
 	N1 is N + 1,
@@ -331,12 +344,8 @@ wiz_cmd(bootloader_dev, DCL, [bootloader_dev(DEV3)| L]) :- !,
 	menu_wiz_action(DCL, L),
 	true.
 
-fs_to_p4l_fsl(btrfs, OTN, B, DL, L) :- !,
-	menu_part_tmpl_btrfs(OTN, NTN),
-	fs_to_p4l_fsl_5(btrfs, NTN, B, DL, L),
-	true.
 fs_to_p4l_fsl(FS, OTN, B, DL, L) :-
-	menu_part_tmpl(OTN, NTN),
+	menu_part_tmpl(FS, OTN, NTN),
 	fs_to_p4l_fsl_5(FS, NTN, B, DL, L),
 	true.
 
@@ -361,7 +370,7 @@ fs_to_p4l_fsl_5(FS, TN, B, DL, L) :-
 	true.
 
 fs_to_fsl_d(btrfs, OTN, B, D, L) :- !,
-	menu_part_tmpl_btrfs(OTN, NTN),
+	menu_part_tmpl(btrfs, OTN, NTN),
 	fs_to_fsl_d_5(btrfs, NTN, B, D, L),
 	true.
 fs_to_fsl_d(FS, OTN, B, D, L) :-
@@ -380,12 +389,8 @@ fs_to_fsl_d_5(FS, _TN, _B, D, L) :-
 	L = [fs7(FS, void, '/', [D], [], MOL, create)],
 	true.
 
-fs_to_lvl_fsl(btrfs, OTN, B, PDL, L) :- !,
-	menu_part_tmpl_btrfs(OTN, NTN),
-	fs_to_lvl_fsl_5(btrfs, NTN, B, PDL, L),
-	true.
 fs_to_lvl_fsl(FS, OTN, B, PDL, L) :-
-	menu_part_tmpl(OTN, NTN),
+	menu_part_tmpl(FS, OTN, NTN),
 	fs_to_lvl_fsl_5(FS, NTN, B, PDL, L),
 	true.
 
@@ -412,12 +417,8 @@ fs_to_lvl_fsl_5(FS, TN, B, PDL, L) :-
 	],
 	true.
 
-fs_to_fsl(PTT, btrfs, OTN, B, DL, L) :- !,
-	menu_part_tmpl_btrfs(OTN, NTN),
-	fs_to_fsl_6(PTT, btrfs, NTN, B, DL, L),
-	true.
 fs_to_fsl(PTT, FS, OTN, B, DL, L) :- !,
-	menu_part_tmpl(OTN, NTN),
+	menu_part_tmpl(FS, OTN, NTN),
 	fs_to_fsl_6(PTT, FS, NTN, B, DL, L),
 	true.
 
