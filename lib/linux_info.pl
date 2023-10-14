@@ -12,7 +12,6 @@ os_gpt_part_type('d3bfe2de-3daf-11df-ba40-e3a556d89593', sys_iffs, 'Intel Fast F
 os_gpt_part_type('f4019732-066e-4e12-8273-346c5641494f', sys_sony_boot, 'Sony boot partition').
 os_gpt_part_type('bfbfafe7-a34f-448a-9a5b-6213eb736c22', sys_lenovo_boot, 'Lenovo boot partition').
 
-% Windows
 os_gpt_part_type('e3c9e316-0b5c-4db8-817d-f92df00215ae', win_msr, 'Microsoft Reserved Partition (MSR)').
 os_gpt_part_type('ebd0a0a2-b9e5-4433-87c0-68b6b72699c7', win_data, 'Basic data partition').
 os_gpt_part_type('5808c8aa-7e8f-42e0-85d2-e1e90434cfb3', win_ldm_metadata, 'Logical Disk Manager (LDM) metadata partition').

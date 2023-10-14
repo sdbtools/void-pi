@@ -9,7 +9,7 @@ Last tested | ISO                                                               
 2023-07-25  | [void-live-i686-20230628-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20230628-base.iso) | PASS
 2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
 2023-06-29  | [void-live-i686-20210930.iso](https://repo-default.voidlinux.org/live/20210930/void-live-i686-20210930.iso) | PASS
-2023-08-14  | [hrmpf-x86_64-6.1.3_1-20230105.iso ](https://github.com/leahneukirchen/hrmpf/releases/download/v20230105/hrmpf-x86_64-6.1.3_1-20230105.iso) | PASS
+2023-10-14  | [hrmpf-x86_64-6.1.3_1-20230105.iso ](https://github.com/leahneukirchen/hrmpf/releases/download/v20230105/hrmpf-x86_64-6.1.3_1-20230105.iso) | PASS
 2023-08-22  | [void-live-lxqt-unofficial-x86_64-6.3.13_1-20230821.iso](https://voidbuilds.xyz/download/void-live-lxqt-unofficial-x86_64-6.3.13_1-20230821.iso) | PASS
 
 ## Description
@@ -19,9 +19,9 @@ Last tested | ISO                                                               
 void-pi is a Void Linux installer similar to [void-installer](https://docs.voidlinux.org/installation/live-images/guide.html).
 
 It extends void-installer in several ways:
-- provides predefined templates for [BTRFS](https://en.wikipedia.org/wiki/Btrfs), [LVM](https://en.wikipedia.org/wiki/Logical_volume_management), and [LUKS](https://en.wikipedia.org/wiki/Linux_Unified_Key_Setup).
-- provides predefined partitioning templates.
-- supports [rEFInd](https://rodsbooks.com/refind/), [Limine](https://limine-bootloader.org/), [Syslinux](https://wiki.syslinux.org/wiki/index.php?title=The_Syslinux_Project), and [Gummiboot](https://www.freedesktop.org/wiki/Software/systemd/systemd-boot/) boot managers
+- provides predefined templates for [LVM](https://en.wikipedia.org/wiki/Logical_volume_management), and [LUKS](https://en.wikipedia.org/wiki/Linux_Unified_Key_Setup).
+- provides predefined partitioning templates for block devices and [BTRFS](https://en.wikipedia.org/wiki/Btrfs) and [ZFS](https://en.wikipedia.org/wiki/ZFS).
+- supports [rEFInd](https://rodsbooks.com/refind/), [Limine](https://limine-bootloader.org/), [Syslinux](https://wiki.syslinux.org/wiki/index.php?title=The_Syslinux_Project), [Gummiboot](https://www.freedesktop.org/wiki/Software/systemd/systemd-boot/), and [ZFSBootMenu](https://docs.zfsbootmenu.org/) boot managers
 - supports EFISTUB boot loader
 - supports multi-device configurations.
 - supports either BIOS or UEFI, or both boot modes.
@@ -47,15 +47,20 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
     - BIOS
     - both
 - Boot managers
-    - uses GRUB, rEFInd, Limine, Syslnux, or Gummiboot as a boot manager.
-    - uses EFISTUB as a boot loader.
-    - GRUB supports fat, btrfs, ext2, ext3, ext4, and xfs file systems.
-    - rEFInd supports fat, btrfs, ext2, ext3, and ext4 file systems.
-    - rEFInd is configured to use kernel auto detection.
+    - Uses GRUB, rEFInd, Limine, Syslnux, or Gummiboot as a boot manager.
+    - Uses EFISTUB as a boot loader.
+    - GRUB supports fat, btrfs, ext2, ext3, ext4, xfs and zfs file systems.
+    - REFInd supports fat, btrfs, ext2, ext3, and ext4 file systems.
+    - REFInd is configured to use kernel auto detection.
     - Limine supports fat, ext2, ext3, and ext4 file systems.
     - Syslinux supports fat, ext2, ext3, and ext4 file systems.
     - EFISTUB and Gummiboot are enabled with UEFI and support fat, ext2, ext3, ext4, f2fs, and xfs file systems. (btrfs is not supported at this time)
-    - if a boot manager doesn't support a file system (or LVM, or LUKS), then installer will create an ext4 `/boot` partition.
+    - ZFSBootMenu is enabled only with "Manual" and "GPT. Basic" templates at this time.
+    - If a boot manager doesn't support a file system (or LVM, or LUKS), then installer will create an ext4 `/boot` partition.
+- ZFS
+    - Requires [hrmpf](https://github.com/leahneukirchen/hrmpf/releases) ISO.
+    - Supported by GRUB and ZFSBootMenu bootmanagers.
+    - In case of GRUB only "GPT. Basic" template is supported at this time.
 - LUKS
     - LUKS can be used with GRUB, rEFInd, Limine, and Syslinux.
     - In case of GRUB whole system is located on LUKS, including encrypted `/boot`. LUKS1 is used because GRUB2 doesn't support LUKS2.
@@ -69,6 +74,9 @@ void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 - Gummiboot
     - The kernel and initramfs files are located in the EFI system partition (aka ESP).
     - btrfs is not supported.
+- ZFSBootMenu
+    - Only direct EFI booting is supported at this time.
+    - Enabled only with "Manual" and "GPT. Basic" templates at this time.
 - Multi-device support
     - Multi-device configurations are available with BTRFS and LVM.
 - Additional software
@@ -121,6 +129,39 @@ Subvolume name    | Mounting point    | Mount options
 `@var-spool`      | `/var/spool`      | `nodev,noexec,nosuid` + nodatacow
 `@var-tmp`        | `/var/tmp`        | `nodev,noexec,nosuid` + nodatacow
 `@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
+
+#### ZFS
+
+- root
+ 
+Dataset name      | Mounting point    | Options
+---               | ---               | ---
+`/ROOT/void`      | `/`               | `canmount=noauto, atime=off`
+
+- root_home
+
+Dataset name      | Mounting point    | Options
+---               | ---               | ---
+`/ROOT/void`      | `/`               | `canmount=noauto, atime=off`
+`/home`           | `/home`           | `atime=off`
+
+- max
+
+Dataset name      | Mounting point    | Options
+---               | ---               | ---
+`/ROOT/void`      | `/`               | `canmount=noauto, atime=off`
+`/home`           | `/home`           | `atime=off`
+`/opt`            | `/opt`            | `atime=off`
+`/srv`            | `/srv`            | `atime=off`
+`/tmp`            | `/tmp`            | `com.sun:auto-snapshot=false, atime=off`
+`/var`            | `/var`            | `canmount=off, atime=off`
+`/var-lib`        | `/var/lib`        | `canmount=off, atime=off`
+`/var-cache-xbps` | `/var/cache/xbps` | `com.sun:auto-snapshot=false, atime=off`
+`/var-lib-ex`     | `/var/lib/ex`     | `atime=off`
+`/var-log`        | `/var/log`        | `atime=off`
+`/var-opt`        | `/var/opt`        | `atime=off`
+`/var-spool`      | `/var/spool`      | `atime=off`
+`/var-tmp`        | `/var/tmp`        | `com.sun:auto-snapshot=false, atime=off`
 
 #### All other
 
@@ -216,6 +257,7 @@ lz4        | Extremely Fast Compression algorithm | N
 snooze     | cron replacement | N
 btrbk      | Tool for creating snapshots | N
 grub-btrfs | Add a btrfs snapshots sub-menu to GRUB | N
+zfs        | ZFS filesystem | N
 
 ## Licensing
 

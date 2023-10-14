@@ -24,7 +24,10 @@ part_sgdisk_pl(TL, D, PL) :-
 	% tui_msgbox2([part_sgdisk_pl, PL]),
 	make_sgdisk_par(TL, PL, 1, SGPL),
 	format_to_atom(MA, ' Partitioning ~w ', [D]),
-	tui_progressbox_safe([sgdisk, '--zap-all', '--clear', '--mbrtogpt', SGPL, D], '', [title(MA), sz([6, 60])]),
+	tui_progressbox_safe([sgdisk, '--zap-all', '--clear', '--mbrtogpt', SGPL, D, '2>&1'], '', [title(MA), sz([6, 60])]),
+	% This is required for zfs.
+	% Watch the udev event queue, and exit if all current events are handled.
+	os_call2([udevadm, settle]),
 	true.
 
 validate_fs(TL) :-
@@ -116,7 +119,7 @@ install_pkg(TL, rootfs, RD) :-
 	assertz(inst_setting(system(arch), ARCH)),
 
 	% os_call2([tar, 'xvf', N, o('C', RD)]),
-	tui_progressbox_safe([tar, xvf, N, o('C', RD)], '', [title(' Extracting rootfs '), sz(max)]),
+	tui_progressbox_safe([tar, xvf, N, o('C', RD), '2>&1'], '', [title(' Extracting rootfs '), sz(max)]),
 
 	% mount required fs
 	mount_chroot_filesystems(RD),
@@ -164,12 +167,11 @@ install_pkg(TL, net, RD) :-
 install_pkg(TL, local, RD) :-
 	copy_rootfs(RD),
 	host_name(HN),
-	( HN = 'void-live' ->
-	  os_rm_f(RD + '/etc/motd'),
+	( HN \= 'void-live'
+	; os_rm_f(RD + '/etc/motd'),
 	  % Remove modified sddm.conf to let sddm use the defaults.
 	  os_rm_f(RD + '/etc/sddm.conf'),
 	  os_rm_f(RD + '/etc/sudoers.d/99-void-live')
-	; true
 	),
 	( (HN = 'void-live' ; HN = hrmpf) ->
 	  os_rm_f(RD + '/etc/issue'),
@@ -177,6 +179,9 @@ install_pkg(TL, local, RD) :-
 	  % Remove live user.
 	  tui_progressbox_safe([userdel, o('R', RD), '-r', anon, '2>&1'], '', [title(' Remove user anon '), sz([6, 60])])
 	; true
+	),
+	( HN \= hrmpf
+	; make_agetty_generic_run(RD)
 	),
 
 	% mount required fs
@@ -204,6 +209,28 @@ install_target_dep(TL, RD) :-
 	  soft_install_deps(Pref, TPL)
 	; true
 	),
+	true.
+
+make_agetty_generic_run(RD) :-
+	atom_concat(RD, '/etc/sv/agetty-generic/run', F),
+	open(F, write, S),
+	make_agetty_generic_run_(S),
+	close(S),
+	os_shell2([chmod, '755', F]),
+	true.
+
+make_agetty_generic_run_(S) :-
+	write(S, '#!/bin/sh'), nl(S), nl(S),
+	write(S, 'tty=${PWD##*-}'), nl(S), nl(S),
+	write(S, '[ -r conf ] && . ./conf'), nl(S), nl(S),
+	write(S, 'if [ -x /sbin/getty -o -x /bin/getty ]; then'), nl(S),
+	write(S, '\t# busybox'), nl(S),
+	write(S, '\tGETTY=getty'), nl(S),
+	write(S, 'elif [ -x /sbin/agetty -o -x /bin/agetty ]; then'), nl(S),
+	write(S, '\t# util-linux'), nl(S),
+	write(S, '\tGETTY=agetty'), nl(S),
+	write(S, 'fi'), nl(S), nl(S),
+	write(S, 'exec chpst -P ${GETTY} ${GETTY_ARGS} "${tty}" "${BAUD_RATE}" "${TERM_NAME}"'), nl(S),
 	true.
 
 set_keymap(RD) :-
@@ -315,10 +342,12 @@ mount_chroot_filesystem_none(RD, m(FS, MP)) :-
 umount_filesystems(RD) :-
 	% ??? swap ???
 	os_call2([umount, '--recursive', RD]),
+	% os_call2([umount, '--lazy', '--recursive', RD]),
 	fail.
 umount_filesystems(RD) :-
 	zpool_list(L),
 	memberchk(zp(PN,_A2,_A3,_A4,_A5,_A6,_A7,_A8,_A9,_A10,RD), L),
+	% os_call2_rc([zfs, unmount, '-f', '-a'], _),
 	tui_progressbox_safe([zpool, export, '-f', PN, '2>&1'], '', [title(' export zpool '), sz([6, 40])]),
 	fail.
 umount_filesystems(_RD).
@@ -350,8 +379,8 @@ wipe_dev_tree(PL, tree(NAME, L)) :-
 wipe_dev(crypt(_UUID), _D, name(SNAME,_KNAME,_DL)) :- !,
 	lx_luks_close(SNAME),
 	true.
-wipe_dev(part5(_PTTYPE,PARTTYPE,_PARTUUID,_UUID,_FSTYPE), D, _CN) :- !,
-	wipe_dev_part(PARTTYPE, D),
+wipe_dev(part5(_PTTYPE,PARTTYPE,_PARTUUID,_UUID,FSTYPE), D, _CN) :- !,
+	wipe_dev_part(PARTTYPE,FSTYPE, D),
 	true.
 wipe_dev(disk, D, _CN) :- !,
 	wipe_disk(D),
@@ -366,12 +395,17 @@ wipe_dev(ET, D, _CN) :- !,
 	tui_msgbox(A),
 	fail.
 
-wipe_dev_part(linux_lvm, D) :-
+wipe_dev_part(linux_lvm, _FSTYPE, D) :- !,
 	lvm_pvremove_unsafe(D),
 	% wipe_disk(D),
 	true.
-wipe_dev_part(_T, _D) :-
-	% wipe_disk(D),
+wipe_dev_part(solaris_root, zfs_member, D) :- !,
+	% tui_msgbox(D),
+	zpool_destroy_all,
+	wipe_disk(D),
+	true.
+wipe_dev_part(_T, _FSTYPE, D) :-
+	wipe_disk(D),
 	true.
 
 ensure_settings(TT, TL) :-

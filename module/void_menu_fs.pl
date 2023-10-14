@@ -128,6 +128,7 @@ fs_type_to_menu(FST, [FST, Descr]) :-
 % TT - template name
 % OFS - old file system
 % NFS - new file system
+menu_select_fs(_TT, zfsBootMenu, _OFS, zfs) :- !.
 menu_select_fs(TT, B, OFS, NFS) :-
 	FSL = [
 		  btrfs
@@ -139,7 +140,7 @@ menu_select_fs(TT, B, OFS, NFS) :-
 		, swap
 		, vfat
 		, xfs
-		% , zfs
+		, zfs
 	],
 	% template_info(name, descr, except_fs).
 	template_info(TT, _Descr, EL1),

@@ -14,7 +14,7 @@ bootloader_info(grub2, [
 		, swap
 		, vfat
 		, xfs
-		% , zfs
+		, zfs
 	], [
 		  manual
 		, gpt_basic
@@ -24,7 +24,6 @@ bootloader_info(grub2, [
 		, gpt_luks_lvm
 		% , gpt_wizard
 		% , gpt_raid
-		% , gpt_zfsbootmenu
 	], []).
 bootloader_info(rEFInd, [
 		  btrfs
@@ -111,11 +110,14 @@ bootloader_info(gummiboot, [
 bootloader_info(zfsBootMenu, [
 		  zfs
 	], [
-		  gpt_zfsbootmenu
+		  manual
+		, gpt_basic
+		% , gpt_luks
 	], []).
 
 % Get bootloader name/dependency
 % target_dep_bootloader(efistub, efibootmgr) :- !. % Already installed.
+target_dep_bootloader(zfsBootMenu, zfsbootmenu) :- !.
 target_dep_bootloader(gummiboot, gummiboot) :- !.
 target_dep_bootloader(syslinux, syslinux) :- !.
 target_dep_bootloader(limine, limine) :- !.
@@ -155,7 +157,7 @@ install_bootloader(_, _TL, none, _RD) :- !.
 install_bootloader(grub2, TL, BD, RD) :- !,
 	grub_configure(TL, RD),
 	grub_install(TL, BD, RD),
-	grub_mkconfig(RD),
+	grub_mkconfig(TL, RD),
 	!.
 install_bootloader(rEFInd, TL, _BD, RD) :- !,
 	refind_install(TL, RD),
@@ -176,6 +178,10 @@ install_bootloader(syslinux, TL, BD, RD) :- !,
 install_bootloader(gummiboot, _TL, _BD, RD) :- !,
 	gummiboot_install(RD),
 	% gummiboot_configure(TL, RD),
+	!.
+install_bootloader(zfsBootMenu, TL, BD, RD) :- !,
+	zfsbootmenu_configure(TL, RD),
+	zfsbootmenu_install(BD, RD),
 	!.
 
 /* Old code. */

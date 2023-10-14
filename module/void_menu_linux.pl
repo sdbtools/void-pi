@@ -218,7 +218,7 @@ menu_bootloader_([grub2, syslinux]) :-
 	),
 	true.
 menu_bootloader_([limine]).
-menu_bootloader_([rEFInd, gummiboot]) :-
+menu_bootloader_([rEFInd, gummiboot, zfsBootMenu]) :-
 	inst_setting(system(efi), _),
 	\+ inst_setting(system(bios), _),
 	true.
@@ -240,22 +240,28 @@ menu_bootloader(TT, TL) :-
 	),
 	!.
 
+% It is used with manual template.
 menu_bootloader_dev(TL) :-
-	lx_list_dev7_disk(L),
-	maplist(menu_dev7_menu_, L, DL),
-	dialog_msg(radiolist, RADIOLABEL),
 	( member(bootloader_dev(DEV31), TL),
 	  DEV31 = dev3(_, [dev_part(_, name(OSN, _, _), _, _)| _], _TL)
 	; OSN = none
 	), !,
-	append(DL, [[none, 'Manage bootloader otherwise']], BL1),
-	tui_radiolist_tag2(BL1, OSN, RADIOLABEL, [title(' Select the disk to install the bootloader ')], NSN),
+	lx_list_dev7_disk(L),
+	menu_select_bootloader_dev(L, OSN, NSN),
 	( OSN = NSN
 	; replace_bootloader_dev(OSN, NSN, L, TL, NTL),
 	  retract(inst_setting(template(TT), _)),
 	  assertz(inst_setting(template(TT), NTL))
 	),
 	!.
+
+% Select from dev7 list.
+menu_select_bootloader_dev(DEV7L, OSN, NSN) :-
+	maplist(menu_dev7_menu_, DEV7L, DL),
+	dialog_msg(radiolist, LABEL),
+	append(DL, [[none, 'Manage bootloader otherwise']], BL1),
+	tui_radiolist_tag2(BL1, OSN, LABEL, [title(' Select the disk to install the bootloader ')], NSN),
+	true.
 
 split_grp(G, GL) :-
 	atom_chars(G, GC),

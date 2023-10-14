@@ -5,12 +5,11 @@
 template_info(manual, 'Manual configuration of everything', []).
 template_info(gpt_wizard, 'GPT. Wizard', [swap, vfat]).
 template_info(gpt_basic, 'GPT. Basic', [swap, vfat]).
-template_info(gpt_lvm, 'GPT. LVM', [swap, vfat]).
-template_info(gpt_lvm_luks, 'GPT. LVM. LUKS', [swap, vfat]).
-template_info(gpt_luks, 'GPT. LUKS. One device', [swap, vfat]).
-template_info(gpt_luks_lvm, 'GPT. LUKS. LVM. One device', [swap, vfat]).
+template_info(gpt_lvm, 'GPT. LVM', [swap, vfat, zfs]).
+template_info(gpt_lvm_luks, 'GPT. LVM. LUKS', [swap, vfat, zfs]).
+template_info(gpt_luks, 'GPT. LUKS. One device', [swap, vfat, zfs]).
+template_info(gpt_luks_lvm, 'GPT. LUKS. LVM. One device', [swap, vfat, zfs]).
 template_info(gpt_raid, 'GPT. RAID. One device', [swap]).
-template_info(gpt_zfsbootmenu, 'GPT. ZFS. One device', []).
 
 part_tmpl_info(root, 'Single root partition').
 part_tmpl_info(root_home, 'Root + home partitions').
@@ -19,36 +18,54 @@ part_tmpl_info_btrfs(root, 'Single root subvolume').
 part_tmpl_info_btrfs(root_home, 'Root + home subvolumes').
 part_tmpl_info_btrfs(max, 'Max complexity').
 
+part_tmpl_info_zfs(root, 'Single root dataset').
+part_tmpl_info_zfs(root_home, 'Root + home datasets').
+part_tmpl_info_zfs(max, 'Max complexity').
+
+part_tmpl_info(zfs, Name, Descr) :- !,
+	part_tmpl_info_zfs(Name, Descr).
 part_tmpl_info(btrfs, Name, Descr) :- !,
 	part_tmpl_info_btrfs(Name, Descr).
 part_tmpl_info(_FS, Name, Descr) :-
 	part_tmpl_info(Name, Descr).
 
 setup_fs_template :-
-	% dataset(name, mount_point, mount_attrs)
-	assertz(inst_setting(zfs, dataset('ROOT', 'none', ['canmount=off']))),
-	assertz(inst_setting(zfs, dataset('ROOT/void', '/', ['canmount=noauto', 'atime=off']))),
-	% assertz(inst_setting(zfs, dataset('ROOT/void', '/', ['atime=off']))),
-	assertz(inst_setting(zfs, dataset('home', '/home', ['atime=off']))),
-	assertz(inst_setting(zfs, dataset('opt', '/opt', ['atime=off']))),
-	assertz(inst_setting(zfs, dataset('srv', '/srv', ['atime=off']))),
-	% assertz(inst_setting(zfs, dataset('usr', '/usr', ['canmount=off', 'atime=off']))),
-	% assertz(inst_setting(zfs, dataset('usr-local', '/usr/local', ['atime=off']))),
-	assertz(inst_setting(zfs, dataset('tmp', '/tmp', ['com.sun:auto-snapshot=false', 'atime=off']))),
-	assertz(inst_setting(zfs, dataset('var', '/var', ['canmount=off', 'atime=off']))),
-	assertz(inst_setting(zfs, dataset('var-lib', '/var/lib', ['canmount=off', 'atime=off']))),
-	assertz(inst_setting(zfs, dataset('var-cache-xbps', '/var/cache/xbps', ['com.sun:auto-snapshot=false', 'atime=off']))),
-	assertz(inst_setting(zfs, dataset('var-lib-ex', '/var/lib/ex', ['atime=off']))),
-	assertz(inst_setting(zfs, dataset('var-log', '/var/log', ['atime=off']))),
-	assertz(inst_setting(zfs, dataset('var-opt', '/var/opt', ['atime=off']))),
-	assertz(inst_setting(zfs, dataset('var-spool', '/var/spool', ['atime=off']))),
-	assertz(inst_setting(zfs, dataset('var-tmp', '/var/tmp', ['com.sun:auto-snapshot=false', 'atime=off']))),
-	% os_shell2([zfs, create, '-o', 'mountpoint=/var/tmp', 'zroot/var-tmp']),
-
 	% Partition + file system.
 	% pfs(name, mount_point, size)
 	assertz(inst_setting(part_tmpl(root), [pfs(root, '/', '')])),
 	assertz(inst_setting(part_tmpl(root_home), [pfs(root, '/', '20G'), pfs(home, '/home', '')])),
+
+	% dataset(name, mount_point, mount_attrs)
+	assertz(inst_setting(part_tmpl_zfs(root), [
+		  dataset('/ROOT', 'none', [canmount=off])
+		, dataset('/ROOT/void', '/', [canmount=noauto, atime=off])
+		% , dataset('ROOT/void', '/', [atime=off])
+		])),
+	assertz(inst_setting(part_tmpl_zfs(root_home), [
+		  dataset('/ROOT', 'none', [canmount=off])
+		, dataset('/ROOT/void', '/', [canmount=noauto, atime=off])
+		% , dataset('ROOT/void', '/', [atime=off])
+		, dataset('/home', '/home', [atime=off])
+		])),
+	assertz(inst_setting(part_tmpl_zfs(max), [
+		  dataset('/ROOT', 'none', [canmount=off])
+		, dataset('/ROOT/void', '/', [canmount=noauto, atime=off])
+		% , dataset('ROOT/void', '/', [atime=off])
+		, dataset('/home', '/home', [atime=off])
+		, dataset('/opt', '/opt', [atime=off])
+		, dataset('/srv', '/srv', [atime=off])
+		% , dataset('/usr', '/usr', [canmount=off, atime=off])
+		% , dataset('/usr-local', '/usr/local', [atime=off])
+		, dataset('/tmp', '/tmp', ['com.sun:auto-snapshot'=false, atime=off])
+		, dataset('/var', '/var', [canmount=off, atime=off])
+		, dataset('/var-lib', '/var/lib', [canmount=off, atime=off])
+		, dataset('/var-cache-xbps', '/var/cache/xbps', ['com.sun:auto-snapshot'=false, atime=off])
+		, dataset('/var-lib-ex', '/var/lib/ex', [atime=off])
+		, dataset('/var-log', '/var/log', [atime=off])
+		, dataset('/var-opt', '/var/opt', [atime=off])
+		, dataset('/var-spool', '/var/spool', [atime=off])
+		, dataset('/var-tmp', '/var/tmp', ['com.sun:auto-snapshot'=false, atime=off])
+		])),
 
 	% subv(name, mount_point, mount_attrs, cow)
 	assertz(inst_setting(part_tmpl_btrfs(root), [
@@ -77,6 +94,8 @@ setup_fs_template :-
 
 	true.
 
+part_tmpl(zfs, Name, L) :- !,
+	inst_setting(part_tmpl_zfs(Name), L).
 part_tmpl(btrfs, Name, L) :- !,
 	inst_setting(part_tmpl_btrfs(Name), L).
 part_tmpl(_FS, Name, L) :-
@@ -104,26 +123,29 @@ need_boot_part(TT, B, _FS) :-
 	member(B, [rEFInd, limine, syslinux, gummiboot]),
 	member(TT, [gpt_lvm, gpt_lvm_luks, gpt_luks, gpt_luks_lvm]),
 	!.
+need_boot_part(_TT, B, zfs) :-
+	B \= zfsBootMenu,
+	!.
 need_boot_part(_TT, B, FS) :-
-	% bootloader_info(bootloade, supported_fs, supported_template, _).
+	% bootloader_info(bootloade, supported_fs, supported_template, except_fs).
 	bootloader_info(B, FSL, _, _),
 	\+ member(FS, FSL),
 	!.
 
 % B - bootloader.
-% make_cmd_list(manual, B, [state(bios_efi), state(bootloader), bootloader(B)]) :- !.
-make_cmd_list(manual, B, [bootloader(B)]) :- !.
-% make_cmd_list(gpt_zfsbootmenu, B, [state(bios_efi), state(bootloader), bootloader(B)]) :- !,
-make_cmd_list(gpt_zfsbootmenu, B, [bootloader(B)]) :- !,
+make_cmd_list(TT, B, [bootloader(B), state(template, ctx_tmpl(B, TT))| L]) :-
+	make_cmd_list_3(TT, B, L),
+	true.
+
+make_cmd_list_3(manual, _B, []) :- !.
+make_cmd_list_3(gpt_zfsbootmenu, _B, []) :- !,
 	tui_msgbox('not implemented yet'),
 	true.
-% make_cmd_list(gpt_wizard, B, [state(bios_efi), state(bootloader), bootloader(B)| L]) :- !,
-make_cmd_list(gpt_wizard, B, [bootloader(B)| L]) :- !,
+make_cmd_list_3(gpt_wizard, _B, L) :- !,
 	menu_dev7_checklist_used_light(' Select device(s) to use ', DEV7L),
 	menu_wiz_action(DEV7L, L),
 	true.
-% make_cmd_list(TT, B, [state(bios_efi), state(bootloader), bootloader(B), state(bootloader_dev), bootloader_dev(DEV3)| L]) :- !,
-make_cmd_list(TT, B, [bootloader(B), bootloader_dev(DEV3)| L]) :- !,
+make_cmd_list_3(TT, B, [bootloader_dev(DEV3)| L]) :- !,
 	menu_dev7_combo(TT, DEV7L),
 	menu_root_fs(TT, B, FS),
 	maplist(menu_dev7_to_d4, DEV7L, D4L),
@@ -219,7 +241,7 @@ partition_set_template(gpt_lvm, B, FS, DL, L) :- !,
 	maplist(d4_to_p4_pd(linux_lvm), DL, P4L, PDL),
 	fs_to_lvl_fsl(FS, root, B, PDL, L0),
 	menu_soft(B, FS, [], SL),
-	append(P4L, [state(root_fs, ctx_rfs(lvm, FS, B, DL))| L0], L1),
+	append(P4L, [state(root_fs, ctx_rfs(lvm, FS, B, DL, gpt_lvm))| L0], L1),
 	append(L1, SL, L),
 	true.
 partition_set_template(gpt_lvm_luks, B, FS, DL, L) :- !,
@@ -234,7 +256,7 @@ partition_set_template(gpt_lvm_luks, B, FS, DL, L) :- !,
 	append(P4L, [
 		bdev(lvm, vg(VG, PDL, [lv(LV, SZ)])),
 		bdev(luks, luks(LUKS_T, LVM_PD)),
-		state(root_fs, ctx_rfs(one, FS, B, DL))| FSL],
+		state(root_fs, ctx_rfs(one, FS, B, DL, gpt_lvm_luks))| FSL],
 		L0),
 	append(L0, SL, L),
 	true.
@@ -248,26 +270,14 @@ partition_set_template(gpt_luks, B, FS, DL, L) :- !,
 	append([
 		p4(linux_luks, bd1([PD, D]), create, ''),
 		bdev(luks, luks(LUKS_T, PD)),
-		state(root_fs, ctx_rfs(one, FS, B, DL))| FSL],
+		state(root_fs, ctx_rfs(one, FS, B, DL, gpt_luks))| FSL],
 		SL,
 		L),
 	true.
-% !!! DO NOT delete !!!
-% multi-device support.
-% partition_set_template(gpt_luks, B, FS, DL, L) :- !,
-% 	DL = [D41| _T],
-% 	d4_to_luks_pd(D41, LUKS_PD),
-% 	% menu_d4_checklist_light(' Select device(s) to use with LUKS ', DL, DL0),
-% 	% DL0 \= [],
-% 	% maplist(d4_to_luks_bdev(LUKS_T), DL0, P4L, BDEVL),
-% 	get_luks_type(B, LUKS_T),
-% 	maplist(d4_to_luks_bdev(LUKS_T), DL, P4L, BDEVL),
-% 	flatten([P4L, BDEVL, fs7(FS, void, '/', [LUKS_PD], [], [], create)], L),
-% 	true.
 partition_set_template(gpt_luks_lvm, B, FS, DL, [
 		p4(linux_luks, bd1([PD, D]), create, ''),
 		bdev(luks, luks(LUKS_T, PD)),
-		state(root_fs, ctx_rfs(lvm, FS, B, DL))| L]
+		state(root_fs, ctx_rfs(lvm, FS, B, DL, gpt_luks_lvm))| L]
 		) :- !,
 	DL = [d4(D, _SN, SDN, N)| _T],
 	lx_part_name(D, N, PD),
@@ -277,17 +287,7 @@ partition_set_template(gpt_luks_lvm, B, FS, DL, [
 	menu_soft(B, FS, [], SL),
 	append(L0, SL, L),
 	true.
-% !!! DO NOT delete !!!
-% multi-device support.
-% partition_set_template(gpt_luks_lvm, B, FS, DL, L) :- !,
-% 	get_luks_type(B, LUKS_T),
-% 	maplist(d4_to_luks_bdev(LUKS_T), DL, P4L, BDEVL),
-% 	inst_setting(lvm, lv(VG, LV, SZ)),
-% 	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
-% 	maplist(d4_to_luks_pd, DL, PDL),
-% 	flatten([P4L, BDEVL, bdev(lvm, vg(VG, PDL, [lv(LV, SZ)])), fs7(FS, void, '/', [LVM_PD], [], [], create)], L),
-% 	true.
-partition_set_template(_, B, FS, DL, [state(root_fs, ctx_rfs(dev, FS, B, DL))|L]) :-
+partition_set_template(TT, B, FS, DL, [state(root_fs, ctx_rfs(dev, FS, B, DL, TT))|L]) :-
 	fs_to_p4l_fsl(FS, root, B, DL, L0),
 	menu_soft(B, FS, [], SL),
 	append(L0, SL, L),
@@ -349,6 +349,15 @@ fs_to_p4l_fsl(FS, OTN, B, DL, L) :-
 	fs_to_p4l_fsl_5(FS, NTN, B, DL, L),
 	true.
 
+fs_to_p4l_fsl_5(zfs, TN, B, DL, L) :- !,
+	inst_setting(part_tmpl_zfs(TN), PTL),
+	fs2parttype(zfs, PT),
+	maplist(d4_to_p4_pd(PT), DL, P4L, PDL),
+	append(
+		[state(make_part_tmpl, ctx_part(dev, B, zfs, TN, DL))|P4L],
+		[fs5_multi(zfs, void, PDL, PTL, create)],
+		L),
+	true.
 fs_to_p4l_fsl_5(btrfs, TN, B, DL, L) :- !,
 	inst_setting(part_tmpl_btrfs(TN), PTL),
 	fs2parttype(btrfs, PT),
@@ -377,6 +386,13 @@ fs_to_fsl_d(FS, OTN, B, D, L) :-
 	fs_to_fsl_d_5(FS, OTN, B, D, L),
 	true.
 
+fs_to_fsl_d_5(zfs, TN, B, D, L) :- !,
+	inst_setting(part_tmpl_zfs(TN), PTL),
+	L = [
+		  state(make_part_tmpl , ctx_part(one, B, zfs, TN, D))
+		, fs5_multi(zfs, void, [D], PTL, create)
+	],
+	true.
 fs_to_fsl_d_5(btrfs, TN, B, D, L) :- !,
 	inst_setting(part_tmpl_btrfs(TN), PTL),
 	L = [
@@ -394,6 +410,17 @@ fs_to_lvl_fsl(FS, OTN, B, PDL, L) :-
 	fs_to_lvl_fsl_5(FS, NTN, B, PDL, L),
 	true.
 
+fs_to_lvl_fsl_5(zfs, TN, B, PDL, L) :- !,
+	inst_setting(part_tmpl_zfs(TN), PTL),
+	inst_setting(lvm, lv(VG, LV, SZ)),
+	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
+	L = [
+		  state(make_part_tmpl
+		, ctx_part(lvm, B, zfs, TN, PDL))
+		, bdev(lvm, vg(VG, PDL, [lv(LV, SZ)]))
+		, fs5_multi(zfs, void, [LVM_PD], PTL, create)
+	],
+	true.
 fs_to_lvl_fsl_5(btrfs, TN, B, PDL, L) :- !,
 	inst_setting(part_tmpl_btrfs(TN), PTL),
 	inst_setting(lvm, lv(VG, LV, SZ)),

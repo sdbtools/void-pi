@@ -8,7 +8,7 @@ dialog_msg(checklist, 'Use UP and DOWN arrows to navigate menus. Use TAB to swit
 dialog_msg(form, 'Use UP and DOWN arrows (or Ctrl/N, Ctrl/P) to move between fields. Use TAB to move between windows.') :- !.
 
 action_info(common_settings, 'Common Attrs', 'Common settings').
-action_info(template, 'Template', 'Predefined configuration').
+action_info(template, 'Template', 'Predefined configurations').
 action_info(review, 'Review', 'Show current settings').
 action_info(filesystem, 'Filesystem', 'Configure filesystems and mount points').
 action_info(keymap, 'Keyboard', 'Set system keyboard').
@@ -74,8 +74,7 @@ setting_value(TL, bootloader_dev, D) :- !,
 	; D = 'not set'
 	), !.
 setting_value(TL, root_fs, FS) :- !,
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	( memberchk(fs7(FS, _Label, '/', _DL, _CAL, _MOL, _CK), TL)
+	( root_fs(TL, FS)
 	; FS = 'not set'
 	), !.
 setting_value(_TL, S, V1) :-
@@ -141,15 +140,27 @@ menu_soft_(S, [S, Descr]) :-
 	soft_info(S, _B, _FS, _DepL, Descr), !,
 	true.
 
-menu_edit_main(C, TT, TL) :-
-	% tui_msgbox_w(TL),
-	menu_edit_main(TL, C, TT, TL, NTL),
-	retractall(inst_setting(template(TT), _)),
-	assertz(inst_setting(template(TT), NTL)),
+% C - command.
+menu_edit_main(C, OTL) :-
+	menu_edit_main_3(OTL, C, NTL),
+	memberchk(state(template, ctx_tmpl(_B, NT)), NTL),
+	retractall(inst_setting(template(_), _)),
+	assertz(inst_setting(template(NT), NTL)),
 	true.
 
-menu_edit_main([state(root_fs, CTX)|T], root_fs, TT, _TL, [state(root_fs, ctx_rfs(PTT, NFS, B, DL))|L]) :- !,
-	CTX = ctx_rfs(PTT, OFS, B, DL),
+menu_edit_main_3([state(bootloader_dev, CTX)|_T], bootloader_dev, [state(bootloader_dev, ctx_bld(B, _NBD))|_L]) :- !,
+	CTX = ctx_bld(B, _OBD),
+	true.
+menu_edit_main_3([state(template, CTX)|T], template, [state(template, ctx_tmpl(B, NT))|L]) :- !,
+	CTX = ctx_tmpl(B, OT),
+	menu_select_template(B, OT, NT),
+	( OT = NT ->
+	  L = T
+	; make_cmd_list_3(NT, B, L)
+	), !,
+	true.
+menu_edit_main_3([state(root_fs, CTX)|T], root_fs, [state(root_fs, ctx_rfs(PTT, NFS, B, DL, TT))|L]) :- !,
+	CTX = ctx_rfs(PTT, OFS, B, DL, TT),
 	menu_select_fs(TT, B, OFS, NFS),
 	( OFS = NFS ->
 	  L = T
@@ -161,7 +172,7 @@ menu_edit_main([state(root_fs, CTX)|T], root_fs, TT, _TL, [state(root_fs, ctx_rf
 	  append(L0, SL, L)
 	), !,
 	true.
-menu_edit_main([state(make_part_tmpl, CTX)|T], make_part_tmpl, _TT, _TL, OL) :- !,
+menu_edit_main_3([state(make_part_tmpl, CTX)|T], make_part_tmpl, OL) :- !,
 	CTX = ctx_part(PTT, B, FS, OTN, DL),
 	menu_part_tmpl(FS, OTN, NTN),
 	( OTN = NTN ->
@@ -171,14 +182,14 @@ menu_edit_main([state(make_part_tmpl, CTX)|T], make_part_tmpl, _TT, _TL, OL) :- 
 	  append(L0, SL, OL)
 	), !,
 	true.
-menu_edit_main([state(soft, ctx_soft(FS, B))|T], soft, _TT, _TL, SL) :- !,
+menu_edit_main_3([state(soft, ctx_soft(FS, B))|T], soft, SL) :- !,
 	% root_fs(TL, FS),
 	menu_edit_soft(FS, T, B, SL),
 	true.
-menu_edit_main([H|T], C, TT, TL, [H|NTL]) :-
+menu_edit_main_3([H|T], C, [H|NTL]) :-
 	% tui_msgbox_w(H),
-	menu_edit_main(T, C, TT, TL, NTL).
-menu_edit_main([], _C, _TT, _TL, []).
+	menu_edit_main_3(T, C, NTL).
+menu_edit_main_3([], _C, []).
 
 menu_edit_soft(FS, L, B, SL) :-
 	findall(S, member(soft(S), L), OSL),
@@ -188,17 +199,17 @@ menu_edit_soft(FS, L, B, SL) :-
 % OB - old bootloader.
 % NB - new bootloader.
 menu_template(OT, OB, NB) :-
-	bootloader_info(NB, _, TL0, _),
-	( TL0 = [NT]
-	; maplist(template_to_menu, TL0, TL),
-	  dialog_msg(radiolist, LABEL),
-	  tui_radiolist_tag2(TL, OT, LABEL, [no-tags, title(' Choose configuration ')], NT)
-	), !,
+	menu_select_template(NB, OT, NT),
 	switch_template(OT, NT, OB, NB),
 	true.
 
-template_to_menu(T, [T, Descr]) :-
-	template_info(T, Descr, _),
+menu_select_template(B, OT, NT) :-
+	bootloader_info(B, _, TL0, _),
+	( TL0 = [NT]
+	; findall([TT0, Descr], (member(TT0, TL0), template_info(TT0, Descr, _)), TL),
+	  dialog_msg(radiolist, LABEL),
+	  tui_radiolist_tag2(TL, OT, LABEL, [no-tags, title(' Choose configuration ')], NT)
+	), !,
 	true.
 
 menu_save :-
@@ -275,10 +286,8 @@ menu_common(TT, TL) :-
 	cmd_action(A,TT1, TL1),
 	!.
 
-menu_main_info(_TT, _TL, [bios_efi, bootloader, template]).
-% menu_main_info(TT, _TL, [root_fs]) :-
-% 	TT \= manual.
-menu_main_info(manual, _TL, [bootloader_dev, make_part_manually, part_select, filesystem]).
+menu_main_info(_TT, _TL, [bios_efi, bootloader]).
+menu_main_info(manual, _TL, [template, bootloader_dev, make_part_manually, part_select, filesystem]).
 menu_main_info(_TT, TL, [ST]) :-
 	member(state(ST, _), TL).
 menu_main_info(_TT, _TL, [common_settings, review, install]).
@@ -295,8 +304,8 @@ menu_main :-
 	cmd_action(A, TT, TL),
 	true.
 
-cmd_menu(root_fs, TT, TL) :- !,
-	menu_edit_main(root_fs, TT, TL),
+cmd_menu(root_fs, _TT, TL) :- !,
+	menu_edit_main(root_fs, TL),
 	true.
 cmd_menu(btrfs_opt, _TT, _TL) :- !,
 	menu_btrfs,
@@ -304,9 +313,8 @@ cmd_menu(btrfs_opt, _TT, _TL) :- !,
 cmd_menu(common_settings, TT, TL) :- !,
 	menu_common(TT, TL),
 	true.
-cmd_menu(template, TT, TL) :- !,
-	get_bootloader(TL, OB),
-	menu_template(TT, OB, OB),
+cmd_menu(template, _TT, TL) :- !,
+	menu_edit_main(template, TL),
 	true.
 cmd_menu(bios_efi, TT, TL) :- !,
 	menu_bios_efi(TT, TL),
@@ -360,11 +368,11 @@ cmd_menu(bootloader_dev, _TT, TL) :- !,
 cmd_menu(make_part_manually, _TT, _TL) :- !,
 	menu_part_manually,
 	true.
-cmd_menu(make_part_tmpl, TT, TL) :- !,
-	menu_edit_main(make_part_tmpl, TT, TL),
+cmd_menu(make_part_tmpl, _TT, TL) :- !,
+	menu_edit_main(make_part_tmpl, TL),
 	true.
-cmd_menu(soft, TT, TL) :- !,
-	menu_edit_main(soft, TT, TL),
+cmd_menu(soft, _TT, TL) :- !,
+	menu_edit_main(soft, TL),
 	true.
 cmd_menu(part_select, _TT, TL) :- !,
 	menu_part_select(TL),

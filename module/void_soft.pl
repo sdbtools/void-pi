@@ -23,7 +23,7 @@ soft_install(TL, RD) :-
 	% Add dependencies to the list.
 	findall(S1, (member(S0, SL), soft_info(S0, _, _, PKGL, _), member(S1, PKGL)), SL1),
 	dedup(SL1, SL2),
-	soft_install_(SL2, RD),
+	soft_install_soft(SL2, RD),
 	maplist(soft_configure(RD), SL2),
 	true.
 soft_install(_TL, _RD) :-
@@ -38,8 +38,8 @@ soft_update(RD) :-
 	tui_progressbox_safe([Pref, 'xbps-install', '-Suy', '2>&1'], '', [title(' Update Software '), sz(max)]),
 	true.
 
-soft_install_([], _RD) :- !.
-soft_install_(SL, RD) :-
+soft_install_soft([], _RD) :- !.
+soft_install_soft(SL, RD) :-
 	inst_setting(system(arch), ARCH),
 	make_chroot_inst_pref_chroot(ARCH, Pref, RD),
 	% This is mandatory.

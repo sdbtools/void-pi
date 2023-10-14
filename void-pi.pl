@@ -41,6 +41,7 @@
 :- include('module/void_efistub.pl').
 :- include('module/void_syslinux.pl').
 :- include('module/void_gummiboot.pl').
+:- include('module/void_zfsbootmenu.pl').
 :- include('module/void_bootloader.pl').
 
 % file systems
@@ -180,7 +181,9 @@ setup_install(TT, TL) :-
 	( source_dependency_pkg(TT, TL, HN, D) ->
 	  soft_install_deps([], D)
 	; true
-	).
+	),
+	install_zfs(TL, _RD),
+	true.
 
 parse_prop(P, dp(N, V)) :-
 	atom_codes(P, PA),
@@ -202,6 +205,7 @@ target_dep(TL, D) :-
 	target_dep_bootloader(B, D),
 	true.
 target_dep(TL, zfs) :-
+	\+ host_name(hrmpf),
 	uses_zfs(TL),
 	true.
 
@@ -282,7 +286,7 @@ run_cmd(_TT, TL, RD, install_pkg(IM)) :- !,
 	% unmount all filesystems.
 	umount_filesystems(RD),
 	tui_msgbox('Void Linux has been installed successfully!', [sz([6, 40])]),
-	os_call2([clear]),
+	os_call(clear, []),
 	true.
 
 run_cmdl(TT, TL, L) :-
@@ -301,7 +305,6 @@ make_cmd(_TT, TL, ensure_lvm) :-
 make_cmd(TT, TL, part(D, SPL)) :-
 	TT \= manual,
 	% Find all devices.
-	% part4(bd1([PartDev, Dev]), PartType, create/keep, size)
 	findall(D0, member(p4(_PT0, bd1([_, D0]), _F0, _SZ0), TL), DL0),
 	sort(DL0, DL),
 	% For each device

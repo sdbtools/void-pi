@@ -50,7 +50,7 @@ dracut_conf(lvm, _TL, _RD, [v(add_dracutmodules, [lvm]), v(add_drivers, [lvm])])
 dracut_conf(mdraid, _TL, _RD, [v(add_dracutmodules, [mdraid]), v(add_drivers, [mdraid])]) :- !.
 
 dracut_conf(fs(zfs), _TL, _RD, [
-		  v(nofsck, yes)
+		  v(nofscks, yes)
 		, v(add_dracutmodules, [zfs])
 		, v(omit_dracutmodules, [btrfs, resume])
 	]) :- !.

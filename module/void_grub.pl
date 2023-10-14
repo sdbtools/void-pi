@@ -1,6 +1,8 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
 % Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
+% https://github.com/AdisonCavani/distro-grub-themes
+
 arch2grub(ARCH, GRUB) :-
 	% efi-grub depends on bios-grub.
 	inst_setting(system(efi), _), !,
@@ -32,14 +34,14 @@ grub_install(TL, BD, RD) :-
 grub_install_efi(ENV, BD, RD) :-
 	inst_setting(system(efi), EFI_TARGET),
 	OL = [oo(target, EFI_TARGET), '--efi-directory=/boot/efi', '--bootloader-id=void_grub_efi', '--recheck'],
-	CL = [chroot, RD, ENV, 'grub-install', OL, BD, '2>&1'],
+	CL = [ENV, chroot, RD, 'grub-install', OL, BD, '2>&1'],
 	% os_shell2(CL),
 	tui_progressbox_safe(CL, '', [title(' Installing GRUB for EFI '), sz([6, 60])]),
 	true.
 
 grub_install_bios(ENV, BD, RD) :-
 	OL = ['--target=i386-pc', '--bootloader-id=void_grub_bios', '--recheck'],
-	CL = [chroot, RD, ENV, 'grub-install', OL, BD, '2>&1'],
+	CL = [ENV, chroot, RD, 'grub-install', OL, BD, '2>&1'],
 	% os_shell2(CL),
 	tui_progressbox_safe(CL, '', [title(' Installing GRUB for BIOS '), sz([6, 60])]),
 	true.
@@ -93,10 +95,14 @@ grub_configure(TL, RD) :-
 	grub_sconf(GVL, RD),
 	true.
 
-grub_mkconfig(RD) :-
-	CL2 = [chroot, RD, 'grub-mkconfig', o(o, '/boot/grub/grub.cfg'), '2>&1'],
+grub_mkconfig(TL, RD) :-
+	grub_install_env(TL, ENV),
+	% CL2 = [chroot, RD, 'grub-mkconfig', o(o, '/boot/grub/grub.cfg'), '2>&1'],
+	% CL2 = [stdbuf, '-oL', env, ENV, chroot, RD, 'grub-mkconfig', o(o, '/boot/grub/grub.cfg'), '2>&1'],
+	CL2 = [ENV, chroot, RD, 'grub-mkconfig', o(o, '/boot/grub/grub.cfg'), '2>&1'],
 	% os_shell2(CL2),
 	tui_progressbox_safe(CL2, '', [title(' Generating grub configuration file '), sz([10, 60])]),
+	% Watch the udev event queue, and exit if all current events are handled.
 	os_call2([udevadm, settle]),
 	true.
 
