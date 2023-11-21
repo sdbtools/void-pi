@@ -49,10 +49,12 @@ menu_part_manually :-
 	assertz(inst_setting(template(TT), NTL)),
 	true.
 
-menu_part_tmpl(FS, OTN, NTN) :-
+% OPTN - old partition template name
+% NPTN - new partition template name
+menu_part_tmpl(FS, OPTN, NPTN) :-
 	findall([TN, TD], (part_tmpl(FS, TN, _), part_tmpl_info(FS, TN, TD)), TL),
 	dialog_msg(radiolist, LABEL),
-	tui_radiolist_tag2(TL, OTN, LABEL, [title(' Select partition template ')], NTN),
+	tui_radiolist_tag2(TL, OPTN, LABEL, [title(' Select partition template ')], NPTN),
 	true.
 
 menu_part_select(TL) :-
@@ -83,7 +85,7 @@ update_part_info(PIL, OPL, PLO, IL, OL) :-
 % KL - list of partitions to keep.
 keep_part_(KL, p4(_PT, bd1([PD| _]), _CK, _SZ)) :- !,
 	memberchk(PD, KL).
-keep_part_(KL, fs7(_, _, _, [PD| _], _, _, _)) :- !,
+keep_part_(KL, fs7(_, _, _, PD, _, _, _)) :- !,
 	memberchk(PD, KL).
 keep_part_(_KL, _).
 
@@ -91,7 +93,7 @@ keep_part_(_KL, _).
 add_part_(PIL, SL, [PD| T], IL, OL) :-
 	memberchk(PD, SL), !,
 	add_part_(PIL, SL, T, IL, OL).
-add_part_(PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), fs7(FS, '', '', [PD], _CAL, _MOL, keep)| OL]) :-
+add_part_(PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), fs7(FS, '', '', PD, _COL, _MOL, keep)| OL]) :-
 	% dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)
 	member(dev_part(PD,name(_SNAME,_KNAME,[DL|_]),part5(_PTTYPE,PT,_PARTUUID,_UUID,FS),SZ), PIL),
 	BD1 = bd1([PD|DL]), !,
@@ -209,7 +211,6 @@ split_tz(TZ, A1, A2) :-
 	maplist(codes_atom, LL, [A1, A2]),
 	true.
 
-% , zfsBootMenu
 menu_bootloader_([grub2, syslinux]) :-
 	% grub2 and syslinux cannot be installed for EFI if booted in BIOS mode.
 	( lx_sys_efi(_) ->
@@ -218,9 +219,15 @@ menu_bootloader_([grub2, syslinux]) :-
 	),
 	true.
 menu_bootloader_([limine]).
-menu_bootloader_([rEFInd, gummiboot, zfsBootMenu]) :-
+menu_bootloader_([rEFInd, gummiboot]) :-
 	inst_setting(system(efi), _),
 	\+ inst_setting(system(bios), _),
+	true.
+menu_bootloader_([zfsBootMenu]) :-
+	inst_setting(system(efi), _),
+	\+ inst_setting(system(bios), _),
+	inst_setting(fs, available(FSL)),
+	memberchk(zfs, FSL),
 	true.
 menu_bootloader_([efistub]) :-
 	% efistub cannot be installed if booted in BIOS mode.
@@ -239,29 +246,6 @@ menu_bootloader(TT, TL) :-
 	; menu_template(TT, OB, NB)
 	),
 	!.
-
-% It is used with manual template.
-menu_bootloader_dev(TL) :-
-	( member(bootloader_dev(DEV31), TL),
-	  DEV31 = dev3(_, [dev_part(_, name(OSN, _, _), _, _)| _], _TL)
-	; OSN = none
-	), !,
-	lx_list_dev7_disk(L),
-	menu_select_bootloader_dev(L, OSN, NSN),
-	( OSN = NSN
-	; replace_bootloader_dev(OSN, NSN, L, TL, NTL),
-	  retract(inst_setting(template(TT), _)),
-	  assertz(inst_setting(template(TT), NTL))
-	),
-	!.
-
-% Select from dev7 list.
-menu_select_bootloader_dev(DEV7L, OSN, NSN) :-
-	maplist(menu_dev7_menu_, DEV7L, DL),
-	dialog_msg(radiolist, LABEL),
-	append(DL, [[none, 'Manage bootloader otherwise']], BL1),
-	tui_radiolist_tag2(BL1, OSN, LABEL, [title(' Select the disk to install the bootloader ')], NSN),
-	true.
 
 split_grp(G, GL) :-
 	atom_chars(G, GC),

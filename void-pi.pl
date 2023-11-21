@@ -52,6 +52,7 @@
 :- include('module/void_template.pl').
 :- include('module/void_action.pl').
 :- include('module/void_soft.pl').
+:- include('module/void_state.pl').
 
 :- dynamic([inst_setting/2, inst_setting_tmp/2]).
 
@@ -65,23 +66,26 @@ def_settings :-
 	assertz(inst_setting(mbr_size, '1M')),
 	assertz(inst_setting(esp_size, '550M')),
 	assertz(inst_setting(boot_size, '1G')),
+	assertz(inst_setting(root_size, '20G')),
 	assertz(inst_setting(root_dir, '/mnt')),
 	assertz(inst_setting(hostonly, no)),
 
 	% fs_attr(Name, MountPoint, Bootloader)
-	assertz(inst_setting(fs_attr(btrfs, '/', _), mount([rw, noatime, 'compress-force'=zstd, space_cache=v2, commit=120]))),
+	assertz(inst_setting(fs_attr(btrfs, '/', _), mount([rw, noatime, 'compress-force'=zstd, space_cache=v2, commit=60]))),
 	assertz(inst_setting(fs_attr(vfat, '/boot', _), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
 	assertz(inst_setting(fs_attr(vfat, '/boot/efi', _), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
-	assertz(inst_setting(fs_attr(f2fs, '/', _), mount([rw, compress_algorithm=lz4, compress_chksum, atgc, gc_merge, lazytime]))),
+	assertz(inst_setting(fs_attr(f2fs, _, _), mount([rw, compress_algorithm=lz4, compress_chksum, atgc, gc_merge, lazytime]))),
 	assertz(inst_setting(fs_attr(tmp, _, _), mount([defaults, nosuid, nodev]))),
 	assertz(inst_setting(fs_attr(proc, _, _), mount([nodev, noexec, nosuid, hidepid=2, gid=proc]))),
 	assertz(inst_setting(fs_attr(efivarfs, _, _), mount([defaults]))),
 	assertz(inst_setting(fs_attr(swap, _, _), mount([defaults]))),
 
-	assertz(inst_setting(fs_attr(f2fs, '/', _), create([extra_attr, inode_checksum, sb_checksum, compression, encrypt]))),
+	assertz(inst_setting(fs_attr(f2fs, _, _), create([extra_attr, inode_checksum, sb_checksum, compression, encrypt]))),
 	% https://wiki.syslinux.org/wiki/index.php?title=Filesystem#ext
 	assertz(inst_setting(fs_attr(ext4, '/', syslinux), create(['^64bit']))),
 	assertz(inst_setting(fs_attr(ext4, '/boot', syslinux), create(['^64bit']))),
+	assertz(inst_setting(fs_attr(zfs, '/', _), create([]))),
+	assertz(inst_setting(fs_attr(zfs, '/', _), encr(false))),
 
 	assertz(inst_setting(source, local)),
 	assertz(inst_setting(hostname, voidpp)),
@@ -99,8 +103,8 @@ source_dependency_pkg(TT, TL, Distro, DL) :-
 
 source_dep(_TT, TL, Distro, D) :-
 	% Collect all used filesystems.
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	findall(FS, member(fs7(FS, _Label, _MP, _DL, _CAL, _MOL, _CK), TL), FSL0),
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	findall(FS, member(fs7(FS, _Label, _MP, _D, _COL, _MOL, _CK), TL), FSL0),
 	sort(FSL0, FSL),
 	% tui_msgbox2(PTL),
 	member(F, FSL),
@@ -168,11 +172,32 @@ setup_sys_disk :-
 	assertz(inst_setting(dev7, available(L))),
 	true.
 
+setup_sys_fs :-
+	findall(FS, (setup_sys_fs_list(L), member(FS, L)), FSL),
+	retractall(inst_setting(fs, _)),
+	assertz(inst_setting(fs, available(FSL))),
+	true.
+
+setup_sys_fs_list([
+	  btrfs
+	% , bcachefs
+	, ext2
+	, ext3
+	, ext4
+	, f2fs
+	, swap
+	, vfat
+	, xfs
+	]).
+setup_sys_fs_list([zfs]) :-
+	os_shell('modprobe zfs 2>/dev/null').
+
 setup_conf :-
 	setup_sys_bios_efi,
 	setup_sys_arch,
 	setup_sys_kernel,
 	setup_sys_disk,
+	setup_sys_fs,
 	true.
 
 setup_install(TT, TL) :-
@@ -182,7 +207,7 @@ setup_install(TT, TL) :-
 	  soft_install_deps([], D)
 	; true
 	),
-	install_zfs(TL, _RD),
+	zfs_install(TL, _RD),
 	true.
 
 parse_prop(P, dp(N, V)) :-
@@ -202,10 +227,10 @@ target_dep(_TL, 'base-system') :-
 	true.
 target_dep(TL, D) :-
 	memberchk(bootloader(B), TL),
-	target_dep_bootloader(B, D),
+	target_dep_bootloader(B, DL),
+	member(D, DL),
 	true.
 target_dep(TL, zfs) :-
-	\+ host_name(hrmpf),
 	uses_zfs(TL),
 	true.
 
@@ -244,14 +269,12 @@ run_cmd(_TT, _TL, _RD, modprobe(FS)) :- !,
 run_cmd(_TT, _TL, _RD, mkbd(BD, CMD)) :- !, % make block device.
 	mkbd(BD, CMD),
 	!.
-run_cmd(_TT, TL, RD, mkfs(FS, DL, Label)) :- !,
-	format_to_atom(Title, ' Creating filesystem ~w ', [FS]),
-	get_bootloader(TL, B),
-	mkfs(FS, B, Title, DL, Label, RD),
+run_cmd(_TT, _TL, _RD, mkfs(FS, D, COL, Label)) :- !,
+	mkfs(FS, D, COL, Label),
 	true.
-run_cmd(_TT, _TL, RD, mkfs_multi(FS, DL, PTL, Label)) :- !,
+run_cmd(_TT, _TL, RD, mkfs_multi(FS, DL, PTL, Label, B, E)) :- !,
 	format_to_atom(Title, ' Creating filesystem ~w ', [FS]),
-	mkfs_multi(FS, Title, DL, PTL, Label, RD),
+	mkfs_multi(FS, Title, DL, PTL, Label, B, E, RD),
 	true.
 run_cmd(_TT, _TL, RD, mount_multi(FS, D, PTL)) :- !,
 	mount_fs_multi(FS, D, PTL, RD),
@@ -271,19 +294,14 @@ run_cmd(_TT, TL, RD, install_pkg(IM)) :- !,
 	set_useraccount(RD),
 	% Copy /etc/skel files for root.
 	os_shell2([cp, RD + '/etc/skel/.[bix]*', RD + '/root']),
-	% set network
 	set_network(RD),
-	% set sudoers
 	set_sudoers,
 	% clean up polkit rule - it's only useful in live systems
 	( IM \= local
 	; os_rm_f(RD + '/etc/polkit-1/rules.d/void-live.rules')
 	),
-	% install software.
 	soft_install(TL, RD),
-	% install bootloader.
 	install_bootloader(TL, RD),
-	% unmount all filesystems.
 	umount_filesystems(RD),
 	tui_msgbox('Void Linux has been installed successfully!', [sz([6, 40])]),
 	os_call(clear, []),
@@ -294,9 +312,9 @@ run_cmdl(TT, TL, L) :-
 	maplist(run_cmd(TT, TL, RD), L).
 
 make_cmd(_TT, _TL, prepare_to_install).
-make_cmd(TT, _TL, wipe_dev7(DEV7)) :-
+make_cmd(TT, TL, wipe_dev7(DEV7)) :-
 	TT \= manual,
-	inst_setting(dev7, used(UL)),
+	memberchk(state(used_d7, ctx_used(UL)), TL),
 	member(DEV7, UL),
 	true.
 make_cmd(_TT, TL, ensure_lvm) :-
@@ -314,29 +332,29 @@ make_cmd(TT, TL, part(D, SPL)) :-
 	sort(PL0, SPL),
 	true.
 make_cmd(_TT, TL, modprobe(FS)) :-
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	findall(FS0, (member(fs7(FS0, _Label, _MP, _DL, _CAL, _MOL, _CK), TL), \+ memberchk(FS0, [swap, lvm, luks])), FSL),
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	findall(FS0, (member(fs7(FS0, _Label, _MP, _D, _COL, _MOL, _CK), TL), \+ memberchk(FS0, [swap, lvm, luks])), FSL),
 	sort(FSL, SFSL),
 	member(FS, SFSL),
 	true.
 make_cmd(_TT, TL, mkbd(BD, CMD)) :-
 	member(bdev(BD, CMD), TL),
 	true.
-make_cmd(_TT, TL, mkfs_multi(FS, DL, PTL, Label)) :-
-	member(fs5_multi(FS, Label, DL, PTL, create), TL),
+make_cmd(_TT, TL, mkfs_multi(FS, DL, PTL, Label, B, E)) :-
+	member(fs5_multi(FS, Label, DL, PTL, create, B, E), TL),
 	true.
-make_cmd(_TT, TL, mkfs(FS, DL, Label)) :-
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	member(fs7(FS, Label, _MP, DL, _CAL, _MOL, create), TL),
+make_cmd(_TT, TL, mkfs(FS, D, COL, Label)) :-
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	member(fs7(FS, Label, _MP, D, COL, _MOL, create), TL),
 	true.
 make_cmd(_TT, TL, mount_multi(FS, D, PTL)) :-
-	member(fs5_multi(FS, _Label, [D|_], PTL, create), TL),
+	member(fs5_multi(FS, _Label, [D|_], PTL, create, _B, _E), TL),
 	true.
 make_cmd(_TT, TL, mount(FS, PD, MP)) :-
 	get_mp_list(TL, MPL),
 	member(MP, MPL),
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	member(fs7(FS, _Label, MP, [PD| _], _CAL, _MOL, _CK), TL),
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	member(fs7(FS, _Label, MP, PD, _COL, _MOL, _CK), TL),
 	true.
 make_cmd(_TT, _TL, install_pkg(IM)) :-
 	inst_setting(source, IM),
@@ -347,14 +365,23 @@ run_install(TT, TL) :-
 	run_cmdl(TT, TL, CL),
 	true.
 
+check_dialog :-
+	os_shell2([dialog, '2>/dev/null']),
+	!.
+check_dialog :-
+	writenl('dialog not found.'),
+	writenl('Call "xbps-install dialog" to install it.'),
+	fail.
+
 do_install :-
-	ux_user_root, !,
+	( ux_user_root
+	; writenl('Installer must run as root.'),
+	  fail
+	), !,
+	check_dialog,
 	setup_tui,
 	menu_main,
 	true.
-do_install :-
-	writenl('Installer must run as root.'),
-	fail.
 
 read_config(S) :-
 	\+ at_end_of_stream(S),

@@ -59,6 +59,16 @@ get_mol(FS, MP, MOL) :-
 	!.
 get_mol(_FS, _MP, [rw, noatime]).
 
+get_col(FS, MP, B, COL) :-
+	inst_setting(fs_attr(FS, MP, B), create(COL)),
+	!.
+get_col(_FS, _MP, _B, []).
+
+get_col_mol(B, FS, MP, COL, MOL) :-
+	get_col(FS, MP, B, COL),
+	get_mol(FS, MP, MOL),
+	true.
+
 write_fstab_line(L, S) :-
 	os_wcmdl(L, '\t', S), nl(S), nl(S).
 
@@ -71,15 +81,15 @@ fapassno(_FS, _MP, '2').
 get_fstab_list(TL, [fstab4(none, proc, PMOL, none), fstab4(none, tmp, TMOL, none)| MPL3]) :-
 	get_mol(proc, _, PMOL),
 	get_mol(tmp, _, TMOL),
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	findall(fstab4(MP, FS, MOL, PD), member(fs7(FS, _Label, MP, [PD| _], _CAL, MOL, _CK), TL), MPL0),
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	findall(fstab4(MP, FS, MOL, PD), member(fs7(FS, _Label, MP, PD, _COL, MOL, _CK), TL), MPL0),
 	findall(FSTAB4, get_fstab_list_multi(FS, TL, FSTAB4), MPL1),
 	append(MPL0, MPL1, MPL2),
 	sort(MPL2, MPL3),
 	true.
 
 get_fstab_list_multi(btrfs, TL, fstab4(MP, btrfs, MOL, PD)) :-
-	member(fs5_multi(btrfs, _Label, [PD|_], PTL, _), TL),
+	member(fs5_multi(btrfs, _Label, [PD|_], PTL, _, _B, _E), TL),
 	get_fstab_list_multi_btrfs(PTL, MP, MOL),
 	true.
 

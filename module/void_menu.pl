@@ -32,6 +32,7 @@ action_info(root_fs, 'Root FS', 'Set root file system').
 action_info(mbr_size, 'MBR Size', 'Set MBR size').
 action_info(esp_size, 'ESP Size', 'Set EFI system partition size').
 action_info(boot_size, 'Boot Size', 'Set boot partition size').
+action_info(root_size, 'Root Size', 'Set root partition size').
 action_info(lvm_info, 'LVM Info', 'Set LVM info').
 action_info(make_lvm_vg, 'VG', 'Create LVM volume group').
 action_info(make_lvm_lv, 'LV', 'Create LVM logical volume').
@@ -44,6 +45,7 @@ action_info(part_use, 'Partitions', 'Partitions to use during installation').
 action_info(bios_efi, 'BIOS/EFI', 'Support either BIOS or EFI, or both').
 action_info(hostonly, 'Host-only', 'Install only what is needed for booting the local host').
 action_info(soft, 'Software', 'Select software to install').
+action_info(used_d7, 'Used devices', 'Select device(s) to use').
 
 boot_info(bios, 'Old BIOS boot method').
 boot_info(efi, 'New EFI boot method').
@@ -70,9 +72,10 @@ setting_value(TL, bootloader, B) :- !,
 	; B = 'not set'
 	), !.
 setting_value(TL, bootloader_dev, D) :- !,
-	( memberchk(bootloader_dev(dev3(D, _PL, _TL1)), TL)
+	( get_bootloader_dev7(TL, DEV7) ->
+	  lx_dev7_to_ldn(DEV7, D)
 	; D = 'not set'
-	), !.
+	).
 setting_value(TL, root_fs, FS) :- !,
 	( root_fs(TL, FS)
 	; FS = 'not set'
@@ -121,18 +124,15 @@ menu_review(TT, TL) :-
 	tui_menu_tag(SL, MENULABEL, [no-cancel, ok-label('Return'), title(' Current settings ')], _Tag),
 	true.
 
-% IL - input list (previously selected)
-% OL - output list
-menu_soft(B, FS, IL, OL) :-
+% OL - old list (previously selected)
+% NL - new list
+menu_soft(B, FS, OL, NL) :-
 	findall(S, soft_info(S, B, FS, _DepL, _Descr), SL),
 	( SL = [] ->
-	  OL = []
+	  NL = []
 	; findall(SD, (member(S, SL), menu_soft_(S, SD)), AL),
 	  dialog_msg(checklist, LABEL),
-	  tui_checklist_tag2(AL, IL, LABEL, [title(' Select Software ')], OL1),
-	  % tui_checklist_tag(AL, LABEL, [title(' Select Software ')], OL1),
-	  findall(soft(S), member(S, OL1), OL2),
-	  OL = [state(soft, ctx_soft(FS, B))|OL2]
+	  tui_checklist_tag2(AL, OL, LABEL, [title(' Select Software ')], NL)
 	),
 	true.
 
@@ -142,60 +142,140 @@ menu_soft_(S, [S, Descr]) :-
 
 % C - command.
 menu_edit_main(C, OTL) :-
-	menu_edit_main_3(OTL, C, NTL),
+	% menu_edit_main_4(OTL, C, [], OTL, NTL),
+	phrase(gen_edit(OTL, C, [], no_fu, OTL), NTL),
 	memberchk(state(template, ctx_tmpl(_B, NT)), NTL),
 	retractall(inst_setting(template(_), _)),
 	assertz(inst_setting(template(NT), NTL)),
-	true.
+	!.
 
-menu_edit_main_3([state(bootloader_dev, CTX)|_T], bootloader_dev, [state(bootloader_dev, ctx_bld(B, _NBD))|_L]) :- !,
-	CTX = ctx_bld(B, _OBD),
-	true.
-menu_edit_main_3([state(template, CTX)|T], template, [state(template, ctx_tmpl(B, NT))|L]) :- !,
-	CTX = ctx_tmpl(B, OT),
-	menu_select_template(B, OT, NT),
-	( OT = NT ->
-	  L = T
-	; make_cmd_list_3(NT, B, L)
-	), !,
-	true.
-menu_edit_main_3([state(root_fs, CTX)|T], root_fs, [state(root_fs, ctx_rfs(PTT, NFS, B, DL, TT))|L]) :- !,
-	CTX = ctx_rfs(PTT, OFS, B, DL, TT),
-	menu_select_fs(TT, B, OFS, NFS),
-	( OFS = NFS ->
-	  L = T
-	; ( memberchk(state(make_part_tmpl, ctx_part(_PTT, _B, _FS, TN, _DL)), T)
-	  ; TN = root
-	  ), !,
-	  fs_to_fsl(PTT, NFS, TN, B, DL, L0),
-	  menu_edit_soft(NFS, T, B, SL),
-	  append(L0, SL, L)
-	), !,
-	true.
-menu_edit_main_3([state(make_part_tmpl, CTX)|T], make_part_tmpl, OL) :- !,
-	CTX = ctx_part(PTT, B, FS, OTN, DL),
-	menu_part_tmpl(FS, OTN, NTN),
-	( OTN = NTN ->
-	  OL = [state(make_part_tmpl, CTX)|T]
-	; fs_to_fsl_6(PTT, FS, NTN, B, DL, L0),
-	  menu_edit_soft(FS, T, B, SL),
-	  append(L0, SL, OL)
-	), !,
-	true.
-menu_edit_main_3([state(soft, ctx_soft(FS, B))|T], soft, SL) :- !,
-	% root_fs(TL, FS),
-	menu_edit_soft(FS, T, B, SL),
-	true.
-menu_edit_main_3([H|T], C, [H|NTL]) :-
-	% tui_msgbox_w(H),
-	menu_edit_main_3(T, C, NTL).
-menu_edit_main_3([], _C, []).
+gen_edit([state(bootloader, CTX), bootloader(OB)|T], bootloader, VL, FU, OTL) -->
+	{
+	  CTX = ctx_bl(OB),
+	  % Similar to menu_bootloader(TT, TL).
+	  findall(B, (menu_bootloader_(L0), member(B, L0)), BL),
+	  dialog_msg(radiolist, LABEL),
+	  tui_radiolist_tag2(BL, OB, LABEL, [no-tags, title(' Select a bootloader ')], NB)
+	},
+	[ state(bootloader, ctx_bl(NB))
+	, bootloader(NB)
+	],
+	( { OB = NB } ->
+	  T
+	; gen_edit(T, template, [bl(NB)|VL], FU, OTL)
+	).
+gen_edit([state(template, CTX)|T], template, VL, FU, OTL) -->
+	{
+	  CTX = ctx_tmpl(B, OT),
+	  ( memberchk(bl(VB), VL); VB = B ), !,
+	  menu_select_template(VB, OT, NT)
+	},
+	[state(template, ctx_tmpl(VB, NT))],
+	( { FU = no_fu, OT = NT } ->
+	  T
+	; {
+		memberchk(state(used_d7, ctx_used(UL)), OTL)
+		% , st_root_fs(OTL, OFS)
+	  },
+	  gen_cmd_list_tmpl(NT, UL, VB)
+	).
+gen_edit([state(used_d7, CTX)|T], used_d7, VL, FU, OTL) -->
+	{
+	  CTX = ctx_used(OL),
+	  menu_dev71_checklist(' Select device(s) to use ', OL, NL)
+	},
+	[state(used_d7, ctx_used(NL))],
+	( { FU = no_fu, OL = NL, \+ memberchk(tmpl(_), VL) } ->
+	  T
+	; gen_edit(T, bootloader_dev, [used(NL)|VL], fu, OTL)
+	).
+gen_edit([state(bootloader_dev, CTX), bootloader_dev7(OBD)|T], bootloader_dev, VL, FU, OTL) -->
+	{
+	  CTX = ctx_bld7(B, OBD, D7L),
+	  ( memberchk(bl(VB), VL); VB = B ), !,
+	  ( memberchk(used(VD7L), VL); VD7L = D7L ), !,
+	  menu_dev7_boot_dev(VD7L, [OBD], NBD),
+	  maplist(conv_dev7_to_d4, VD7L, VD4L0), !,
+	  conv_dev7_to_d4(NBD, D4),
+	  delete(VD4L0, D4, DL0),
+	  VD4L = [D4|DL0]
+	},
+	[ state(bootloader_dev, ctx_bld7(VB, NBD, VD7L))
+	, bootloader_dev7(NBD)
+	],
+	( { FU = no_fu, OBD = NBD, D7L = VD7L } ->
+	  T
+	% ; gen_edit(T, root_fs, [d4l(VD4L), bld7(NBD)|VL], fu, OTL)
+	; { memberchk(tmpl(TT), VL)
+		, st_root_fs(OTL, OFS)
+	  }
+	, gen_root_fs(TT, OFS, VB, VD4L)
+	).
+gen_edit([state(root_fs, CTX)|T], root_fs, VL, FU, OTL) -->
+	{
+	  CTX = ctx_rfs(PTT, OFS, B, TT),
+	  ( memberchk(bl(VB), VL); VB = B ), !,
+	  ( memberchk(tmpl(VTT), VL); VTT = TT ), !,
+	  menu_select_fs(VTT, VB, OFS, NFS)
+	},
+	[state(root_fs, ctx_rfs(PTT, NFS, VB, VTT))],
+	( { FU = no_fu, OFS = NFS } ->
+	  T
+	; gen_edit(T, make_part_tmpl, [fs(NFS)|VL], FU, OTL)
+	).
+gen_edit([state(make_part_tmpl, CTX)|T], make_part_tmpl, VL, FU, _OTL) -->
+	{
+	  CTX = ctx_part(PTT, B, FS, OPTN, D4L),
+	  ( memberchk(bl(VB), VL); VB = B ), !,
+	  ( memberchk(fs(VFS), VL); VFS = FS ), !,
+	  ( memberchk(d4l(VD4L), VL); VD4L = D4L ), !,
+	  % !!! PTT can change !!!
+	  ( PTT = one, \+ memberchk(VFS, [zfs, btrfs]) ->
+	    % Skip partition template menu in case of one non-partitionable device.
+	    NPTN = OPTN
+	  ; menu_part_tmpl(VFS, OPTN, NPTN)
+	  )
+	},
+	[state(make_part_tmpl, ctx_part(PTT, VB, VFS, NPTN, VD4L))],
+	( { FU = no_fu, VFS = FS, VD4L = D4L, OPTN = NPTN } ->
+	  T
+	; gen_tmpl_ptt(PTT, VFS, NPTN, VB, VD4L)
+	  , { st_skip_till(T, soft, SL) }
+	  , gen_edit(SL, soft, VL, FU, SL)
+	  % , gen_soft(VFS, VB)
+	).
+gen_edit([state(soft, ctx_soft(FS, B, OSL))|T], soft, VL, _FU, _OTL) -->
+	{
+	  % root_fs(TL, FS),
+	  ( memberchk(bl(VB), VL); VB = B ), !,
+	  ( memberchk(fs(VFS), VL); VFS = FS ), !,
+	  menu_soft(VB, VFS, OSL, NSL)
+	},
+	[state(soft, ctx_soft(VFS, VB, NSL))],
+	( { FS = VFS, OSL = NSL } ->
+	  T
+	; { findall(soft(S), member(S, NSL), NSL2) },
+	  NSL2
+	).
+gen_edit([H|T], C, VL, FU, OTL) -->
+	[H],
+	{ st_retrieve_ctx(H, VL, NVL) },
+	gen_edit(T, C, NVL, FU, OTL).
+gen_edit([], _C, _VL, _FU, _OTL) --> [].
 
-menu_edit_soft(FS, L, B, SL) :-
+gen_tmpl_ptt(dev, FS, PTN, B, D4L) -->
+	gen_tmpl_dev(FS, PTN, B, D4L).
+gen_tmpl_ptt(lvm, FS, PTN, B, PDL) -->
+	gen_tmpl_lvm(FS, PTN, B, PDL).
+gen_tmpl_ptt(one, FS, PTN, B, D) -->
+	gen_tmpl_one(FS, PTN, B, D).
+
+menu_edit_soft(FS, L, B, NSL) :-
 	findall(S, member(soft(S), L), OSL),
-	menu_soft(B, FS, OSL, SL),
+	menu_soft(B, FS, OSL, NSL),
 	true.
 
+% OTL - old template list
 % OB - old bootloader.
 % NB - new bootloader.
 menu_template(OT, OB, NB) :-
@@ -268,12 +348,20 @@ menu_common_opt(_TT, _TL, [mbr_size]) :-
 menu_common_opt(TT, TL, [boot_size]) :-
 	root_fs(TL, FS),
 	get_bootloader(TL, B),
-	need_boot_part(TT, B, FS).
-menu_common_opt(gpt_raid, _TL, [boot_size]).
+	get_enc_attr(FS, B, E),
+	need_boot_part(TT, B, FS, E).
+menu_common_opt(_TT, _TL, [root_size]).
+% menu_common_opt(_TT, _TL, [root_size]) :-
+% 	inst_setting(part_tmpl(root_home), _).
+% menu_common_opt(gpt_raid, _TL, [boot_size]).
 menu_common_opt(gpt_lvm, _TL, [lvm_info]).
 menu_common_opt(gpt_luks, _TL, [luks_info, luks_passwd]).
 menu_common_opt(gpt_luks_lvm, _TL, [lvm_info, luks_info, luks_passwd]).
 menu_common_opt(gpt_lvm_luks, _TL, [lvm_info, luks_info, luks_passwd]).
+
+get_enc_attr(FS, B, E) :-
+	inst_setting(fs_attr(FS, '/', B), encr(E)), !.
+get_enc_attr(_FS, _B, false).
 
 menu_common(TT, TL) :-
 	findall(M0, (menu_common_opt(TT, TL, ML0), member(M0, ML0)), M),
@@ -286,11 +374,24 @@ menu_common(TT, TL) :-
 	cmd_action(A,TT1, TL1),
 	!.
 
-menu_main_info(_TT, _TL, [bios_efi, bootloader]).
-menu_main_info(manual, _TL, [template, bootloader_dev, make_part_manually, part_select, filesystem]).
+menu_main_info(_TT, _TL, [bios_efi]).
 menu_main_info(_TT, TL, [ST]) :-
-	member(state(ST, _), TL).
+	member(state(ST, _), TL),
+	\+ menu_main_skip(ST, TL).
+menu_main_info(manual, _TL, [bootloader_dev, make_part_manually, part_select, filesystem]).
 menu_main_info(_TT, _TL, [common_settings, review, install]).
+
+menu_main_skip(bootloader_dev, TL) :-
+	% Skip bootloader_dev if only one device is used.
+	memberchk(state(used_d7, ctx_used([_])), TL).
+menu_main_skip(soft, TL) :-
+	memberchk(state(root_fs, ctx_rfs(_PTT, FS, B, _TT)), TL),
+	% Skip if there is no software to install.
+	findall(S, soft_info(S, B, FS, _DepL, _Descr), []).
+menu_main_skip(make_part_tmpl, TL) :-
+	memberchk(state(make_part_tmpl, ctx_part(PTT, _B, FS, _OPTN, _D4L)), TL),
+	PTT = one,
+	\+ memberchk(FS, [zfs, btrfs]).
 
 menu_main :-
 	dialog_msg(menu, LABEL),
@@ -359,17 +460,25 @@ cmd_menu(lvm_info, _TT, _TL) :- !,
 cmd_menu(luks_info, _TT, _TL) :- !,
 	menu_luks_info,
 	true.
-cmd_menu(bootloader, TT, TL) :- !,
-	menu_bootloader(TT, TL),
+cmd_menu(bootloader, _TT, TL) :- !,
+	% menu_bootloader(TT, TL),
+	menu_edit_main(bootloader, TL),
 	true.
 cmd_menu(bootloader_dev, _TT, TL) :- !,
-	menu_bootloader_dev(TL),
+	get_bootloader(TL, B),
+	( B = manual ->
+	  menu_bootloader_dev(TL)
+	; menu_edit_main(bootloader_dev, TL)
+	),
 	true.
 cmd_menu(make_part_manually, _TT, _TL) :- !,
 	menu_part_manually,
 	true.
 cmd_menu(make_part_tmpl, _TT, TL) :- !,
 	menu_edit_main(make_part_tmpl, TL),
+	true.
+cmd_menu(used_d7, _TT, TL) :- !,
+	menu_edit_main(used_d7, TL),
 	true.
 cmd_menu(soft, _TT, TL) :- !,
 	menu_edit_main(soft, TL),
@@ -391,6 +500,9 @@ cmd_menu(esp_size, _TT, _TL) :- !,
 	true.
 cmd_menu(boot_size, _TT, _TL) :- !,
 	menu_setting(boot_size),
+	true.
+cmd_menu(root_size, _TT, _TL) :- !,
+	menu_setting(root_size),
 	true.
 cmd_menu(save, _TT, _TL) :- !,
 	menu_save,

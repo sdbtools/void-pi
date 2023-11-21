@@ -29,12 +29,13 @@ part_tmpl_info(btrfs, Name, Descr) :- !,
 part_tmpl_info(_FS, Name, Descr) :-
 	part_tmpl_info(Name, Descr).
 
-setup_fs_template :-
-	% Partition + file system.
-	% pfs(name, mount_point, size)
-	assertz(inst_setting(part_tmpl(root), [pfs(root, '/', '')])),
-	assertz(inst_setting(part_tmpl(root_home), [pfs(root, '/', '20G'), pfs(home, '/home', '')])),
+% Partition + file system.
+% pfs(name, mount_point, size)
+predef_part_tmpl(root, [pfs(root, '/', '')]).
+predef_part_tmpl(root_home, [pfs(root, '/', ROOT_SZ), pfs(home, '/home', '')]) :-
+	inst_setting(root_size, ROOT_SZ).
 
+setup_fs_template :-
 	% dataset(name, mount_point, mount_attrs)
 	assertz(inst_setting(part_tmpl_zfs(root), [
 		  dataset('/ROOT', 'none', [canmount=off])
@@ -99,7 +100,7 @@ part_tmpl(zfs, Name, L) :- !,
 part_tmpl(btrfs, Name, L) :- !,
 	inst_setting(part_tmpl_btrfs(Name), L).
 part_tmpl(_FS, Name, L) :-
-	inst_setting(part_tmpl(Name), L).
+	predef_part_tmpl(Name, L).
 
 % OT - old template
 % NT - new template
@@ -107,9 +108,10 @@ part_tmpl(_FS, Name, L) :-
 % NB - new bootloader.
 switch_template(OT, OT, OB, OB) :- !.
 switch_template(OT, NT, _OB, NB) :-
-	make_cmd_list(NT, NB, L),
+	% make_cmd_list(NT, NB, NTL),
+	phrase(gen_cmd_list(NT, NB), NTL),
 	retractall(inst_setting(template(OT), _)),
-	assertz(inst_setting(template(NT), L)),
+	assertz(inst_setting(template(NT), NTL)),
 	!.
 switch_template(_OT, _NT, _OB, _NB) :-
 	tui_msgbox('Switching of template has failed.', [title(' ERROR ')]),
@@ -118,362 +120,388 @@ switch_template(_OT, _NT, _OB, _NB) :-
 fs2parttype(zfs, solaris_root).
 fs2parttype(_, linux_data).
 
-% need_boot_part(TemplateType, BootLoader, FileSystem).
-need_boot_part(TT, B, _FS) :-
-	member(B, [rEFInd, limine, syslinux, gummiboot]),
-	member(TT, [gpt_lvm, gpt_lvm_luks, gpt_luks, gpt_luks_lvm]),
+% need_boot_part(TemplateType, BootLoader, FileSystem, Encrypt).
+need_boot_part(TT, B, _FS, _E) :-
+	memberchk(B, [rEFInd, limine, syslinux, gummiboot]),
+	memberchk(TT, [gpt_lvm, gpt_lvm_luks, gpt_luks, gpt_luks_lvm]),
 	!.
-need_boot_part(_TT, B, zfs) :-
-	B \= zfsBootMenu,
-	!.
-need_boot_part(_TT, B, FS) :-
+% need_boot_part(_TT, grub2, zfs, true) :- !.
+need_boot_part(_TT, B, FS, _E) :-
 	% bootloader_info(bootloade, supported_fs, supported_template, except_fs).
 	bootloader_info(B, FSL, _, _),
-	\+ member(FS, FSL),
+	\+ memberchk(FS, FSL),
 	!.
 
-% B - bootloader.
-make_cmd_list(TT, B, [bootloader(B), state(template, ctx_tmpl(B, TT))| L]) :-
-	make_cmd_list_3(TT, B, L),
-	true.
+gen_cmd_list(TT, B) -->
+	[
+	  state(bootloader, ctx_bl(B)),
+	  bootloader(B),
+	  state(template, ctx_tmpl(B, TT))
+	],
+	gen_cmd_list_tmpl(TT, [], B).
 
-make_cmd_list_3(manual, _B, []) :- !.
-make_cmd_list_3(gpt_zfsbootmenu, _B, []) :- !,
-	tui_msgbox('not implemented yet'),
-	true.
-make_cmd_list_3(gpt_wizard, _B, L) :- !,
-	menu_dev7_checklist_used_light(' Select device(s) to use ', DEV7L),
-	menu_wiz_action(DEV7L, L),
-	true.
-make_cmd_list_3(TT, B, [bootloader_dev(DEV3)| L]) :- !,
-	menu_dev7_combo(TT, DEV7L),
-	menu_root_fs(TT, B, FS),
-	maplist(menu_dev7_to_d4, DEV7L, D4L),
-	partition_set_mbr(TT, B, FS, D4L, L),
-	D4L = [d4(LN1, _SN1, _D1, _)| _],
-	lx_make_dev3(LN1, DEV3),
-	true.
+% OUDL - old used/boot dev7 list.
+% OFS - old file system.
+gen_cmd_list_tmpl(manual, _OUDL, _B) -->
+	% { inst_setting(dev7, available(DL)) },
+	[state(used_d7, ctx_used([]))].
+gen_cmd_list_tmpl(gpt_wizard, OUDL, _B) -->
+	{ menu_dev71_checklist(' Select device(s) to use ', OUDL, DEV7L) },
+	[state(used_d7, ctx_used(DEV7L))],
+	gen_wiz_action(DEV7L).
+gen_cmd_list_tmpl(TT, OUDL, B) -->
+	gen_cmd_list4(TT, OUDL, B).
 
 enable_template(TT, B) :-
-	make_cmd_list(TT, B, L),
+	% inst_setting(dev7, available(AL)),
+	% make_cmd_list(TT, B, L),
+	phrase(gen_cmd_list(TT, B), L),
 	retractall(inst_setting(template(_), _)),
 	assertz(inst_setting(template(TT), L)),
 	true.
 
-% p4(PartType, device, create/keep, size)
-% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-% TT - template type
-% N - partition number.
-% B - bootloader.
-% DL - available device list.
-% vg(Name, [PhysicalVolumeList], [LogicalVolumeList])
-partition_set_mbr(TT, B, FS, DL, L) :-
-	inst_setting(system(bios), _), !,
-	partition_set_mbr_1(TT, B, FS, DL, L).
-partition_set_mbr(TT, B, FS, DL, L) :-
-	partition_set_efi(TT, B, FS, DL, L).
+% O7L - old list.
+gen_cmd_list4(TT, O7L, B) -->
+	{ menu_dev7_use(TT, O7L, D7L) },
+	[ state(used_d7, ctx_used(D7L)) ],
+	gen_bld(TT, B, O7L, D7L).
 
-partition_set_mbr_1(TT, B, FS, DL, L) :-
-	memberchk(B, [syslinux, limine]), !,
-	partition_set_efi(TT, B, FS, DL, L).
-partition_set_mbr_1(TT, B, FS, [d4(D, SN, _SDN, N)| T], [
-		p4(sys_bios_boot, bd1([PD, D]), create, MBR_SZ)| L]
-		) :-
-	% No filesystem in this case.
-	lx_part_name(D, N, PD),
-	inst_setting(mbr_size, MBR_SZ),
-	N1 is N + 1,
-	lx_part_name(SN, N1, SD1),
-	partition_set_efi(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
+gen_bld(TT, B, O7L, D7L) -->
+	{ menu_dev7_boot_dev(D7L, O7L, DEV71)
+	  , delete(D7L, DEV71, D7L1)
+	  , DEV7L = [DEV71| D7L1]
+	  , maplist(conv_dev7_to_d4, DEV7L, D4L)
+	},
+	[ state(bootloader_dev, ctx_bld7(B, DEV71, D7L))
+	, bootloader_dev7(DEV71)
+	],
+	gen_root_fs(TT, ext4, B, D4L).
 
-partition_set_efi(TT, B, FS, DL, L) :-
-	inst_setting(system(efi), _), !,
-	partition_set_efi_1(TT, B, FS, DL, L).
-partition_set_efi(TT, B, FS, DL, L) :-
-	partition_set_boot(TT, B, FS, DL, L).
+gen_root_fs(TT, OFS, B, D4L) -->
+	{ menu_select_fs(TT, B, OFS, NFS) },
+	gen_mbr(TT, NFS, B, D4L).
 
-% mount EFI to /boot instead of /boot/efi
-partition_set_efi_1(TT, B, FS, [d4(D, SN, _SDN, N)| T], [
-		p4(sys_efi, bd1([PD, D]), create, ESP_SZ),
-		fs7(EFI_FS, efi, MP, [PD], [], MOL, create)| L]
-		) :-
-	bootloader_boot_efi(BL),
-	memberchk(B, BL), !,
-	EFI_FS = vfat,
-	MP = '/boot',
-	get_mol(EFI_FS, MP, MOL),
-	lx_part_name(D, N, PD),
-	inst_setting(esp_size, ESP_SZ),
-	N1 is N + 1,
-	lx_part_name(SN, N1, SD1),
-	% !!! skip partition_set_boot
-	partition_set_template(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
-partition_set_efi_1(TT, B, FS, [d4(D, SN, _SDN, N)| T], [
-		p4(sys_efi, bd1([PD, D]), create, ESP_SZ),
-		fs7(EFI_FS, efi, MP, [PD], [], MOL, create)| L]
-		) :-
-	EFI_FS = vfat,
-	MP = '/boot/efi',
-	get_mol(EFI_FS, MP, MOL),
-	lx_part_name(D, N, PD),
-	inst_setting(esp_size, ESP_SZ),
-	N1 is N + 1,
-	lx_part_name(SN, N1, SD1),
-	partition_set_boot(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
+gen_mbr(TT, FS, B, D4L) -->
+	{
+	  ( B = zfsBootMenu, inst_setting(system(bios), _) ->
+	    B1 = syslinux
+	  ; B1 = B
+	  )
+	},
+	gen_mbr_1(TT, FS, B1, D4L).
 
-partition_set_boot(TT, B, FS, [d4(D, SN, _SDN, N)| T], [
-		p4(linux_data, bd1([PD, D]), create, BOOT_SZ),
-		fs7(BOOT_FS, boot, MP, [PD], [], MOL, create)| L]
-		) :-
-	need_boot_part(TT, B, FS), !,
-	BOOT_FS = ext4,
-	MP = '/boot',
-	get_mol(BOOT_FS, MP, MOL),
-	lx_part_name(D, N, PD),
-	inst_setting(boot_size, BOOT_SZ),
-	N1 is N + 1,
-	lx_part_name(SN, N1, SD1),
-	partition_set_template(TT, B, FS, [d4(D, SN, SD1, N1)| T], L).
-partition_set_boot(TT, B, FS, DL, L) :-
-	partition_set_template(TT, B, FS, DL, L).
+gen_mbr_1(TT, FS, B, D4L) -->
+	{ inst_setting(system(bios), _), ! },
+	gen_mbr_2(TT, FS, B, D4L).
+gen_mbr_1(TT, FS, B, D4L) -->
+	gen_efi(TT, FS, B, D4L).
 
-partition_set_template(gpt_lvm, B, FS, DL, L) :- !,
-	maplist(d4_to_p4_pd(linux_lvm), DL, P4L, PDL),
-	fs_to_lvl_fsl(FS, root, B, PDL, L0),
-	menu_soft(B, FS, [], SL),
-	append(P4L, [state(root_fs, ctx_rfs(lvm, FS, B, DL, gpt_lvm))| L0], L1),
-	append(L1, SL, L),
-	true.
-partition_set_template(gpt_lvm_luks, B, FS, DL, L) :- !,
-	inst_setting(lvm, lv(VG, LV, SZ)),
-	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
-	maplist(d4_to_p4_pd(linux_lvm), DL, P4L, PDL),
-	format_to_atom(LVM_PD_SHORT, '~w-~w', [VG, LV]),
-	luks_dev_name(LVM_PD_SHORT, LUKS_PD),
-	get_luks_type(B, LUKS_T),
-	fs_to_fsl_d(FS, root, B, LUKS_PD, FSL),
-	menu_soft(B, FS, [], SL),
-	append(P4L, [
-		bdev(lvm, vg(VG, PDL, [lv(LV, SZ)])),
-		bdev(luks, luks(LUKS_T, LVM_PD)),
-		state(root_fs, ctx_rfs(one, FS, B, DL, gpt_lvm_luks))| FSL],
-		L0),
-	append(L0, SL, L),
-	true.
-partition_set_template(gpt_luks, B, FS, DL, L) :- !,
-	DL = [d4(D, _SN, SDN, N)| _T],
-	lx_part_name(D, N, PD),
-	luks_dev_name(SDN, LUKS_PD),
-	get_luks_type(B, LUKS_T),
-	fs_to_fsl_d(FS, root, B, LUKS_PD, FSL),
-	menu_soft(B, FS, [], SL),
-	append([
-		p4(linux_luks, bd1([PD, D]), create, ''),
-		bdev(luks, luks(LUKS_T, PD)),
-		state(root_fs, ctx_rfs(one, FS, B, DL, gpt_luks))| FSL],
-		SL,
-		L),
-	true.
-partition_set_template(gpt_luks_lvm, B, FS, DL, [
-		p4(linux_luks, bd1([PD, D]), create, ''),
-		bdev(luks, luks(LUKS_T, PD)),
-		state(root_fs, ctx_rfs(lvm, FS, B, DL, gpt_luks_lvm))| L]
-		) :- !,
-	DL = [d4(D, _SN, SDN, N)| _T],
-	lx_part_name(D, N, PD),
-	luks_dev_name(SDN, LUKS_PD),
-	get_luks_type(B, LUKS_T),
-	fs_to_lvl_fsl(FS, root, B, [LUKS_PD], L0),
-	menu_soft(B, FS, [], SL),
-	append(L0, SL, L),
-	true.
-partition_set_template(TT, B, FS, DL, [state(root_fs, ctx_rfs(dev, FS, B, DL, TT))|L]) :-
-	fs_to_p4l_fsl(FS, root, B, DL, L0),
-	menu_soft(B, FS, [], SL),
-	append(L0, SL, L),
-	true.
+gen_mbr_2(TT, FS, B, D4L) -->
+	{ memberchk(B, [syslinux, limine]) },
+	gen_efi(TT, FS, B, D4L).
+gen_mbr_2(TT, FS, B, [d4(D, SN, _SDN, N)| T]) -->
+	{
+	  % No filesystem in this case.
+	  lx_part_name(D, N, PD),
+	  inst_setting(mbr_size, MBR_SZ),
+	  N1 is N + 1,
+	  lx_part_name(SN, N1, SD1)
+	},
+	[p4(sys_bios_boot, bd1([PD, D]), create, MBR_SZ)],
+	gen_efi(TT, FS, B, [d4(D, SN, SD1, N1)| T]).
+
+gen_efi(TT, FS, B, D4L) -->
+	{ inst_setting(system(efi), _), ! },
+	gen_efi_1(TT, FS, B, D4L).
+gen_efi(TT, FS, B, D4L) -->
+	gen_boot(TT, FS, B, D4L).
+
+gen_efi_1(TT, FS, B, [d4(D, SN, _SDN, N)| T]) -->
+	{
+	  bootloader_boot_efi(BL),
+	  memberchk(B, BL), !,
+	  EFI_FS = vfat,
+	  MP = '/boot',
+	  get_col_mol(B, EFI_FS, MP, COL, MOL),
+	  lx_part_name(D, N, PD),
+	  inst_setting(esp_size, ESP_SZ),
+	  N1 is N + 1,
+	  lx_part_name(SN, N1, SD1)
+	},
+	[
+	  p4(sys_efi, bd1([PD, D]), create, ESP_SZ),
+	  fs7(EFI_FS, efi, MP, PD, COL, MOL, create)
+	],
+	gen_tmpl(TT, FS, B, [d4(D, SN, SD1, N1)| T]).
+gen_efi_1(TT, FS, B, [d4(D, SN, _SDN, N)| T]) -->
+	{
+	  EFI_FS = vfat,
+	  MP = '/boot/efi',
+	  get_col_mol(B, EFI_FS, MP, COL, MOL),
+	  lx_part_name(D, N, PD),
+	  inst_setting(esp_size, ESP_SZ),
+	  N1 is N + 1,
+	  lx_part_name(SN, N1, SD1)
+	},
+	[
+	  p4(sys_efi, bd1([PD, D]), create, ESP_SZ),
+	  fs7(EFI_FS, efi, MP, PD, COL, MOL, create)
+	],
+	gen_boot(TT, FS, B, [d4(D, SN, SD1, N1)| T]).
+
+gen_boot(TT, FS, B, [d4(D, SN, _SDN, N)| T]) -->
+	{ 
+	  menu_zfs_encr(FS, B, E),
+	  need_boot_part(TT, B, FS, E), !,
+	  BOOT_FS = ext4,
+	  MP = '/boot',
+	  get_col_mol(B, BOOT_FS, MP, COL, MOL),
+	  lx_part_name(D, N, PD),
+	  inst_setting(boot_size, BOOT_SZ),
+	  N1 is N + 1,
+	  lx_part_name(SN, N1, SD1)
+	},
+	[
+	  p4(linux_data, bd1([PD, D]), create, BOOT_SZ),
+	  fs7(BOOT_FS, boot, MP, PD, COL, MOL, create)
+	],
+	gen_tmpl(TT, FS, B, [d4(D, SN, SD1, N1)| T]).
+gen_boot(TT, FS, B, D4L) --> gen_tmpl(TT, FS, B, D4L).
+
+gen_tmpl(gpt_lvm, FS, B, D4L) -->
+	{ maplist(d4_to_p4_pd(linux_lvm), D4L, P4L, PDL) },
+	P4L,
+	gen_st_root_fs(gpt_lvm, FS, B),
+	gen_tmpl_lvm_init(FS, root, B, PDL, D4L),
+	gen_soft(FS, B).
+gen_tmpl(gpt_lvm_luks, FS, B, D4L) -->
+	{
+	  inst_setting(lvm, lv(VG, LV, SZ)),
+	  format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
+	  maplist(d4_to_p4_pd(linux_lvm), D4L, P4L, PDL),
+	  format_to_atom(LVM_PD_SHORT, '~w-~w', [VG, LV]),
+	  luks_dev_name(LVM_PD_SHORT, LUKS_PD),
+	  get_luks_type(B, LUKS_T)
+	},
+	P4L,
+	[
+	  bdev(lvm, vg(VG, PDL, [lv(LV, SZ)]))
+	, bdev(luks, luks(LUKS_T, LVM_PD))
+	],
+	gen_st_root_fs(gpt_lvm_luks, FS, B),
+	gen_tmpl_one_init(FS, root, B, LUKS_PD, D4L),
+	gen_soft(FS, B).
+gen_tmpl(gpt_luks, FS, B, D4L) -->
+	{
+	  D4L = [d4(D, _SN, SDN, N)| _T],
+	  lx_part_name(D, N, PD),
+	  luks_dev_name(SDN, LUKS_PD),
+	  get_luks_type(B, LUKS_T)
+	},
+	[
+	  p4(linux_luks, bd1([PD, D]), create, '')
+	, bdev(luks, luks(LUKS_T, PD))
+	],
+	gen_st_root_fs(gpt_luks, FS, B),
+	gen_tmpl_one_init(FS, root, B, LUKS_PD, D4L),
+	gen_soft(FS, B).
+gen_tmpl(gpt_luks_lvm, FS, B, D4L) -->
+	{
+	  D4L = [d4(D, _SN, SDN, N)| _T],
+	  lx_part_name(D, N, PD),
+	  luks_dev_name(SDN, LUKS_PD),
+	  get_luks_type(B, LUKS_T)
+	},
+	[
+	  p4(linux_luks, bd1([PD, D]), create, '')
+	, bdev(luks, luks(LUKS_T, PD))
+	],
+	gen_st_root_fs(gpt_luks_lvm, FS, B),
+	gen_tmpl_lvm_init(FS, root, B, [LUKS_PD], D4L),
+	gen_soft(FS, B).
+gen_tmpl(gpt_basic, FS, B, D4L) -->
+	gen_st_root_fs(gpt_basic, FS, B),
+	gen_tmpl_dev_init(FS, root, B, D4L),
+	gen_soft(FS, B).
+
+% Bootloader supports only one filesystem.
+gen_st_root_fs(_TT, _FS, B) -->
+	{ bootloader_info(B, [_], _, _) }.
+gen_st_root_fs(TT, FS, B) -->
+	{ tmpl_to_grp(TT, PTT) },
+	[state(root_fs, ctx_rfs(PTT, FS, B, TT))].
+
+gen_tmpl_lvm(FS, PTN, B, PDL) -->
+	{
+	  memberchk(FS, [zfs, btrfs]), !,
+	  part_tmpl(FS, PTN, PTL),
+	  get_enc_attr(FS, B, E),
+	  inst_setting(lvm, lv(VG, LV, SZ)),
+	  format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV])
+	},
+	[ bdev(lvm, vg(VG, PDL, [lv(LV, SZ)]))
+	, fs5_multi(FS, void, [LVM_PD], PTL, create, B, E)
+	].
+gen_tmpl_lvm(FS, PTN, B, PDL) -->
+	{
+	  part_tmpl(FS, PTN, PTL),
+	  inst_setting(lvm, lv(VG, _LV, _SZ)),
+	  part_tmpl_to_lv_fs(PTL, B, FS, VG, LVL, FSL)
+	},
+	[ bdev(lvm, vg(VG, PDL, LVL)) ],
+	FSL.
+
+gen_tmpl_lvm_init(FS, OPTN, B, PDL, D4L) -->
+	{ menu_part_tmpl(FS, OPTN, NPTN) },
+	[state(make_part_tmpl, ctx_part(lvm, B, FS, NPTN, D4L))],
+	gen_tmpl_lvm(FS, NPTN, B, PDL).
+
+gen_tmpl_one(FS, PTN, B, D) -->
+	{
+	  memberchk(FS, [zfs, btrfs]), !,
+	  part_tmpl(FS, PTN, PTL),
+	  get_enc_attr(FS, B, E)
+	},
+	[ fs5_multi(FS, void, [D], PTL, create, B, E) ].
+gen_tmpl_one(FS, _PTN, B, D) -->
+	{ 
+	  MP = (/),
+	  get_col_mol(B, FS, MP, COL, MOL)
+	},
+	[fs7(FS, void, MP, D, COL, MOL, create)].
+
+gen_tmpl_one_init(FS, OPTN, B, D, D4L) -->
+	{ memberchk(FS, [zfs, btrfs]) -> 
+	  menu_part_tmpl(FS, OPTN, NPTN)
+	; NPTN = root
+	},
+	[state(make_part_tmpl, ctx_part(one, B, FS, NPTN, D4L))],
+	gen_tmpl_one(FS, NPTN, B, D).
+
+gen_tmpl_dev(FS, PTN, B, D4L) -->
+	{
+	  memberchk(FS, [zfs, btrfs]), !,
+	  part_tmpl(FS, PTN, PTL),
+	  get_enc_attr(FS, B, E),
+	  fs2parttype(FS, PT),
+	  maplist(d4_to_p4_pd(PT), D4L, P4L, PDL)
+	},
+	P4L,
+	[fs5_multi(FS, void, PDL, PTL, create, B, E)].
+gen_tmpl_dev(FS, PTN, B, D4L) -->
+	{
+	  part_tmpl(FS, PTN, PTL),
+	  fs2parttype(FS, PT),
+	  D4L = [D4| _T]
+	},
+	gen_tmpl_to_p4_fs(PTL, B, FS, PT, D4).
+
+gen_tmpl_dev_init(FS, OPTN, B, D4L) -->
+	{ menu_part_tmpl(FS, OPTN, NPTN) },
+	[state(make_part_tmpl, ctx_part(dev, B, FS, NPTN, D4L))],
+	gen_tmpl_dev(FS, NPTN, B, D4L).
+
+gen_soft(FS, B) -->
+	{ findall(S, soft_info(S, B, FS, _DepL, _Descr), SL) },
+	gen_soft2(SL, FS, B, []).
+
+gen_soft2([], FS, B, _IL) -->
+	[state(soft, ctx_soft(FS, B, []))].
+gen_soft2(SL, FS, B, IL) -->
+    {
+	  findall(SD, (member(S, SL), menu_soft_(S, SD)), AL),
+	  dialog_msg(checklist, LABEL),
+	  tui_checklist_tag2(AL, IL, LABEL, [title(' Select Software ')], OL1),
+	  findall(soft(S), member(S, OL1), OL2)
+	},
+	[state(soft, ctx_soft(FS, B, OL1))],
+	OL2.
+
+gen_tmpl_to_p4_fs([pfs(Label, MP, SZ)|T], B, FS, PT, d4(D, SN, _SDN, N)) -->
+	{
+	  get_col_mol(B, FS, MP, COL, MOL),
+	  lx_part_name(D, N, PD),
+	  N1 is N + 1,
+	  lx_part_name(SN, N1, SD1)
+	},
+	[ p4(PT, bd1([PD, D]), create, SZ)
+	, fs7(FS, Label, MP, PD, COL, MOL, create)
+	],
+	gen_tmpl_to_p4_fs(T, B, FS, PT, d4(D, SN, SD1, N1)).
+gen_tmpl_to_p4_fs([], _B, _FS, _PT, _D) --> [].
+
+tmpl_to_grp(gpt_basic, dev) :- !.
+tmpl_to_grp(gpt_lvm, lvm) :- !.
+tmpl_to_grp(gpt_luks_lvm, lvm) :- !.
+tmpl_to_grp(gpt_luks, one) :- !.
+tmpl_to_grp(gpt_lvm_luks, one) :- !.
 
 get_luks_type(grub2, luks1) :- !.
 get_luks_type(_B, luks2).
 
-% DCL - device combo list.
-menu_wiz_action([], []) :- !.
-menu_wiz_action(DCL, L) :-
-	dialog_msg(menu, MENULABEL),
-	M = [
-		  make_lvm_vg
-		, make_luks
-		, make_part_wiz
-		, bootloader_dev
-	],
-	maplist(menu_tag, M, ML),
-	tui_menu_tag(ML, MENULABEL, [title(' Select Action ')], Tag),
-	action_info(A, Tag, _),
-	wiz_cmd(A, DCL, L),
-	true.
+gen_wiz_action([]) --> [].
+gen_wiz_action(DCL) -->
+	{
+	  dialog_msg(menu, MENULABEL),
+	  M = [
+	  	  make_lvm_vg
+	  	, make_luks
+	  	, make_part_wiz
+	  	, bootloader_dev
+	  ],
+	  maplist(menu_tag, M, ML),
+	  tui_menu_tag(ML, MENULABEL, [title(' Select Action ')], Tag),
+	  action_info(A, Tag, _)
+	},
+	gen_wiz_cmd(A, DCL).
 
 % DCL - device combo list.
 % DC: dev7, p4, luks, lvm_vg
-wiz_cmd(make_lvm_vg, DCL, [bdev(lvm, vg(VG, _PDL, [lv(LV, SZ)]))| L]) :- !,
-	menu_dev_combo_checklist2(' Select VG Device(s) ', DCL, [], VGL),
-	tui_inputbox('Volume Group Name:', '', [], VG),
-	LV = void,
-	SZ = '',
-	% maplist(d4_to_p4_pd(linux_lvm), DL, P4L, PDL),
-	subtract(DCL, VGL, DCL2),
-	menu_wiz_action(DCL2, L),
-	true.
-wiz_cmd(make_luks, DCL, L) :- !,
-	% LD - luks device
-	menu_dev_combo_menu(' Select LUKS Device ', DCL, none, LD),
-	% LDN - luks device name
-	tui_inputbox('LUKS Dev Name:', '', [], LDN),
-	menu_password_for('LUKS', luks(LDN)),
-	format_to_atom(LUKS_PD, '/dev/mapper/~w', [LDN]),
-	delete(DCL, LD, DCL2),
-	menu_wiz_action([luks(LUKS_PD, LDN)| DCL2], L),
-	true.
-wiz_cmd(make_part_wiz, DCL, [p4(linux_luks, bd1([_PD, _D]), create, '')| L]) :- !,
-	menu_dev_combo_menu(' Select Partition Device ', DCL, none, PD),
-	delete(DCL, PD, DCL2),
-	menu_wiz_action([d4(_D, _SN, _SDN, _N)| DCL2], L),
-	true.
-wiz_cmd(bootloader_dev, DCL, [bootloader_dev(DEV3)| L]) :- !,
-	menu_dev_combo_menu(' Select Bootloader Device ', DCL, none, PD),
-	lx_make_dev3(PD, DEV3),
-	menu_wiz_action(DCL, L),
-	true.
+gen_wiz_cmd(make_lvm_vg, DCL) -->
+	[bdev(lvm, vg(VG, _PDL, [lv(LV, SZ)]))],
+	{
+	  menu_dev_combo_checklist2(' Select VG Device(s) ', DCL, [], VGL),
+	  tui_inputbox('Volume Group Name:', '', [], VG),
+	  LV = void,
+	  SZ = '',
+	  % maplist(d4_to_p4_pd(linux_lvm), DL, P4L, PDL),
+	  subtract(DCL, VGL, DCL2)
+	},
+	gen_wiz_action(DCL2).
+gen_wiz_cmd(make_luks, DCL) -->
+	{
+	  % CD - combo device
+	  menu_dev_combo_menu(' Select LUKS Device ', DCL, none, CD),
+	  % LDN - luks device name
+	  tui_inputbox('LUKS Dev Name:', '', [], LDN),
+	  menu_password_for('LUKS', luks(LDN)),
+	  format_to_atom(LUKS_PD, '/dev/mapper/~w', [LDN]),
+	  delete(DCL, CD, DCL2)
+	},
+	gen_wiz_action([luks(LUKS_PD, LDN)| DCL2]).
+gen_wiz_cmd(make_part_wiz, DCL) -->
+	[p4(linux_luks, bd1([_PD, _D]), create, '')],
+	{
+	  % CD - combo device
+	  menu_dev_combo_menu(' Select Partition Device ', DCL, none, CD),
+	  delete(DCL, CD, DCL2)
+	},
+	gen_wiz_action([d4(_D, _SN, _SDN, _N)| DCL2]).
+gen_wiz_cmd(bootloader_dev, DCL) -->
+	% lx_make_dev3(CD, DEV3),
+	[bootloader_dev7(_DEV7)],
+	{
+	  % CD - combo device
+	  menu_dev_combo_menu(' Select Bootloader Device ', DCL, none, _CD)
+	},
+	gen_wiz_action(DCL).
 
-fs_to_p4l_fsl(FS, OTN, B, DL, L) :-
-	menu_part_tmpl(FS, OTN, NTN),
-	fs_to_p4l_fsl_5(FS, NTN, B, DL, L),
-	true.
-
-fs_to_p4l_fsl_5(zfs, TN, B, DL, L) :- !,
-	inst_setting(part_tmpl_zfs(TN), PTL),
-	fs2parttype(zfs, PT),
-	maplist(d4_to_p4_pd(PT), DL, P4L, PDL),
-	append(
-		[state(make_part_tmpl, ctx_part(dev, B, zfs, TN, DL))|P4L],
-		[fs5_multi(zfs, void, PDL, PTL, create)],
-		L),
-	true.
-fs_to_p4l_fsl_5(btrfs, TN, B, DL, L) :- !,
-	inst_setting(part_tmpl_btrfs(TN), PTL),
-	fs2parttype(btrfs, PT),
-	maplist(d4_to_p4_pd(PT), DL, P4L, PDL),
-	append(
-		[state(make_part_tmpl, ctx_part(dev, B, btrfs, TN, DL))|P4L],
-		[fs5_multi(btrfs, void, PDL, PTL, create)],
-		L),
-	true.
-fs_to_p4l_fsl_5(FS, TN, B, DL, L) :-
-	inst_setting(part_tmpl(TN), PTL),
-	fs2parttype(FS, PT),
-	DL = [D4| _T],
-	part_tmpl_to_p4_fs(PTL, FS, PT, D4, P4L, FSL),
-	append(
-		[state(make_part_tmpl, ctx_part(dev, B, FS, TN, DL))|P4L],
-		FSL,
-		L),
-	true.
-
-fs_to_fsl_d(btrfs, OTN, B, D, L) :- !,
-	menu_part_tmpl(btrfs, OTN, NTN),
-	fs_to_fsl_d_5(btrfs, NTN, B, D, L),
-	true.
-fs_to_fsl_d(FS, OTN, B, D, L) :-
-	fs_to_fsl_d_5(FS, OTN, B, D, L),
-	true.
-
-fs_to_fsl_d_5(zfs, TN, B, D, L) :- !,
-	inst_setting(part_tmpl_zfs(TN), PTL),
-	L = [
-		  state(make_part_tmpl , ctx_part(one, B, zfs, TN, D))
-		, fs5_multi(zfs, void, [D], PTL, create)
-	],
-	true.
-fs_to_fsl_d_5(btrfs, TN, B, D, L) :- !,
-	inst_setting(part_tmpl_btrfs(TN), PTL),
-	L = [
-		  state(make_part_tmpl , ctx_part(one, B, btrfs, TN, D))
-		, fs5_multi(btrfs, void, [D], PTL, create)
-	],
-	true.
-fs_to_fsl_d_5(FS, _TN, _B, D, L) :-
-	get_mol(FS, '/', MOL),
-	L = [fs7(FS, void, '/', [D], [], MOL, create)],
-	true.
-
-fs_to_lvl_fsl(FS, OTN, B, PDL, L) :-
-	menu_part_tmpl(FS, OTN, NTN),
-	fs_to_lvl_fsl_5(FS, NTN, B, PDL, L),
-	true.
-
-fs_to_lvl_fsl_5(zfs, TN, B, PDL, L) :- !,
-	inst_setting(part_tmpl_zfs(TN), PTL),
-	inst_setting(lvm, lv(VG, LV, SZ)),
-	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
-	L = [
-		  state(make_part_tmpl
-		, ctx_part(lvm, B, zfs, TN, PDL))
-		, bdev(lvm, vg(VG, PDL, [lv(LV, SZ)]))
-		, fs5_multi(zfs, void, [LVM_PD], PTL, create)
-	],
-	true.
-fs_to_lvl_fsl_5(btrfs, TN, B, PDL, L) :- !,
-	inst_setting(part_tmpl_btrfs(TN), PTL),
-	inst_setting(lvm, lv(VG, LV, SZ)),
-	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
-	L = [
-		  state(make_part_tmpl
-		, ctx_part(lvm, B, btrfs, TN, PDL))
-		, bdev(lvm, vg(VG, PDL, [lv(LV, SZ)]))
-		, fs5_multi(btrfs, void, [LVM_PD], PTL, create)
-	],
-	true.
-fs_to_lvl_fsl_5(FS, TN, B, PDL, L) :-
-	inst_setting(part_tmpl(TN), PTL),
-	inst_setting(lvm, lv(VG, _LV, _SZ)),
-	part_tmpl_to_lv_fs(PTL, FS, VG, LVL, FSL),
-	L = [
-		  state(make_part_tmpl
-		, ctx_part(lvm, B, FS, TN, PDL))
-		, bdev(lvm, vg(VG, PDL, LVL))
-		| FSL
-	],
-	true.
-
-fs_to_fsl(PTT, FS, OTN, B, DL, L) :- !,
-	menu_part_tmpl(FS, OTN, NTN),
-	fs_to_fsl_6(PTT, FS, NTN, B, DL, L),
-	true.
-
-fs_to_fsl_6(dev, FS, TN, B, DL, L) :- !,
-	fs_to_p4l_fsl_5(FS, TN, B, DL, L).
-fs_to_fsl_6(lvm, FS, TN, B, DL, L) :- !,
-	fs_to_lvl_fsl_5(FS, TN, B, DL, L).
-fs_to_fsl_6(one, FS, TN, B, DL, L) :- !,
-	fs_to_fsl_d_5(FS, TN, B, DL, L).
-fs_to_fsl_6(PTT, _FS, _TN, _B, _DL, _L) :- !,
-	tui_msgbox2(['fs_to_6. Invalid key', PTT], [title(' ERROR ')]),
-	fail.
-
-part_tmpl_to_p4_fs([pfs(Label, MP, SZ)|T], FS, PT, d4(D, SN, _SDN, N), [p4(PT, bd1([PD, D]), create, SZ)|P4L], [fs7(FS, Label, MP, [PD], [], MOL, create)|FSL]) :- !,
-	get_mol(FS, MP, MOL),
-	lx_part_name(D, N, PD),
-	N1 is N + 1,
-	lx_part_name(SN, N1, SD1),
-	part_tmpl_to_p4_fs(T, FS, PT, d4(D, SN, SD1, N1), P4L, FSL),
-	true.
-part_tmpl_to_p4_fs([], _FS, _PT, _D, [], []).
-
-part_tmpl_to_lv_fs([pfs(Label, MP, SZ)|T], FS, VG, [lv(Label, SZ)|LVL], [fs7(FS, Label, MP, [LVM_PD], [], MOL, create)|FSL]) :- !,
-	get_mol(FS, MP, MOL),
+part_tmpl_to_lv_fs([pfs(Label, MP, SZ)|T], B, FS, VG, [lv(Label, SZ)|LVL], [fs7(FS, Label, MP, LVM_PD, COL, MOL, create)|FSL]) :- !,
+	get_col_mol(B, FS, MP, COL, MOL),
 	format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, Label]),
-	part_tmpl_to_lv_fs(T, FS, VG, LVL, FSL),
+	part_tmpl_to_lv_fs(T, B, FS, VG, LVL, FSL),
 	true.
-part_tmpl_to_lv_fs([], _FS, _VG, [], []).
+part_tmpl_to_lv_fs([], _B, _FS, _VG, [], []).
 
 d4_to_p4_pd(PT, d4(D, _SN, _SDN, N), p4(PT, bd1([PD, D]), create, ''), PD) :-
 	lx_part_name(D, N, PD),

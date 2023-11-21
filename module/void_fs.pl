@@ -10,46 +10,54 @@
 %	EfiFs - EFI File System Drivers: https://github.com/pbatard/efifs
 
 has_boot_part(TL) :-
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	memberchk(fs7(_FS, _Label, '/boot', _DL, _CAL, _MOL, _CK), TL), !,
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	memberchk(fs7(_FS, _Label, '/boot', _D, _COL, _MOL, _CK), TL), !,
 	true.
 
 has_root_part(TL) :-
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	memberchk(fs7(_FS, _Label, '/', _DL, _CAL, _MOL, _CK), TL), !,
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	memberchk(fs7(_FS, _Label, '/', _D, _COL, _MOL, _CK), TL), !,
 	true.
 has_root_part(TL) :-
-	member(fs5_multi(btrfs, _Label, _DL, PTL, _CK), TL),
+	member(fs5_multi(btrfs, _Label, _DL, PTL, _CK, _B, _E), TL),
 	memberchk(subv(_Name, '/', _MOL, _), PTL), !,
 	true.
 has_root_part(TL) :-
-	member(fs5_multi(zfs, _Label, _DL, PTL, _CK), TL),
+	member(fs5_multi(zfs, _Label, _DL, PTL, _CK, _B, _E), TL),
 	memberchk(dataset(_, '/', _), PTL), !,
 	true.
 
 has_usr_part(TL) :-
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	memberchk(fs7(_FS, _Label, '/usr', _DL, _CAL, _MOL, _CK), TL), !,
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	memberchk(fs7(_FS, _Label, '/usr', _D, _COL, _MOL, _CK), TL), !,
 	true.
 
 root_pd(TL, PD) :-
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	memberchk(fs7(_FS, _Labe1, '/', [PD| _], _CAL, _MOL, _CK), TL),
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	memberchk(fs7(_FS, _Labe1, '/', PD, _COL, _MOL, _CK), TL),
 	!.
+root_pd(TL, PD) :-
+	member(fs5_multi(btrfs, _Label, [PD|_], PTL, _CK, _B, _E), TL),
+	memberchk(subv(_Name, '/', _MOL, _), PTL),
+	!.
+root_pd(TL, PD) :-
+	member(fs5_multi(zfs, _Label, [PD|_], PTL, _CK, _B, _E), TL),
+	memberchk(dataset(_, '/', _), PTL), !,
+	true.
 root_pd(_TL, _PD) :-
 	tui_msgbox2(['root partition was not found']),
 	fail.
 
 root_fs(TL, FS) :-
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	memberchk(fs7(FS, _Labe1, '/', _DL, _CAL, _MOL, _CK), TL), !,
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	memberchk(fs7(FS, _Labe1, '/', _D, _COL, _MOL, _CK), TL), !,
 	true.
 root_fs(TL, btrfs) :-
-	member(fs5_multi(btrfs, _Label, _DL, PTL, _CK), TL),
+	member(fs5_multi(btrfs, _Label, _DL, PTL, _CK, _B, _E), TL),
 	memberchk(subv(_Name, '/', _MOL, _), PTL), !,
 	true.
 root_fs(TL, zfs) :-
-	member(fs5_multi(zfs, _Label, _DL, PTL, _CK), TL),
+	member(fs5_multi(zfs, _Label, _DL, PTL, _CK, _B, _E), TL),
 	memberchk(dataset(_, '/', _), PTL), !,
 	true.
 
@@ -58,43 +66,16 @@ boot_pref(TL, '') :-
 	!.
 boot_pref(_TL, 'boot/').
 
-% DAL - default attr list.
-make_fs_attr(FS, B, _DAL, OL) :-
-	inst_setting(fs_attr(FS, _, B), create(AL1)), !,
-	make_fs_attr_(AL1, OL),
-	true.
-make_fs_attr(_FS, _B, DAL, OL) :-
-	make_fs_attr_(DAL, OL),
-	true.
+get_mkfs_attrs([], []) :- !.
+get_mkfs_attrs(COL, [o('O', lc(COL))]).
 
-make_fs_attr_([], []) :- !.
-make_fs_attr_(AL, [o('O', lc(AL))]).
-
-mkfs(bcachefs, _B, Title, DL, Label, _RD) :- !,
-	tui_progressbox_safe(['mkfs.bcachefs', o('L', dq(Label)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
+mkfs(FS, D, COL, Label) :-
+	get_mkfs_attrs(COL, OL),
+	mkfs_cl(FS, D, OL, Label, CL),
+	format_to_atom(Title, ' Creating filesystem ~w ', [FS]),
+	tui_progressbox_safe(CL, '', [title(Title), sz([12, 80])]),
 	true.
-mkfs(ext2, _B, Title, DL, Label, _RD) :- !,
-	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), '-F', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	true.
-mkfs(ext3, _B, Title, DL, Label, _RD) :- !,
-	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), '-j', '-F', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	true.
-mkfs(ext4, B, Title, DL, Label, _RD) :- !,
-	make_fs_attr(ext4, B, [], OL),
-	tui_progressbox_safe(['mke2fs', o('L', dq(Label)), OL, o(t, ext4), '-F', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	true.
-mkfs(f2fs, B, Title, DL, Label, _RD) :- !,
-	make_fs_attr(f2fs, B, [encrypt], OL),
-	tui_progressbox_safe(['mkfs.f2fs', o(l, dq(Label)), OL, '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	true.
-mkfs(vfat, _B, Title, DL, Label, _RD) :- !,
-	upper(Label, UL),
-	tui_progressbox_safe(['mkfs.vfat', o('F', '32'), o('n', dq(UL)), DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	true.
-mkfs(xfs, _B, Title, DL, Label, _RD) :- !,
-	tui_progressbox_safe(['mkfs.xfs', o('L', dq(Label)), '-f', '-i', 'sparse=0', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	true.
-mkfs(swap, _B, _Title, [PD| _], _Label, _RD) :- !,
+mkfs(swap, PD, _COL, _Label) :- !,
 	os_shell2_rc([swapoff, PD, '>/dev/null', '2>&1'], _),
 	( os_shell2l([mkswap, PD, '2>&1'])
 	; tui_msgbox('ERROR: failed to create swap'),
@@ -105,51 +86,40 @@ mkfs(swap, _B, _Title, [PD| _], _Label, _RD) :- !,
 	  fail
 	), !,
 	true.
-mkfs(FS, _B, _Title, _, _, _, _RD) :- !,
+mkfs(FS, _, _, _) :- !,
 	tui_msgbox2(['Unknown filesystem', FS]),
 	fail.
 
-mkfs_multi(zfs, Title, DL, PTL, _Label, RD) :- !,
-	findall(PID, (member(PD, DL), lx_split_dev(PD, _Pref, P), lx_get_dev_id(P, PID)), PIDL),
-	% tui_msgbox_w(PIDL),
+mkfs_cl(ext2, D, OL, Label, CL) :- !,
+	CL = ['mke2fs', o('L', dq(Label)), OL, '-F', D, '2>&1'],
+	true.
+mkfs_cl(ext3, D, OL, Label, CL) :- !,
+	CL = ['mke2fs', o('L', dq(Label)), OL, '-j', '-F', D, '2>&1'],
+	true.
+mkfs_cl(ext4, D, OL, Label, CL) :- !,
+	CL = ['mke2fs', o('L', dq(Label)), OL, o(t, ext4), '-F', D, '2>&1'],
+	true.
+mkfs_cl(f2fs, D, OL, Label, CL) :- !,
+	CL = ['mkfs.f2fs', o(l, dq(Label)), OL, '-f', D, '2>&1'],
+	true.
+mkfs_cl(vfat, D, OL, Label, CL) :- !,
+	upper(Label, UL),
+	CL = ['mkfs.vfat', o('F', '32'), o('n', dq(UL)), OL, D, '2>&1'],
+	true.
+mkfs_cl(xfs, D, OL, Label, CL) :- !,
+	CL = ['mkfs.xfs', o('L', dq(Label)), OL, '-f', '-i', 'sparse=0', D, '2>&1'],
+	true.
+mkfs_cl(bcachefs, D, OL, Label, CL) :- !,
+	CL = ['mkfs.bcachefs', o('L', dq(Label)), OL, '-f', D, '2>&1'],
+	true.
 
-	% Create a ZFS pool
-	% tui_programbox_safe([
-	tui_progressbox_safe([
-		zpool,
-		create,
-		o(f),
-		o(o, ashift=12),
-		o(o, autotrim=on),
-		% o(o, compatibility='openzfs-2.1-linux'),
-		o('O', compression=lz4),
-		o('O', acltype=posixacl),
-		o('O', xattr=sa),
-		o('O', relatime=on),
-		o(m, none),
-		zroot,
-		PIDL,
-		'2>&1'
-		], '', [title(Title), sz([12, 80])]
-	),
-	% export and re-import the pool with a temporary, alternate root path
-	os_shell2([zpool, export, zroot]),
-	% os_shell2([zpool, import, '-N', o('R', RD), zroot]),
-	tui_progressbox_safe([zpool, import, '-N', o('R', RD), zroot, '2>&1'], '', [title('Import pool'), sz([8, 60])]),
-	mkfs_multi_zfs(PTL),
+mkfs_multi(zfs, Title, DL, PTL, _Label, B, E, RD) :- !,
+	zfs_zpool_create(Title, DL, PTL, B, E, RD),
 	true.
-mkfs_multi(btrfs, Title, DL, PTL, Label, RD) :- !,
-	tui_progressbox_safe(['mkfs.btrfs', o('L', dq(Label)), '-f', DL, '2>&1'], '', [title(Title), sz([12, 80])]),
-	( inst_setting(fs_attr(btrfs, '/', _), mount(AL))
-	; AL = [rw, noatime]
-	), !,
-	DL = [D| _],
-	os_call2([mount, o(o, lc(AL)), D, RD]),
-	% create_btrfs_subv(RD),
-	mkfs_multi_btrfs(PTL, RD),
-	os_call2([umount, RD]),
+mkfs_multi(btrfs, Title, DL, PTL, Label, _B, _E, RD) :- !,
+	btrfs_mkfs(Title, DL, PTL, Label, RD),
 	true.
-mkfs_multi(FS, _Title, _DL, _PTL, _Label, _RD) :- !,
+mkfs_multi(FS, _Title, _DL, _PTL, _Label, _B, _E, _RD) :- !,
 	tui_msgbox2(['Unknown filesystem', FS]),
 	fail.
 
@@ -202,8 +172,8 @@ mk_lvm_lvcreate(VG, lv(LV, _SZ)) :-
 % Get list of mounting points in order in which they should be mounted (except of swap).
 get_mp_list(TL, MPL1) :-
 	% Ignore swap partition
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	findall(MP, (member(fs7(FS, _Label, MP, _DL, _CAL, _MOL, _CK), TL), FS \= swap), MPL0),
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	findall(MP, (member(fs7(FS, _Label, MP, _D, _COL, _MOL, _CK), TL), FS \= swap), MPL0),
 	sort(MPL0, MPL1),
 	true.
 
@@ -227,18 +197,10 @@ mount_fs(FS, D, MP, _RD) :-
 	fail.
 
 mount_fs_multi(zfs, _D, _PTL, RD) :-
-	% Mount the ZFS hierarchy
-	os_call2([zfs, mount, 'zroot/ROOT/void']),
-	os_call2([zfs, mount, '-a']),
-	% Update device symlinks
-	os_call2([udevadm, trigger]),
-
-	% record the current pool configuration in a cache file that Void will use to avoid walking the entire device hierarchy to identify importable pools.
-	os_mkdir_p(RD + '/etc/zfs'),
-	os_call2([zpool, set, cachefile=concat(RD, '/etc/zfs/zpool.cache'), zroot]),
+	zfs_mount_muli(RD),
 	!.
 mount_fs_multi(btrfs, D, PTL, RD) :-
-	mount_btrfs_muli(D, PTL, RD),
+	btrfs_mount_muli(D, PTL, RD),
 	!.
 mount_fs_multi(FS, D, _PTL, _RD) :-
 	tui_msgbox2(['mount_fs_multi has failed.', FS, D], [sz([6, 40])]),
@@ -248,10 +210,7 @@ umount_mnt(RD) :-
 	os_shell2([umount, '--recursive', RD, '2>/dev/nul']),
 	fail.
 umount_mnt(RD) :-
-	zpool_list(L),
-	memberchk(zp(PN,_A2,_A3,_A4,_A5,_A6,_A7,_A8,_A9,_A10,RD), L),
-	% tui_progressbox_safe([zpool, export, '-f', PN, '2>&1'], '', [title(' exporting zpool '), sz([6, 40])]),
-	tui_progressbox_safe([zpool, destroy, '-f', PN, '2>&1'], '', [title(' destroying zpool '), sz([6, 40])]),
+	zfs_destroy_pool_rd(RD),
 	fail.
 umount_mnt(_RD).
 
@@ -279,5 +238,25 @@ ensure_lvm(TL) :-
 	fail.
 ensure_lvm(_TL) :-
 	% halt,
+	true.
+
+get_boot_part(TL, PD) :-
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	member(fs7(_FS, _Label, MP, PD, _, _, _CK1), TL),
+	( MP = '/boot'; MP = (/) ), !,
+	% memberchk(p4(_, bd1([PD| _]), _CK2, _SZ), TL),
+	!.
+get_boot_part(TL, PD) :-
+	member(fs5_multi(FS, _Label, [PD|_], PTL, _CK1, _B, _E), TL),
+	get_boot_part_1(FS, PTL),
+	!.
+
+get_boot_part_1(zfs, PTL) :- !,
+	member(dataset(_, MP, _), PTL),
+	( MP = '/boot'; MP = (/) ), !,
+	true.
+get_boot_part_1(btrfs, PTL) :- !,
+	member(subv(_, MP, _, _), PTL),
+	( MP = '/boot'; MP = (/) ), !,
 	true.
 

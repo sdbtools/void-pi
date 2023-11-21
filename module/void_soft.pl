@@ -74,27 +74,15 @@ soft_configure(RD, btrbk) :- !,
 	os_shell2([chmod, '711', CF2]),
 	true.
 soft_configure(RD, snapper) :- !,
-	% tui_msgbox(soft_configure_1),
 	soft_update(RD),
-	% tui_msgbox(soft_configure_2),
 	os_call2([chroot, RD, ln, '-srf', '/etc/sv/dbus', '/var/service']),
-	% tui_msgbox(soft_configure_3),
 	os_call2([chroot, RD, umount, '/.snapshots']),
-	% tui_msgbox(soft_configure_4),
 	os_call2([chroot, RD, rm, '-rf', '/.snapshots']),
-	% tui_msgbox(soft_configure_5),
 	os_call2([chroot, RD, snapper, '-c', root, 'create-config', '/']),
-	% tui_msgbox(soft_configure_6),
 	os_call2([chroot, RD, mkdir, '/.snapshots']),
-	% tui_msgbox(soft_configure_7),
 	os_call2([chroot, RD, chmod, '750', '/.snapshots']),
-	% tui_msgbox(soft_configure_8),
 	os_call2([chroot, RD, mount, '-a']),
-	% tui_msgbox(soft_configure_9),
 	os_call2([chroot, RD, ln, '-srf', '/etc/sv/snapperd', '/var/service']),
-	% tui_msgbox(soft_configure_10),
-	% in case create-config fails ...
-	% os_call2([cp, RD + '/usr/share/snapper/config-templates/default', RD + '/etc/snapper/configs/root']),
 	true.
 soft_configure(_RD, _) :-
 	true.

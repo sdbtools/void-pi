@@ -53,7 +53,11 @@ dracut_conf(fs(zfs), _TL, _RD, [
 		  v(nofscks, yes)
 		, v(add_dracutmodules, [zfs])
 		, v(omit_dracutmodules, [btrfs, resume])
-	]) :- !.
+	]).
+dracut_conf(fs(zfs), TL, RD, [v(install_items, ['/etc/zfs/zroot.key'])]) :-
+	uses_encr_zfs(TL), !,
+	zfs_setup_encr(RD).
+
 dracut_conf(fs(btrfs), _TL, _RD, [v(add_dracutmodules, [btrfs]), v(add_drivers, [btrfs])]) :- !.
 dracut_conf(fs(cifs), _TL, _RD, [v(add_dracutmodules, [cifs]), v(add_drivers, [cifs])]) :- !.
 dracut_conf(fs(nfs), _TL, _RD, [v(add_dracutmodules, [nfs]), v(add_drivers, [nfs])]) :- !.

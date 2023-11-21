@@ -2,16 +2,6 @@
 
 Void Linux installer implemented in GNU Prolog.
 
-Last tested | ISO                                                                                | Result
------------ | ---------------------------------------------------------------------------------- | ------
-2023-10-10  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
-2023-06-29  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
-2023-07-25  | [void-live-i686-20230628-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20230628-base.iso) | PASS
-2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
-2023-06-29  | [void-live-i686-20210930.iso](https://repo-default.voidlinux.org/live/20210930/void-live-i686-20210930.iso) | PASS
-2023-10-14  | [hrmpf-x86_64-6.1.3_1-20230105.iso ](https://github.com/leahneukirchen/hrmpf/releases/download/v20230105/hrmpf-x86_64-6.1.3_1-20230105.iso) | PASS
-2023-08-22  | [void-live-lxqt-unofficial-x86_64-6.3.13_1-20230821.iso](https://voidbuilds.xyz/download/void-live-lxqt-unofficial-x86_64-6.3.13_1-20230821.iso) | PASS
-
 ## Description
 
 ### Overview
@@ -29,187 +19,16 @@ It extends void-installer in several ways:
 
 void-pi works on Void with Intel or AMD x86 CPU. It wasn't tested with ARM CPUs.
 
-### Features
-
-- completely emulates `void-installer`.
-- install from Void ISO or network.
-- predefined templates for LVM, LUKS, and combinations of them.
-- predefined partitioning templates.
-- selected devices will be automatically cleaned up.
-- TUI dynamically changes depending on selected template.
-- uses `/mnt` for chroot by default.
-- allows to use an alternative rootdir via `--rootdir` command line argument.
-- all settings can be saved in a file and loaded on startup. File name is controlled via `--config` command line argument.
-- passwords are never saved in files even temporarily.
-- max password length is limited to 1024 charaters.
-- Boot modes
-    - UEFI
-    - BIOS
-    - both
-- Boot managers
-    - Uses GRUB, rEFInd, Limine, Syslnux, or Gummiboot as a boot manager.
-    - Uses EFISTUB as a boot loader.
-    - GRUB supports fat, btrfs, ext2, ext3, ext4, xfs and zfs file systems.
-    - REFInd supports fat, btrfs, ext2, ext3, and ext4 file systems.
-    - REFInd is configured to use kernel auto detection.
-    - Limine supports fat, ext2, ext3, and ext4 file systems.
-    - Syslinux supports fat, ext2, ext3, and ext4 file systems.
-    - EFISTUB and Gummiboot are enabled with UEFI and support fat, ext2, ext3, ext4, f2fs, and xfs file systems. (btrfs is not supported at this time)
-    - ZFSBootMenu is enabled only with "Manual" and "GPT. Basic" templates at this time.
-    - If a boot manager doesn't support a file system (or LVM, or LUKS), then installer will create an ext4 `/boot` partition.
-- ZFS
-    - Requires [hrmpf](https://github.com/leahneukirchen/hrmpf/releases) ISO.
-    - Supported by GRUB and ZFSBootMenu bootmanagers.
-    - In case of GRUB only "GPT. Basic" template is supported at this time.
-- LUKS
-    - LUKS can be used with GRUB, rEFInd, Limine, and Syslinux.
-    - In case of GRUB whole system is located on LUKS, including encrypted `/boot`. LUKS1 is used because GRUB2 doesn't support LUKS2.
-    - In case of rEFInd and Limine installer will create an unencrypted ext4 `/boot` partition. LUKS2 is used.
-- Syslinux
-    - In case of UEFI the kernel and initramfs files are located in the EFI system partition (aka ESP), as Syslinux does not (currently) have the ability to access files outside its own partition.
-    - IA32 (32-bit) is currently unsupported.
-- EFISTUB
-    - The kernel and initramfs files are located in the EFI system partition (aka ESP).
-    - btrfs is not supported.
-- Gummiboot
-    - The kernel and initramfs files are located in the EFI system partition (aka ESP).
-    - btrfs is not supported.
-- ZFSBootMenu
-    - Only direct EFI booting is supported at this time.
-    - Enabled only with "Manual" and "GPT. Basic" templates at this time.
-- Multi-device support
-    - Multi-device configurations are available with BTRFS and LVM.
-- Additional software
-    - [snooze](https://github.com/leahneukirchen/snooze) - run a command at a particular time.
-    - [btrbk](https://github.com/digint/btrbk) - Tool for creating snapshots and remote backups of btrfs subvolumes.
-    - [grub-btrfs](https://github.com/Antynea/grub-btrfs) - improves the grub bootloader by adding a btrfs snapshots sub-menu, allowing the user to boot into snapshots.
-
-### Templates
-
-- Manual configuration of everything
-- GPT. Basic
-- GPT. LVM
-- GPT. LVM. LUKS
-- GPT. LUKS. One device
-- GPT. LUKS. LVM. One device
-
-### Partitioning Templates
-
-#### BTRFS
-void-pi creates the following Btrfs subvolumes with a [flat layout][flat layout]:
-
-- root
-
-Subvolume name    | Mounting point    | Mount options
----               | ---               | ---
-`@`               | `/`               |
-`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
-
-- root_home
-
-Subvolume name    | Mounting point    | Mount options
----               | ---               | ---
-`@`               | `/`               |
-`@home`           | `/home`           | `nodev,nosuid`
-`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
-
-- max
-
-Subvolume name    | Mounting point    | Mount options
----               | ---               | ---
-`@`               | `/`               |
-`@home`           | `/home`           | `nodev,nosuid`
-`@opt`            | `/opt`            | `nodev`
-`@srv`            | `/srv`            | `nodev,noexec,nosuid` + [nodatacow][nodatacow]
-`@var`            | `/var`            | `nodev,noexec,nosuid`
-`@var-cache-xbps` | `/var/cache/xbps` | `nodev,noexec,nosuid`
-`@var-lib-ex`     | `/var/lib/ex`     | `nodev,noexec,nosuid` + nodatacow
-`@var-log`        | `/var/log`        | `nodev,noexec,nosuid` + nodatacow
-`@var-opt`        | `/var/opt`        | `nodev,noexec,nosuid`
-`@var-spool`      | `/var/spool`      | `nodev,noexec,nosuid` + nodatacow
-`@var-tmp`        | `/var/tmp`        | `nodev,noexec,nosuid` + nodatacow
-`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
-
-#### ZFS
-
-- root
- 
-Dataset name      | Mounting point    | Options
----               | ---               | ---
-`/ROOT/void`      | `/`               | `canmount=noauto, atime=off`
-
-- root_home
-
-Dataset name      | Mounting point    | Options
----               | ---               | ---
-`/ROOT/void`      | `/`               | `canmount=noauto, atime=off`
-`/home`           | `/home`           | `atime=off`
-
-- max
-
-Dataset name      | Mounting point    | Options
----               | ---               | ---
-`/ROOT/void`      | `/`               | `canmount=noauto, atime=off`
-`/home`           | `/home`           | `atime=off`
-`/opt`            | `/opt`            | `atime=off`
-`/srv`            | `/srv`            | `atime=off`
-`/tmp`            | `/tmp`            | `com.sun:auto-snapshot=false, atime=off`
-`/var`            | `/var`            | `canmount=off, atime=off`
-`/var-lib`        | `/var/lib`        | `canmount=off, atime=off`
-`/var-cache-xbps` | `/var/cache/xbps` | `com.sun:auto-snapshot=false, atime=off`
-`/var-lib-ex`     | `/var/lib/ex`     | `atime=off`
-`/var-log`        | `/var/log`        | `atime=off`
-`/var-opt`        | `/var/opt`        | `atime=off`
-`/var-spool`      | `/var/spool`      | `atime=off`
-`/var-tmp`        | `/var/tmp`        | `com.sun:auto-snapshot=false, atime=off`
-
-#### All other
-
-- root
-    - `/` (size: whole device)
-- root_home
-    - `/` (size: 20GB)
-    - `/home` (size: remainder)
-
-### Default settings
-
-All default settings can be changed via `Common Attrs` sub-menu.
-
-- host-only: no
-- installation source: local
-- host name: voidpp
-- user name: void
-- keymap: us
-- locale: en_US.UTF-8
-- timezone: America/New_York
-- LUKS mapping name: crypt
-- MBR size: 1M
-- ESP size: [550M][550M]
-- Boot partition size: 1G
-- btrbk: `/mnt/btr_pool`
-    - snapshots are created for @, @opt, @var, @srv, and @home subvolumes.
-    - btrbk is scheduled to run every day
-
-### Partitioning
-
-#### BIOS boot mode
-
-- Limine and Syslinux
-    - `/dev/sdX1` is the root filesystem (size: whole device)
-- Grub
-    - `/dev/sdX1` is the BIOS boot sector (size: 1M)
-    - `/dev/sdX2` is the root filesystem (size: remainder)
-
-#### UEFI boot mode
-
-- `/dev/sdX1` is the EFI system partition (size: [550M][550M])
-- `/dev/sdX2` is the root filesystem (size: remainder)
-
-#### F2FS options
-
-- `extra_attr,inode_checksum,sb_checksum,compression,encrypt`
-
 ## How to run
+
+### Run installer from another computer.
+
+- Boot from an installation ISO.
+- Run `ip a` to get an IP address.
+- From another computer run:
+    - `ssh anon@ip_address`
+    - `sudo bash`
+    - Run void-pi.
 
 ### Run precompiled executable.
 ```sh
@@ -246,6 +65,215 @@ gplc --min-size void-pi.pl
 ### Manually run grub-btrfs
 
 - `grub-mkconfig -o /boot/grub/grub.cfg`
+
+### ZFS Install media
+
+#### mklive.sh
+
+This option is to build a custom Void Linux image from the official [void-mklive](https://github.com/void-linux/void-mklive) repository by providing the command-line option -p zfs to the mklive.sh script.
+
+```sh
+$ git clone --depth=1 https://github.com/void-linux/void-mklive.git
+$ cd void-mklive
+$ make
+$ sudo ./mklive.sh -p "zfs dialog" -S "dhcpcd sshd"
+```
+
+#### hrmpf image
+
+Download a pre-built [hrmpf](https://github.com/leahneukirchen/hrmpf/releases) image.
+
+
+## Features
+
+- completely emulates `void-installer`.
+- install from Void ISO or network.
+- predefined templates for LVM, LUKS, and combinations of them.
+- predefined partitioning templates.
+- selected devices will be automatically cleaned up.
+- TUI dynamically changes depending on selected template.
+- uses `/mnt` for chroot by default.
+- allows to use an alternative rootdir via `--rootdir` command line argument.
+- all settings can be saved in a file and loaded on startup. File name is controlled via `--config` command line argument.
+- passwords are never saved in files even temporarily.
+- max password length is limited to 1024 charaters.
+- Boot modes
+    - UEFI
+    - BIOS
+    - both
+- Boot managers
+    - Uses GRUB, rEFInd, Limine, Syslnux, or Gummiboot as a boot manager.
+    - Uses EFISTUB as a boot loader.
+    - GRUB supports fat, btrfs, ext2, ext3, ext4, xfs and zfs file systems.
+    - REFInd supports fat, btrfs, ext2, ext3, and ext4 file systems.
+    - REFInd is configured to use kernel auto detection.
+    - Limine supports fat, ext2, ext3, and ext4 file systems.
+    - Syslinux supports fat, ext2, ext3, and ext4 file systems.
+    - EFISTUB and Gummiboot are enabled with UEFI and support fat, ext2, ext3, ext4, f2fs, and xfs file systems. (btrfs is not supported at this time)
+    - ZFSBootMenu is enabled only with "Manual" and "GPT. Basic" templates at this time.
+    - If a boot manager doesn't support a file system (or LVM, or LUKS), then installer will create an ext4 `/boot` partition.
+- ZFS
+    - Requires a ZFS install media.
+    - Supported by GRUB and ZFSBootMenu bootmanagers.
+    - In case of GRUB only "GPT. Basic" template is supported at this time.
+- LUKS
+    - LUKS can be used with GRUB, rEFInd, Limine, and Syslinux.
+    - In case of GRUB whole system is located on LUKS, including encrypted `/boot`. LUKS1 is used because GRUB2 doesn't support LUKS2.
+    - In case of rEFInd and Limine installer will create an unencrypted ext4 `/boot` partition. LUKS2 is used.
+- Syslinux
+    - In case of UEFI the kernel and initramfs files are located in the EFI system partition (aka ESP), as Syslinux does not (currently) have the ability to access files outside its own partition.
+    - IA32 (32-bit) is currently unsupported.
+- EFISTUB
+    - The kernel and initramfs files are located in the EFI system partition (aka ESP).
+    - btrfs is not supported.
+- Gummiboot
+    - The kernel and initramfs files are located in the EFI system partition (aka ESP).
+    - btrfs is not supported.
+- ZFSBootMenu
+    - Only direct EFI booting is supported at this time.
+    - Enabled only with "Manual" and "GPT. Basic" templates at this time.
+- Multi-device support
+    - Multi-device configurations are available with BTRFS and LVM.
+- Additional software
+    - [snooze](https://github.com/leahneukirchen/snooze) - run a command at a particular time.
+    - [btrbk](https://github.com/digint/btrbk) - Tool for creating snapshots and remote backups of btrfs subvolumes.
+    - [grub-btrfs](https://github.com/Antynea/grub-btrfs) - improves the grub bootloader by adding a btrfs snapshots sub-menu, allowing the user to boot into snapshots.
+
+Last tested | ISO                                                                                | Result
+----------- | ---------------------------------------------------------------------------------- | ------
+2023-10-10  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
+2023-06-29  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
+2023-10-21  | [void-live-i686-20230628-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20230628-base.iso) | PASS
+2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A
+2023-06-29  | [void-live-i686-20210930.iso](https://repo-default.voidlinux.org/live/20210930/void-live-i686-20210930.iso) | PASS
+2023-10-14  | [hrmpf-x86_64-6.1.3_1-20230105.iso ](https://github.com/leahneukirchen/hrmpf/releases/download/v20231102/hrmpf-x86_64-6.5.9_1-20231102.iso) | PASS
+2023-11-19  | [hrmpf-x86_64-6.5.9_1-20231102.iso](https://github.com/leahneukirchen/hrmpf/releases/download/v20230105/hrmpf-x86_64-6.1.3_1-20230105.iso) | PASS
+2023-08-22  | [void-live-lxqt-unofficial-x86_64-6.3.13_1-20230821.iso](https://voidbuilds.xyz/download/void-live-lxqt-unofficial-x86_64-6.3.13_1-20230821.iso) | PASS
+
+## Templates
+
+- Manual configuration of everything
+- GPT. Basic
+- GPT. LVM
+- GPT. LVM. LUKS
+- GPT. LUKS. One device
+- GPT. LUKS. LVM. One device
+
+## Partitioning Templates
+
+### BTRFS
+void-pi creates the following Btrfs subvolumes with a [flat layout][flat layout]:
+
+- root
+
+Subvolume name    | Mounting point    | Mount options
+---               | ---               | ---
+`@`               | `/`               |
+`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
+
+- root_home
+
+Subvolume name    | Mounting point    | Mount options
+---               | ---               | ---
+`@`               | `/`               |
+`@home`           | `/home`           | `nodev,nosuid`
+`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
+
+- max
+
+Subvolume name    | Mounting point    | Mount options
+---               | ---               | ---
+`@`               | `/`               |
+`@home`           | `/home`           | `nodev,nosuid`
+`@opt`            | `/opt`            | `nodev`
+`@srv`            | `/srv`            | `nodev,noexec,nosuid` + [nodatacow][nodatacow]
+`@var`            | `/var`            | `nodev,noexec,nosuid`
+`@var-cache-xbps` | `/var/cache/xbps` | `nodev,noexec,nosuid`
+`@var-lib-ex`     | `/var/lib/ex`     | `nodev,noexec,nosuid` + nodatacow
+`@var-log`        | `/var/log`        | `nodev,noexec,nosuid` + nodatacow
+`@var-opt`        | `/var/opt`        | `nodev,noexec,nosuid`
+`@var-spool`      | `/var/spool`      | `nodev,noexec,nosuid` + nodatacow
+`@var-tmp`        | `/var/tmp`        | `nodev,noexec,nosuid` + nodatacow
+`@snapshots`      | `/.snapshots`     | `nodev,noexec,nosuid` + nodatacow
+
+### ZFS
+
+- root
+ 
+Dataset name      | Mounting point    | Options
+---               | ---               | ---
+`/ROOT/void`      | `/`               | `canmount=noauto, atime=off`
+
+- root_home
+
+Dataset name      | Mounting point    | Options
+---               | ---               | ---
+`/ROOT/void`      | `/`               | `canmount=noauto, atime=off`
+`/home`           | `/home`           | `atime=off`
+
+- max
+
+Dataset name      | Mounting point    | Options
+---               | ---               | ---
+`/ROOT/void`      | `/`               | `canmount=noauto, atime=off`
+`/home`           | `/home`           | `atime=off`
+`/opt`            | `/opt`            | `atime=off`
+`/srv`            | `/srv`            | `atime=off`
+`/tmp`            | `/tmp`            | `com.sun:auto-snapshot=false, atime=off`
+`/var`            | `/var`            | `canmount=off, atime=off`
+`/var-lib`        | `/var/lib`        | `canmount=off, atime=off`
+`/var-cache-xbps` | `/var/cache/xbps` | `com.sun:auto-snapshot=false, atime=off`
+`/var-lib-ex`     | `/var/lib/ex`     | `atime=off`
+`/var-log`        | `/var/log`        | `atime=off`
+`/var-opt`        | `/var/opt`        | `atime=off`
+`/var-spool`      | `/var/spool`      | `atime=off`
+`/var-tmp`        | `/var/tmp`        | `com.sun:auto-snapshot=false, atime=off`
+
+### All other
+
+- root
+    - `/` (size: whole device)
+- root_home
+    - `/` (size: 20GB)
+    - `/home` (size: remainder)
+
+## Default settings
+
+All default settings can be changed via `Common Attrs` sub-menu.
+
+- host-only: no
+- installation source: local
+- host name: voidpp
+- user name: void
+- keymap: us
+- locale: en_US.UTF-8
+- timezone: America/New_York
+- LUKS mapping name: crypt
+- MBR size: 1M
+- ESP size: [550M][550M]
+- Boot partition size: 1G
+- btrbk: `/mnt/btr_pool`
+    - snapshots are created for @, @opt, @var, @srv, and @home subvolumes.
+    - btrbk is scheduled to run every day
+
+## Partitioning
+
+### BIOS boot mode
+
+- Limine and Syslinux
+    - `/dev/sdX1` is the root filesystem (size: whole device)
+- Grub
+    - `/dev/sdX1` is the BIOS boot sector (size: 1M)
+    - `/dev/sdX2` is the root filesystem (size: remainder)
+
+### UEFI boot mode
+
+- `/dev/sdX1` is the EFI system partition (size: [550M][550M])
+- `/dev/sdX2` is the root filesystem (size: remainder)
+
+### F2FS options
+
+- `extra_attr,inode_checksum,sb_checksum,compression,encrypt`
 
 ## Dependencies
 

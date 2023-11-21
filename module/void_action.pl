@@ -31,7 +31,7 @@ part_sgdisk_pl(TL, D, PL) :-
 	true.
 
 validate_fs(TL) :-
-	( get_bootloader_dev3(TL, _)
+	( get_bootloader_dev7(TL, _)
 	; tui_yesno('A bootloader device has not been selected. A bootloader will not be installed. Is this what you want?', [title(' WARNING ')])
 	), !,
 	( has_root_part(TL)
@@ -58,8 +58,8 @@ validate_efi(TL) :-
 	), !,
 	get_bootloader(TL, B),
 	get_bootloader_mp(B, MP),
-	% fs7(Name, Label, MountPoint, [DevList], [CreateAttrList], [MountOptList], create/keep)
-	( memberchk(fs7(FS, _Label, MP, [PD], _CAL, _MOL, _CK), TL)
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	( memberchk(fs7(FS, _Label, MP, PD, _COL, _MOL, _CK), TL)
 	; tui_msgbox2(['The EFI System Partition', PD, 'has not yet been configured, please mount it at', MP], [title(' ERROR ')]),
 	  fail
 	), !,
@@ -345,15 +345,13 @@ umount_filesystems(RD) :-
 	% os_call2([umount, '--lazy', '--recursive', RD]),
 	fail.
 umount_filesystems(RD) :-
-	zpool_list(L),
-	memberchk(zp(PN,_A2,_A3,_A4,_A5,_A6,_A7,_A8,_A9,_A10,RD), L),
-	% os_call2_rc([zfs, unmount, '-f', '-a'], _),
-	tui_progressbox_safe([zpool, export, '-f', PN, '2>&1'], '', [title(' export zpool '), sz([6, 40])]),
+	zfs_export_pool_rd(RD),
 	fail.
 umount_filesystems(_RD).
 
 wipe_disk(D) :-
 	os_shell2_lines([wipefs, '--noheadings', D], L),
+	% os_shell2_lines([wipefs, '--all', '--force', D, '2>&1', '1>/dev/null'], L),
 	( L = [] ->
 	  % os_shell2([sgdisk, '-Zo', D])
 	  format_to_atom(Title, ' Cleaning Device ~w ', [D]),
@@ -401,7 +399,7 @@ wipe_dev_part(linux_lvm, _FSTYPE, D) :- !,
 	true.
 wipe_dev_part(solaris_root, zfs_member, D) :- !,
 	% tui_msgbox(D),
-	zpool_destroy_all,
+	zfs_zpool_destroy_all,
 	wipe_disk(D),
 	true.
 wipe_dev_part(_T, _FSTYPE, D) :-
@@ -413,25 +411,31 @@ ensure_settings(TT, TL) :-
 	S = [bootloader_dev, keymap, network, source, hostname, locale, timezone, passwd, useraccount],
 	maplist(ensure_setting(TT, TL), S).
 
-ensure_passwd(_TT) :-
+ensure_passwd(_TT, _TL) :-
 	\+ inst_setting_tmp(passwd(root), _),
 	menu_password_user(root),
 	fail.
-ensure_passwd(_TT) :-
+ensure_passwd(_TT, _TL) :-
 	inst_setting(useraccount, user(U, _, _)),
 	\+ inst_setting_tmp(passwd(U), _),
 	menu_password_user(U),
 	fail.
-ensure_passwd(TT) :-
+ensure_passwd(TT, _TL) :-
 	memberchk(TT, [gpt_lvm_luks, gpt_luks, gpt_luks_lvm]),
 	U = '$_luks_$',
 	\+ inst_setting_tmp(passwd(U), _),
 	menu_password_luks(U),
 	fail.
-ensure_passwd(_TT).
+ensure_passwd(_TT, TL) :-
+	uses_encr_zfs(TL),
+	U = '$_zfs_$',
+	\+ inst_setting_tmp(passwd(U), _),
+	menu_password_for('ZFS', U),
+	fail.
+ensure_passwd(_TT, _TL).
 
-ensure_setting(TT, _TL, passwd) :- !,
-	ensure_passwd(TT).
+ensure_setting(TT, TL, passwd) :- !,
+	ensure_passwd(TT, TL).
 ensure_setting(TT, TL, bootloader_dev) :- !,
 	ensure_bootloader_dev(TT, TL).
 ensure_setting(_TT, _TL, S) :-

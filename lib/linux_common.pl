@@ -58,15 +58,6 @@ lx_gen_efi(EFI_TARGET) :-
 	),
 	!.
 
-lx_get_boot_part(TL, PD) :-
-	memberchk(fs5(_FS, _Label, '/boot', [PD], _CK1), TL),
-	memberchk(p4(_, bd1([PD| _]), _CK2, _SZ), TL),
-	!.
-lx_get_boot_part(TL, PD) :-
-	memberchk(fs5(_FS, _Label, '/', [PD], _CK1), TL),
-	memberchk(p4(_, bd1([PD| _]), _CK2, _SZ), TL),
-	!.
-
 % N is atom.
 lx_parent_dev_name(D, N, PD) :-
 	% sub_atom(Atom, Before, Length, After, SubAtom),
@@ -181,35 +172,15 @@ lx_get_dev_disk_partuuid(D, PID) :-
 	lx_get_dev_partuuid(D, A),
 	atom_concat('/dev/disk/by-partuuid/', A, PID).
 
-% D - short device name
+% D - long device name
 % /dev/disk/by-id/XXXXX
-lx_get_dev_id(D, DID) :-
-	atom_codes(D, DL),
-	append(PR, [NC], DL),
-	( between(0'0, 0'9, NC) ->
-	  atom_codes(D1, PR)
-	; D1 = D
-	),
-	% atom_concat(WWN, NA, PID),
-	atom_concat('udevadm info -q symlink --path=/sys/block/', D1, C),
+lx_get_dev_disk_id(D, DID) :-
+	atom_concat('udevadm info -q symlink --name=', D, C),
 	os_shell_atom_list(C, AL),
-	lx_fiter_disk_byid(AL, IDL),
+	findall(Suf, (member(A, AL), atom_concat('disk/by-id/', Suf, A)), IDL),
 	lx_fiter_disk_wwn(IDL, WWN),
-	( D1 = D ->
-	  WWN1 = WWN
-	; format_to_atom(WWN1, '~w-part~c', [WWN, NC])
-	),
-	atom_concat('/dev/disk/by-id/', WWN1, DID),
+	atom_concat('/dev/disk/by-id/', WWN, DID),
 	true.
-
-lx_fiter_disk_byid([H|T], [Suf|T1]) :-
-	atom_concat('disk/by-id/', Suf, H), !,
-	lx_fiter_disk_byid(T, T1),
-	true.
-lx_fiter_disk_byid([_|T], T1) :- !,
-	lx_fiter_disk_byid(T, T1),
-	true.
-lx_fiter_disk_byid([], []).
 
 lx_fiter_disk_wwn([H|T], ID) :-
 	( atom_concat('wwn-', _, H) ->
@@ -289,6 +260,7 @@ lx_dev_part_type(part, NAME, part5(PTTYPE,TYPE,PARTUUID,UUID,FSTYPE)) :- !,
 	lx_part_type(PTTYPE, PARTTYPE, TYPE),
 	true.
 lx_dev_part_type(crypt, NAME, crypt(UUID)) :- !,
+	% !!! UUID doesn't seem to exist.
 	os_shell2_atom(['lsblk -dnr -o UUID', NAME], UUID),
 	true.
 lx_dev_part_type(lvm, NAME, lv(VG,LV)) :-
@@ -340,6 +312,8 @@ lx_make_dev3(D, dev3(D, PL, TL)) :-
 lx_dev7_to_dev3(dev7(LN,_SNAME,_TYPE,_RO,_RM,_SIZE,_SSZ), DEV3) :-
 	lx_make_dev3(LN, DEV3),
 	true.
+
+lx_dev3_to_sdn(dev3(_, [dev_part(_, name(SN, _, _), _, _)| _], _TL), SN).
 
 % convert dev7 to long device name.
 lx_dev7_to_ldn(dev7(LN,_SN,_TYPE,_RO,_RM,_SIZE,_SSZ), LN).
@@ -412,6 +386,15 @@ lx_split_dev(D, P, S) :-
 	),
 	atom_codes(S, SL),
 	atom_concat(P, S, D),
+	!.
+
+lx_split_dev_codes(D, PL, SL) :-
+	atom_codes(D, L),
+	split_list_ne(L, "/", LL),
+	( LL = [_, SL]
+	; LL = [_, _, SL]
+	),
+	append(PL, SL, L),
 	!.
 
 lx_get_mac_addr_codes(N, MC) :-

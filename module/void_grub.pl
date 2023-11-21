@@ -47,6 +47,7 @@ grub_install_bios(ENV, BD, RD) :-
 	true.
 
 grub_install_env(TL, ['ZPOOL_VDEV_NAME_PATH=1']) :-
+% grub_install_env(TL, ['ZPOOL_VDEV_NAME_GUID=1']) :-
 	uses_zfs(TL), !,
 	true.
 grub_install_env(_TL, []) :-
@@ -86,7 +87,9 @@ grub_linux_cmdline_luks(TL, ['rd.luks.name'=v(PUUID, LUKS_PD)]) :-
 	true.
 grub_linux_cmdline_luks(_TL, ['rd.auto'=1]) :-
 	inst_setting(hostonly, no).
-grub_linux_cmdline_luks(_TL, [loglevel=4, slub_debug='FZ', slab_nomerge=1, pti=on, mce=0, 'printk.time'=1]).
+% grub_linux_cmdline_luks(_TL, ['rd.debug', rootfstype=zfs, loglevel=4, slub_debug='FZ', slab_nomerge=1, pti=on, mce=0, 'printk.time'=1]).
+% grub_linux_cmdline_luks(_TL, [root='/dev/mapper/crypt_sda2', rootfstype=zfs, loglevel=4, slub_debug='FZ', slab_nomerge=1, mce=0, 'printk.time'=1]).
+grub_linux_cmdline_luks(_TL, [loglevel=4, slub_debug='FZ', slab_nomerge=1, mce=0, 'printk.time'=1]).
 
 grub_configure(TL, RD) :-
 	% Configure grub.

@@ -38,7 +38,9 @@ bootloader_info(rEFInd, [
 		, gpt_lvm_luks
 		, gpt_luks
 		, gpt_luks_lvm
-	], []).
+	], [
+	  zfs
+	]).
 bootloader_info(limine, [
 		  ext2
 		, ext3
@@ -51,7 +53,10 @@ bootloader_info(limine, [
 		, gpt_lvm_luks
 		, gpt_luks
 		, gpt_luks_lvm
-	], []).
+	], [
+		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
+		, zfs
+	]).
 bootloader_info(efistub, [
 		  ext2
 		, ext3
@@ -66,6 +71,7 @@ bootloader_info(efistub, [
 		, gpt_luks_lvm
 	], [
 		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
+		, zfs
 	]).
 bootloader_info(syslinux, [
 		  % btrfs
@@ -85,6 +91,8 @@ bootloader_info(syslinux, [
 		, gpt_luks_lvm
 	], [
 		  % btrfs % It boots with the current configuration of btrfs + EFI. Doesn't boot with BIOS.
+		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
+		, zfs
 		% , f2fs % Not supported by syslinux
 		% , xfs % Won't boot with BIOS
 	]).
@@ -106,39 +114,39 @@ bootloader_info(gummiboot, [
 		, gpt_luks_lvm
 	], [
 		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
+		, zfs
 	]).
 bootloader_info(zfsBootMenu, [
 		  zfs
 	], [
-		  manual
-		, gpt_basic
-		% , gpt_luks
+		  % manual
+		gpt_basic
 	], []).
 
 % Get bootloader name/dependency
-% target_dep_bootloader(efistub, efibootmgr) :- !. % Already installed.
-target_dep_bootloader(zfsBootMenu, zfsbootmenu) :- !.
-target_dep_bootloader(gummiboot, gummiboot) :- !.
-target_dep_bootloader(syslinux, syslinux) :- !.
-target_dep_bootloader(limine, limine) :- !.
-target_dep_bootloader(rEFInd, refind) :- !.
-target_dep_bootloader(grub2, GRUB) :-
-	\+ inst_setting(source, local),
+target_dep_bootloader(efistub, [efibootmgr]) :- !.
+target_dep_bootloader(zfsBootMenu, [zfsbootmenu, efibootmgr, 'gummiboot-efistub']) :- !.
+target_dep_bootloader(gummiboot, [gummiboot]) :- !.
+target_dep_bootloader(syslinux, [syslinux, efibootmgr]) :- !.
+target_dep_bootloader(limine, [limine]) :- !.
+target_dep_bootloader(rEFInd, [refind]) :- !.
+target_dep_bootloader(grub2, [GRUB]) :-
 	inst_setting(system(arch), ARCH),
 	arch2grub(ARCH, GRUB), !.
 
 get_bootloader(TL, B) :-
 	memberchk(bootloader(B), TL).
 
-get_bootloader_dev3(TL, DEV3) :-
-	memberchk(bootloader_dev(DEV3), TL).
+get_bootloader_dev7(TL, DEV7) :-
+	memberchk(bootloader_dev7(DEV7), TL).
 
 install_bootloader(TL, _RD) :-
 	% Do not install bootloader if a bootloader dev has not been selected.
-	\+ get_bootloader_dev3(TL, _), !.
+	\+ get_bootloader_dev7(TL, _), !.
 install_bootloader(TL, RD) :-
 	get_bootloader(TL, B),
-	get_bootloader_dev3(TL, dev3(BD, _, _)),
+	get_bootloader_dev7(TL, DEV7),
+	lx_dev7_to_ldn(DEV7, BD),
 	install_bootloader(B, TL, BD, RD), !.
 install_bootloader(_TL, _RD) :-
 	tui_msgbox('Setting up of a bootloader has failed.'),
@@ -180,8 +188,11 @@ install_bootloader(gummiboot, _TL, _BD, RD) :- !,
 	% gummiboot_configure(TL, RD),
 	!.
 install_bootloader(zfsBootMenu, TL, BD, RD) :- !,
-	zfsbootmenu_configure(TL, RD),
-	zfsbootmenu_install(BD, RD),
+	% tui_msgbox(install_bootloader_1),
+	zfsbootmenu_configure(RD),
+	% tui_msgbox(install_bootloader_2),
+	zfsbootmenu_install(TL, BD, RD),
+	% tui_msgbox(install_bootloader_3),
 	!.
 
 /* Old code. */
@@ -247,7 +258,7 @@ reconfig_kernel(RD) :-
 
 setup_bootloader(_B, TL, _RD) :-
 	% Do not setup bootloader if a bootloader dev has not been selected.
-	\+ get_bootloader_dev3(TL, _), !.
+	\+ get_bootloader_dev7(TL, _), !.
 setup_bootloader(gummiboot, TL, RD) :- !,
 	gummiboot_configure(TL, RD),
 	reconfig_kernel(RD),
@@ -259,19 +270,17 @@ setup_bootloader(efistub, _TL, RD) :- !,
 setup_bootloader(_B, _TL, _RD) :-
 	true.
 
-replace_bootloader_dev(none, NSN, L, TL, NTL) :- !,
+replace_bootloader_dev7(none, NSN, L, TL, NTL) :- !,
 	% add
 	lx_sdn_to_dev7(L, NSN, DEV7),
-	lx_dev7_to_dev3(DEV7, DEV3),
-	NTL = [bootloader_dev(DEV3)| TL].
-replace_bootloader_dev(_, none, _L, TL, NTL) :- !,
+	NTL = [bootloader_dev7(DEV7)| TL].
+replace_bootloader_dev7(_, none, _L, TL, NTL) :- !,
 	% remove
-	findall(E, (member(E, TL), E \= bootloader_dev(_)), NTL).
-replace_bootloader_dev(_, NSN, L, TL, NTL) :-
+	findall(E, (member(E, TL), E \= bootloader_dev7(_)), NTL).
+replace_bootloader_dev7(_, NSN, L, TL, NTL) :-
 	% replace
 	lx_sdn_to_dev7(L, NSN, DEV7),
-	lx_dev7_to_dev3(DEV7, DEV3),
-	maplist(replace_element(bootloader_dev(_), bootloader_dev(DEV3)), TL, NTL).
+	maplist(replace_element(bootloader_dev7(_), bootloader_dev7(DEV7)), TL, NTL).
 
 replace_bootloader(B) :-
 	retract(inst_setting(template(TT), OTL)),
@@ -284,7 +293,7 @@ replace_bootloader(B, TL, NTL) :-
 
 ensure_bootloader_dev(manual, _TL) :- !.
 ensure_bootloader_dev(TT, TL) :-
-	( memberchk(bootloader_dev(_), TL)
+	( get_bootloader_dev7(TL, _)
 	; cmd_menu(bootloader_dev, TT, TL)
 	), !.
 
