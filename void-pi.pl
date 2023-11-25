@@ -314,7 +314,7 @@ run_cmdl(TT, TL, L) :-
 make_cmd(_TT, _TL, prepare_to_install).
 make_cmd(TT, TL, wipe_dev7(DEV7)) :-
 	TT \= manual,
-	memberchk(state(used_d7, ctx_used(UL)), TL),
+	st_used_d7(TL, UL),
 	member(DEV7, UL),
 	true.
 make_cmd(_TT, TL, ensure_lvm) :-

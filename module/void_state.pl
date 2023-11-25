@@ -11,6 +11,9 @@ st_part_tmpl(TL, PTN) :-
 	!.
 st_part_tmpl(_TL, root).
 
+st_used_d7(TL, UL) :-
+	memberchk(state(used_d7, ctx_used(UL)), TL).
+
 st_skip_till([state(C, CTX)|T], C, [state(C, CTX)|T]) :- !.
 st_skip_till([_|T], C, L) :- !,
 	st_skip_till(T, C, L), !.

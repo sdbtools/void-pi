@@ -174,7 +174,7 @@ gen_edit([state(template, CTX)|T], template, VL, FU, OTL) -->
 	( { FU = no_fu, OT = NT } ->
 	  T
 	; {
-		memberchk(state(used_d7, ctx_used(UL)), OTL)
+		st_used_d7(OTL, UL)
 		% , st_root_fs(OTL, OFS)
 	  },
 	  gen_cmd_list_tmpl(NT, UL, VB)
@@ -383,7 +383,7 @@ menu_main_info(_TT, _TL, [common_settings, review, install]).
 
 menu_main_skip(bootloader_dev, TL) :-
 	% Skip bootloader_dev if only one device is used.
-	memberchk(state(used_d7, ctx_used([_])), TL).
+	st_used_d7(TL, [_]).
 menu_main_skip(soft, TL) :-
 	memberchk(state(root_fs, ctx_rfs(_PTT, FS, B, _TT)), TL),
 	% Skip if there is no software to install.
@@ -461,12 +461,10 @@ cmd_menu(luks_info, _TT, _TL) :- !,
 	menu_luks_info,
 	true.
 cmd_menu(bootloader, _TT, TL) :- !,
-	% menu_bootloader(TT, TL),
 	menu_edit_main(bootloader, TL),
 	true.
-cmd_menu(bootloader_dev, _TT, TL) :- !,
-	get_bootloader(TL, B),
-	( B = manual ->
+cmd_menu(bootloader_dev, TT, TL) :- !,
+	( TT = manual ->
 	  menu_bootloader_dev(TL)
 	; menu_edit_main(bootloader_dev, TL)
 	),

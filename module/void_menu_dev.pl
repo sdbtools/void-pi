@@ -21,6 +21,7 @@ menu_dev7_boot_dev(DL, OL, DEV71) :-
 	menu_dev71_radiolist(' Select boot device ', DL, DI, DEV71),
 	true.
 
+% It is not used at this time.
 menu_dev4_boot_dev(D4L, D4) :-
 	menu_d41_menu(' Select boot device ', D4L, SD),
 	menu_sdn_to_d4(D4L, SD, D4),
@@ -32,7 +33,7 @@ menu_bootloader_dev(TL) :-
 	  lx_dev7_to_sdn(DEV7, OSN)
 	; OSN = none
 	),
-	lx_list_dev7_disk(L),
+	st_used_d7(TL, L),
 	menu_select_bootloader_dev7(L, OSN, NSN),
 	( OSN = NSN
 	; replace_bootloader_dev7(OSN, NSN, L, TL, NTL),
