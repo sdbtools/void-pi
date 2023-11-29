@@ -142,12 +142,8 @@ menu_select_fs(TT, B, OFS, NFS) :-
 	tui_radiolist_tag2(ML, OFS, RADIOLABEL, [title(' Select the filesystem type ')], NFS),
 	true.
 
-% MP - mount point
-% FS - file system
-replace_fs(MP, FS, fs7(_, Label, MP, D, CAL, MAL, CK), fs7(FS, Label, MP, D, CAL, MAL, CK)) :- !.
-replace_fs(_MP, _FS, E, E) :- !.
-
-get_zfs_encr(zfs, zfsBootMenu, true) :-
+get_zfs_encr(zfs, grub2, false) :- !.
+get_zfs_encr(zfs, _Bootloader, true) :-
 	tui_yesno('Enable Native ZFS Encryption?', []), !.
 get_zfs_encr(_, _, false).
 

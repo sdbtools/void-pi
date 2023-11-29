@@ -235,18 +235,6 @@ menu_bootloader_([efistub]) :-
 	\+ inst_setting(system(bios), _),
 	true.
 
-menu_bootloader(TT, TL) :-
-	findall(B, (menu_bootloader_(L0), member(B, L0)), BL),
-	( get_bootloader(TL, OB)
-	; OB = none
-	), !,
-	dialog_msg(radiolist, LABEL),
-	tui_radiolist_tag2(BL, OB, LABEL, [no-tags, title(' Select a bootloader ')], NB), !,
-	( OB = NB
-	; menu_template(TT, OB, NB)
-	),
-	!.
-
 split_grp(G, GL) :-
 	atom_chars(G, GC),
 	split_list_ne(GC, [':'], GCL),

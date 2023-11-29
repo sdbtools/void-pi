@@ -273,9 +273,9 @@ run_cmd(_TT, _TL, _RD, mkbd(BD, CMD)) :- !, % make block device.
 run_cmd(_TT, _TL, _RD, mkfs(FS, D, COL, Label)) :- !,
 	mkfs(FS, D, COL, Label),
 	true.
-run_cmd(_TT, _TL, RD, mkfs_multi(FS, DL, PTL, Label, B, E)) :- !,
+run_cmd(_TT, TL, RD, mkfs_multi(FS, DL, PTL, Label, B, E)) :- !,
 	format_to_atom(Title, ' Creating filesystem ~w ', [FS]),
-	mkfs_multi(FS, Title, DL, PTL, Label, B, E, RD),
+	mkfs_multi(FS, Title, TL, DL, PTL, Label, B, E, RD),
 	true.
 run_cmd(_TT, _TL, RD, mount_multi(FS, D, PTL)) :- !,
 	mount_fs_multi(FS, D, PTL, RD),

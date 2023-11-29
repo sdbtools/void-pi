@@ -46,13 +46,13 @@ zfs_zpool_destroy_all :-
 	fail.
 zfs_zpool_destroy_all.
 
-zfs_pool_attrs(B, E) -->
+zfs_pool_attrs(B, E, TL) -->
 	zfs_pool_base,
 	zfs_pool_props,
 	zfs_pool_props(B),
 	zfs_pool_feats,
 	zfs_pool_feats(B),
-	zfs_pool_attrs_encr(E),
+	zfs_pool_attrs_encr(E, TL),
 	zfs_pool_attrs_rest.
 
 zfs_pool_base --> [
@@ -85,29 +85,31 @@ zfs_pool_feats(_) --> [
 	  o('O', dnodesize=auto)
 	].
 
-zfs_pool_attrs_encr(true) --> [
+zfs_pool_attrs_encr(true, TL) --> [
 	  o('O', encryption=on) % ZFS native encryption now defaults to aes-256-gcm.
-	, o('O', keylocation='file:///etc/zfs/zroot.key')
 	, o('O', keyformat=passphrase)
-	].
-zfs_pool_attrs_encr(false) --> [].
+	],
+	zfs_pool_attrs_encr_keylocation(TL).
+zfs_pool_attrs_encr(false, _TL) --> [].
+
+zfs_pool_attrs_encr_keylocation(TL) -->
+	{ has_boot_part(TL), ! },
+	[ o('O', keylocation=prompt) ].
+zfs_pool_attrs_encr_keylocation(_TL) -->
+	[ o('O', keylocation='file:///etc/zfs/zroot.key') ].
 
 zfs_pool_attrs_rest --> [
 	  o(m, none)
 	, zroot
 	].
 
-zfs_zpool_create(Title, DL, PTL, B, E, RD) :-
-	( E = false
-	; inst_setting_tmp(passwd('$_zfs_$'), PSWD),
-	  zfs_passphrase(PSWD, '')
-	), !,
-
+zfs_make_zpool_create_cmd(TL, DL, B, E, OL) :-
 	findall(PID, (member(PD, DL), (atom_concat('/dev/mapper', _, PD) -> PID = PD; lx_get_dev_disk_id(PD, PID))), PIDL),
-	phrase(zfs_pool_attrs(B, E), OL, [PIDL, '2>&1']),
+	phrase(zfs_pool_attrs(B, E, TL), OL, [PIDL, '2>&1']),
 	% tui_msgbox2(OL),
-	tui_progressbox_safe(OL, '', [title(Title), sz([12, 80])]),
+	true.
 
+zfs_zpool_export_import(RD) :-
 	% export and re-import the pool with a temporary, alternate root path
 	PN = zroot,
 	% os_shell2([zpool, export, PN]),
@@ -116,14 +118,42 @@ zfs_zpool_create(Title, DL, PTL, B, E, RD) :-
 	% os_shell2([zpool, import, '-N', o('R', RD), PN]),
 	format_to_atom(ITitle, ' importing zpool ~w ', [PN]),
 	tui_progressbox_safe([zpool, import, '-N', o('R', RD), PN, '2>&1'], '', [title(ITitle), sz([8, 60])]),
-	( E = false
-	% ; os_shell2([zfs, 'load-key', '-L', prompt, zroot])
-	; inst_setting_tmp(passwd('$_zfs_$'), PSWD),
-	  format_to_atom(LKC, 'echo "~w" | zfs load-key -L prompt zroot', [PSWD]),
-	  os_shell(LKC)
-	), !,
-	zfs_mkfs_multi(PTL),
 	true.
+
+zfs_mkfs(TL, PTL) :-
+	zfs_mkfs_multi(PTL),
+	( \+ has_boot_part(TL)
+	; os_call2([zpool, set, bootfs='zroot/ROOT/void', zroot])
+	), !,
+	true.
+
+% No native encryption.
+zfs_zpool_create(Title, TL, DL, PTL, B, false, RD) :- !,
+	zfs_make_zpool_create_cmd(TL, DL, B, false, OL),
+
+	tui_progressbox_safe(OL, '', [title(Title), sz([12, 80])]),
+
+	zfs_zpool_export_import(RD),
+	zfs_mkfs(TL, PTL),
+	!.
+zfs_zpool_create(Title, TL, DL, PTL, B, true, RD) :- !,
+	inst_setting_tmp(passwd('$_zfs_$'), PSWD),
+	( has_boot_part(TL)
+	; zfs_passphrase(PSWD, '')
+	), !,
+
+	zfs_make_zpool_create_cmd(TL, DL, B, true, OL),
+
+	tui_infobox(Title, [sz([4, 40])]),
+	os_scmdl(OL, CA),
+	popen(CA, write, WS),
+	write(WS, PSWD), % no nl(WS) should be here.
+	close(WS),
+
+	zfs_zpool_export_import(RD),
+	zfs_load_key(PSWD),
+	zfs_mkfs(TL, PTL),
+	!.
 
 zfs_export_pool_rd(RD) :-
 	zpool_list(L),

@@ -113,13 +113,13 @@ mkfs_cl(bcachefs, D, OL, Label, CL) :- !,
 	CL = ['mkfs.bcachefs', o('L', dq(Label)), OL, '-f', D, '2>&1'],
 	true.
 
-mkfs_multi(zfs, Title, DL, PTL, _Label, B, E, RD) :- !,
-	zfs_zpool_create(Title, DL, PTL, B, E, RD),
+mkfs_multi(zfs, Title, TL, DL, PTL, _Label, B, E, RD) :- !,
+	zfs_zpool_create(Title, TL, DL, PTL, B, E, RD),
 	true.
-mkfs_multi(btrfs, Title, DL, PTL, Label, _B, _E, RD) :- !,
+mkfs_multi(btrfs, Title, _TL, DL, PTL, Label, _B, _E, RD) :- !,
 	btrfs_mkfs(Title, DL, PTL, Label, RD),
 	true.
-mkfs_multi(FS, _Title, _DL, _PTL, _Label, _B, _E, _RD) :- !,
+mkfs_multi(FS, _Title, _TL, _DL, _PTL, _Label, _B, _E, _RD) :- !,
 	tui_msgbox2(['Unknown filesystem', FS]),
 	fail.
 

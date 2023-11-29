@@ -11,29 +11,11 @@ action_info(common_settings, 'Common Attrs', 'Common settings').
 action_info(template, 'Template', 'Predefined configurations').
 action_info(review, 'Review', 'Show current settings').
 action_info(filesystem, 'Filesystem', 'Configure filesystems and mount points').
-action_info(keymap, 'Keyboard', 'Set system keyboard').
-action_info(locale, 'Locale', 'Set system locale').
-action_info(timezone, 'Timezone', 'Set system time zone').
-action_info(useraccount, 'User Account', 'Set primary user name and password').
-action_info(luks_info, 'LUKS Mapping Name', 'Set LUKS mapping name').
 action_info(bootloader_dev, 'Bootloader Dev', 'Select disk to install bootloader').
 action_info(bootloader, 'Bootloader', 'Set bootloader application').
-action_info(network, 'Network', 'Set up the network').
-action_info(source, 'Source', 'Set source installation').
-action_info(hostname, 'Hostname', 'Set system hostname').
 action_info(save, extra, 'Save settings on disk').
 action_info(install, 'Install', 'Start installation').
-action_info(exit, cancel, 'Exit installation').
-action_info(root_passwd, 'Root Password', 'Set system root password').
-action_info(user_passwd, 'User Password', 'Set user password').
-action_info(luks_passwd, 'LUKS Password', 'Set LUKS password').
-action_info(btrfs_opt, 'Btrfs', 'Btrfs as root options').
 action_info(root_fs, 'Root FS', 'Set root file system').
-action_info(mbr_size, 'MBR Size', 'Set MBR size').
-action_info(esp_size, 'ESP Size', 'Set EFI system partition size').
-action_info(boot_size, 'Boot Size', 'Set boot partition size').
-action_info(root_size, 'Root Size', 'Set root partition size').
-action_info(lvm_info, 'LVM Info', 'Set LVM info').
 action_info(make_lvm_vg, 'VG', 'Create LVM volume group').
 action_info(make_lvm_lv, 'LV', 'Create LVM logical volume').
 action_info(make_luks, 'LUKS', 'Create LUKS device').
@@ -43,9 +25,30 @@ action_info(make_part_manually, 'Partition', 'Manually partition disk(s)').
 action_info(part_select, 'Select Part', 'Select partition(s) to use').
 action_info(part_use, 'Partitions', 'Partitions to use during installation').
 action_info(bios_efi, 'BIOS/EFI', 'Support either BIOS or EFI, or both').
-action_info(hostonly, 'Host-only', 'Install only what is needed for booting the local host').
 action_info(soft, 'Software', 'Select software to install').
 action_info(used_d7, 'Used devices', 'Select device(s) to use').
+action_info(exit, cancel, 'Exit installation').
+
+% action_info_common(tag, short_name, long_name, data_type)
+action_info_common(hostonly, 'Host-only', 'Install only what is needed for booting the local host', bool).
+action_info_common(keymap, 'Keyboard', 'Set system keyboard', bool).
+action_info_common(network, 'Network', 'Set up the network', bool).
+action_info_common(source, 'Source', 'Set source installation', bool).
+action_info_common(hostname, 'Hostname', 'Set system hostname', string).
+action_info_common(locale, 'Locale', 'Set system locale', bool).
+action_info_common(timezone, 'Timezone', 'Set system time zone', bool).
+action_info_common(root_passwd, 'Root Password', 'Set system root password', passwd).
+action_info_common(user_passwd, 'User Password', 'Set user password', passwd).
+action_info_common(luks_passwd, 'LUKS Password', 'Set LUKS password', passwd).
+action_info_common(btrfs_opt, 'Btrfs', 'Btrfs as root options', bool).
+action_info_common(useraccount, 'User Account', 'Set primary user name and password', bool).
+action_info_common(luks_info, 'LUKS Mapping Name', 'Set LUKS mapping name', bool).
+action_info_common(mbr_size, 'MBR Size', 'Set MBR size', int).
+action_info_common(esp_size, 'ESP Size', 'Set EFI system partition size', int).
+action_info_common(boot_size, 'Boot Size', 'Set boot partition size', int).
+action_info_common(root_size, 'Root Size', 'Set root partition size', int).
+action_info_common(lvm_info, 'LVM Info', 'Set LVM info', bool).
+action_info_common(exit, cancel, 'Exit Menu', bool).
 
 boot_info(bios, 'Old BIOS boot method').
 boot_info(efi, 'New EFI boot method').
@@ -119,7 +122,7 @@ menu_review_opt(TT, TL, S) :-
 
 menu_review(TT, TL) :-
 	findall(S0, (menu_review_opt(TT, TL, SL0), member(S0, SL0)), S),
-	maplist(menu_tag_v(TL), S, SL),
+	maplist(menu_tag_common(TL), S, SL),
 	dialog_msg(menu, MENULABEL),
 	tui_menu_tag(SL, MENULABEL, [no-cancel, ok-label('Return'), title(' Current settings ')], _Tag),
 	true.
@@ -304,10 +307,13 @@ menu_tag(A, [T,D]) :-
 	action_info(A,T,D), !.
 menu_tag(A, [A,A]).
 
-menu_tag_v(TL, A, [T, V]) :-
+menu_tag_common(TL, A, [T, V]) :-
 	action_info(A, T, _), !,
 	setting_value(TL, A, V).
-menu_tag_v(_TL, A, [A,A]).
+menu_tag_common(TL, A, [T, V]) :-
+	action_info_common(A, T, _, _), !,
+	setting_value(TL, A, V).
+menu_tag_common(_TL, A, [A,A]).
 
 menu_network :-
 	( file_exists('/var/service/NetworkManager') ->
@@ -320,7 +326,7 @@ menu_setting(Tag) :-
 	( inst_setting(Tag, V)
 	; V = 'not set'
 	), !,
-	action_info(Tag, _, Title),
+	action_info_common(Tag, _, Title, _),
 	tui_inputbox('', V, [title(Title)], NV),
 	( NV = V
 	; retractall(inst_setting(Tag, _)),
@@ -365,13 +371,13 @@ get_enc_attr(_FS, _B, false).
 
 menu_common(TT, TL) :-
 	findall(M0, (menu_common_opt(TT, TL, ML0), member(M0, ML0)), M),
-	dialog_msg(menu, MENULABEL),
+	dialog_msg(menu, LABEL),
 	repeat,
-	inst_setting(template(TT1), TL1),
-	maplist(menu_tag_v(TL1), M, ML),
-	tui_menu_tag2(main_common, ML, MENULABEL, [cancel-label('Return'), title(' Common installation settings ')], Tag),
-	action_info(A, Tag, _),
-	cmd_action(A,TT1, TL1),
+	inst_setting(template(_TT1), TL1),
+	maplist(menu_tag_common(TL1), M, ML),
+	tui_menu_tag2(main_common, ML, LABEL, [cancel-label('Return'), title(' Common installation settings ')], Tag),
+	action_info_common(A, Tag, _, _),
+	cmd_action_common(A),
 	!.
 
 menu_main_info(_TT, _TL, [bios_efi]).
@@ -420,46 +426,6 @@ cmd_menu(template, _TT, TL) :- !,
 cmd_menu(bios_efi, TT, TL) :- !,
 	menu_bios_efi(TT, TL),
 	true.
-cmd_menu(hostonly, _TT, _TL) :- !,
-	menu_hostonly,
-	true.
-cmd_menu(keymap, _TT, _TL) :- !,
-	menu_keymap,
-	true.
-cmd_menu(network, _TT, _TL) :- !,
-	menu_network,
-	true.
-cmd_menu(source, _TT, _TL) :- !,
-	menu_pkg_inst_method,
-	true.
-cmd_menu(hostname, _TT, _TL) :- !,
-	menu_setting(hostname),
-	true.
-cmd_menu(locale, _TT, _TL) :- !,
-	menu_locale,
-	true.
-cmd_menu(timezone, _TT, _TL) :- !,
-	menu_timezone,
-	true.
-cmd_menu(root_passwd, _TT, _TL) :- !,
-	menu_password_user(root),
-	true.
-cmd_menu(user_passwd, _TT, _TL) :- !,
-	inst_setting(useraccount, user(UL, _UN, _UGL)),
-	menu_password_user(UL),
-	true.
-cmd_menu(luks_passwd, _TT, _TL) :- !,
-	menu_password_luks('$_luks_$'),
-	true.
-cmd_menu(useraccount, _TT, _TL) :- !,
-	menu_useraccount_info,
-	true.
-cmd_menu(lvm_info, _TT, _TL) :- !,
-	menu_lvm_info,
-	true.
-cmd_menu(luks_info, _TT, _TL) :- !,
-	menu_luks_info,
-	true.
 cmd_menu(bootloader, _TT, TL) :- !,
 	menu_edit_main(bootloader, TL),
 	true.
@@ -490,18 +456,6 @@ cmd_menu(filesystem, _TT, TL) :- !,
 cmd_menu(review, TT, TL) :- !,
 	menu_review(TT, TL),
 	true.
-cmd_menu(mbr_size, _TT, _TL) :- !,
-	menu_setting(mbr_size),
-	true.
-cmd_menu(esp_size, _TT, _TL) :- !,
-	menu_setting(esp_size),
-	true.
-cmd_menu(boot_size, _TT, _TL) :- !,
-	menu_setting(boot_size),
-	true.
-cmd_menu(root_size, _TT, _TL) :- !,
-	menu_setting(root_size),
-	true.
 cmd_menu(save, _TT, _TL) :- !,
 	menu_save,
 	true.
@@ -520,5 +474,65 @@ cmd_action(exit, TT, TL) :- !,
 	true.
 cmd_action(A, TT, TL) :- !,
 	cmd_menu(A, TT, TL),
+	fail.
+
+cmd_menu_common(hostonly) :- !,
+	menu_hostonly,
+	true.
+cmd_menu_common(keymap) :- !,
+	menu_keymap,
+	true.
+cmd_menu_common(network) :- !,
+	menu_network,
+	true.
+cmd_menu_common(source) :- !,
+	menu_pkg_inst_method,
+	true.
+cmd_menu_common(hostname) :- !,
+	menu_setting(hostname),
+	true.
+cmd_menu_common(locale) :- !,
+	menu_locale,
+	true.
+cmd_menu_common(timezone) :- !,
+	menu_timezone,
+	true.
+cmd_menu_common(root_passwd) :- !,
+	menu_password_user(root),
+	true.
+cmd_menu_common(user_passwd) :- !,
+	inst_setting(useraccount, user(UL, _UN, _UGL)),
+	menu_password_user(UL),
+	true.
+cmd_menu_common(luks_passwd) :- !,
+	menu_password_luks('$_luks_$'),
+	true.
+cmd_menu_common(useraccount) :- !,
+	menu_useraccount_info,
+	true.
+cmd_menu_common(lvm_info) :- !,
+	menu_lvm_info,
+	true.
+cmd_menu_common(luks_info) :- !,
+	menu_luks_info,
+	true.
+cmd_menu_common(mbr_size) :- !,
+	menu_setting(mbr_size),
+	true.
+cmd_menu_common(esp_size) :- !,
+	menu_setting(esp_size),
+	true.
+cmd_menu_common(boot_size) :- !,
+	menu_setting(boot_size),
+	true.
+cmd_menu_common(root_size) :- !,
+	menu_setting(root_size),
+	true.
+
+cmd_action_common(exit) :- !,
+	% cmd_menu_common(exit, TT, TL),
+	true.
+cmd_action_common(A) :- !,
+	cmd_menu_common(A),
 	fail.
 

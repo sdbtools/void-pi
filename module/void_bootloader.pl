@@ -39,7 +39,6 @@ bootloader_info(rEFInd, [
 		, gpt_luks
 		, gpt_luks_lvm
 	], [
-	  zfs
 	]).
 bootloader_info(limine, [
 		  ext2
@@ -55,7 +54,6 @@ bootloader_info(limine, [
 		, gpt_luks_lvm
 	], [
 		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
-		, zfs
 	]).
 bootloader_info(efistub, [
 		  ext2
@@ -71,7 +69,6 @@ bootloader_info(efistub, [
 		, gpt_luks_lvm
 	], [
 		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
-		, zfs
 	]).
 bootloader_info(syslinux, [
 		  % btrfs
@@ -92,7 +89,6 @@ bootloader_info(syslinux, [
 	], [
 		  % btrfs % It boots with the current configuration of btrfs + EFI. Doesn't boot with BIOS.
 		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
-		, zfs
 		% , f2fs % Not supported by syslinux
 		% , xfs % Won't boot with BIOS
 	]).
@@ -114,7 +110,6 @@ bootloader_info(gummiboot, [
 		, gpt_luks_lvm
 	], [
 		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
-		, zfs
 	]).
 bootloader_info(zfsBootMenu, [
 		  zfs
@@ -196,9 +191,8 @@ install_bootloader(zfsBootMenu, TL, BD, RD) :- !,
 	!.
 
 /* Old code. */
-bootloader_kernel_params(TL, [root=v('UUID', RPID)]) :-
-	root_pd(TL, ROOT_PD),
-	lx_get_dev_uuid(ROOT_PD, RPID),
+bootloader_kernel_params(TL, L) :-
+	bootloader_kernel_params_root(TL, L),
 	true.
 /* DO NOT delete. New code. It doesn't work with Limine and gpt_luks template
 bootloader_kernel_params(TL, L) :-
@@ -245,6 +239,15 @@ bootloader_kernel_params_luks(TL, ['rd.luks.name'=v(PUUID, LUKS_PD)]) :-
 	true.
 bootloader_kernel_params_luks(_TL, ['rd.auto'=1]) :-
 	inst_setting(hostonly, no).
+
+bootloader_kernel_params_root(TL, [root='zfs:AUTO']) :-
+	uses_zfs(TL),
+	has_boot_part(TL),
+	!.
+bootloader_kernel_params_root(TL, [root=v('UUID', RPID)]) :-
+	root_pd(TL, ROOT_PD),
+	lx_get_dev_uuid(ROOT_PD, RPID),
+	true.
 
 bootloader_write_cmdline(TL, S) :-
 	findall(P0, (bootloader_kernel_params(TL, PL0), member(P0, PL0)), AL),
