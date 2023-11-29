@@ -131,6 +131,7 @@ install_pkg(TL, rootfs, RD) :-
 	dracut_conf(TL, B, RD),
 
 	install_target_dep(TL, RD),
+	install_target_soft(TL, RD),
 	setup_bootloader(B, TL, RD),
 
 	% Remove stuff
@@ -157,6 +158,7 @@ install_pkg(TL, net, RD) :-
 	dracut_conf(TL, B, RD),
 
 	install_target_dep(TL, RD),
+	install_target_soft(TL, RD),
 	setup_bootloader(B, TL, RD),
 
 	tui_progressbox_safe(['xbps-reconfigure', o(r, RD), '-f', 'base-files', '2>&1'], '', [title(' Reconfigure base-files '), sz(max)]),
@@ -192,6 +194,7 @@ install_pkg(TL, local, RD) :-
 	dracut_setup(TL, B, RD),
 
 	install_target_dep(TL, RD),
+	install_target_soft(TL, RD),
 	setup_bootloader(B, TL, RD),
 
 	% Remove stuff
@@ -210,6 +213,12 @@ install_target_dep(TL, RD) :-
 	; true
 	),
 	true.
+
+install_target_soft(TL, RD) :-
+	setof(D, target_soft(TL, D), SL),
+	soft_install_soft(SL, RD),
+	!.
+install_target_soft(_TL, _RD).
 
 make_agetty_generic_run(RD) :-
 	atom_concat(RD, '/etc/sv/agetty-generic/run', F),

@@ -225,12 +225,13 @@ source_local :-
 target_dep(_TL, 'base-system') :-
 	\+ inst_setting(source, local),
 	true.
-target_dep(TL, D) :-
+
+target_soft(TL, D) :-
 	memberchk(bootloader(B), TL),
 	target_dep_bootloader(B, DL),
 	member(D, DL),
 	true.
-target_dep(TL, zfs) :-
+target_soft(TL, zfs) :-
 	uses_zfs(TL),
 	true.
 
