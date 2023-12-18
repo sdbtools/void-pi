@@ -143,8 +143,10 @@ gen_cmd_list(TT, B) -->
 % OUDL - old used/boot dev7 list.
 % OFS - old file system.
 gen_cmd_list_tmpl(manual, _OUDL, _B) -->
-	% { inst_setting(dev7, available(DL)) },
-	[state(used_d7, ctx_used([]))].
+	({ inst_setting(dev7, available([D])) } ->
+	   [state(used_d7, ctx_used([D]))]
+	;  [state(used_d7, ctx_used([]))]
+	).
 gen_cmd_list_tmpl(gpt_wizard, OUDL, _B) -->
 	{ menu_dev71_checklist(' Select device(s) to use ', OUDL, DEV7L) },
 	[state(used_d7, ctx_used(DEV7L))],

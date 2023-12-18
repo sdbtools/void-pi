@@ -403,7 +403,7 @@ main :-
 	  ( inst_setting(config_file, CF), file_exists(CF) ->
 		load_config(CF)
 	  ; def_settings
-	  ),
+	  ), !,
 	  do_install,
 	  os_call2([clear])
 	; true

@@ -387,6 +387,10 @@ menu_main_info(_TT, TL, [ST]) :-
 menu_main_info(manual, _TL, [bootloader_dev, make_part_manually, part_select, filesystem]).
 menu_main_info(_TT, _TL, [common_settings, review, install]).
 
+menu_main_skip(used_d7, _TL) :-
+	% Skip used_d7 if only one device is available.
+	% memberchk(state(template, ctx_tmpl(_B, manual)), TL),
+	inst_setting(dev7, available([_])).
 menu_main_skip(bootloader_dev, TL) :-
 	% Skip bootloader_dev if only one device is used.
 	st_used_d7(TL, [_]).
