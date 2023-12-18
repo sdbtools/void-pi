@@ -450,7 +450,9 @@ ensure_setting(TT, TL, bootloader_dev) :- !,
 ensure_setting(_TT, _TL, S) :-
 	inst_setting(S, _), !.
 ensure_setting(TT, TL, S) :-
-	cmd_menu(S, TT, TL).
+	cmd_menu(S, TT, TL), !.
+ensure_setting(_TT, _TL, S) :-
+	cmd_menu_common(S).
 
 save_settings(S) :-
 	inst_setting(N, V),

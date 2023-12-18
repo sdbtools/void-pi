@@ -76,7 +76,7 @@ This option is to build a custom Void Linux image from the official [void-mklive
 $ git clone --depth=1 https://github.com/void-linux/void-mklive.git
 $ cd void-mklive
 $ make
-$ sudo ./mklive.sh -p "zfs dialog" -S "dhcpcd sshd"
+$ sudo ./mklive.sh -p "zfs dialog cryptsetup" -S "dhcpcd sshd"
 ```
 
 #### hrmpf image
@@ -149,6 +149,7 @@ Last tested | ISO                                                               
 2023-10-14  | [hrmpf-x86_64-6.1.3_1-20230105.iso ](https://github.com/leahneukirchen/hrmpf/releases/download/v20231102/hrmpf-x86_64-6.5.9_1-20231102.iso) | PASS
 2023-11-19  | [hrmpf-x86_64-6.5.9_1-20231102.iso](https://github.com/leahneukirchen/hrmpf/releases/download/v20230105/hrmpf-x86_64-6.1.3_1-20230105.iso) | PASS
 2023-08-22  | [void-live-lxqt-unofficial-x86_64-6.3.13_1-20230821.iso](https://voidbuilds.xyz/download/void-live-lxqt-unofficial-x86_64-6.3.13_1-20230821.iso) | PASS
+2023-12-17  | [void-live-kde-unofficial-x86_64-6.5.13_1-20231217.iso](https://voidbuilds.xyz/download/void-live-kde-unofficial-x86_64-6.5.13_1-20231217.iso) | PASS
 
 ## Templates
 
