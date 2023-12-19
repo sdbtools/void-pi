@@ -79,7 +79,8 @@ part2taglist(dev_part(PD,_,_,SZ), [PD, SZ]).
 update_part_info(_PIL, OPL, OPL, IL, IL) :- !.
 update_part_info(PIL, OPL, PLO, IL, OL) :-
 	findall(M, (member(M, IL), keep_part_(PLO, M)), IL1),
-	add_part_(PIL, OPL, PLO, IL1, OL),
+	get_bootloader(IL, B),
+	add_part_(B, PIL, OPL, PLO, IL1, OL),
 	true.
 
 % KL - list of partitions to keep.
@@ -90,15 +91,18 @@ keep_part_(KL, fs7(_, _, _, PD, _, _, _)) :- !,
 keep_part_(_KL, _).
 
 % SL - list of partitions to skip.
-add_part_(PIL, SL, [PD| T], IL, OL) :-
+add_part_(B, PIL, SL, [PD| T], IL, OL) :-
 	memberchk(PD, SL), !,
-	add_part_(PIL, SL, T, IL, OL).
-add_part_(PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), fs7(FS, '', '', PD, _COL, _MOL, keep)| OL]) :-
+	add_part_(B, PIL, SL, T, IL, OL).
+add_part_(B, PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), fs7(FS, '', MP, PD, COL, MOL, keep)| OL]) :-
+	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
 	% dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)
 	member(dev_part(PD,name(_SNAME,_KNAME,[DL|_]),part5(_PTTYPE,PT,_PARTUUID,_UUID,FS),SZ), PIL),
 	BD1 = bd1([PD|DL]), !,
-	add_part_(PIL, SL, T, IL, OL).
-add_part_(_PIL, _SL, [], L, L) :-
+	MP = '',
+	get_col_mol(B, FS, MP, COL, MOL),
+	add_part_(B, PIL, SL, T, IL, OL).
+add_part_(_B, _PIL, _SL, [], L, L) :-
 	true.
 
 menu_bios_efi(TT, TL) :-

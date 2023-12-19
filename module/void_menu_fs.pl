@@ -66,53 +66,55 @@ menu_fs_action(save, PD) :-
 	true.
 menu_fs_action(label, PD) :- !,
 	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, CAL, MAL, CK)), !,
+	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, COL, MOL, CK)), !,
 	tui_inputbox('', Label, [title('Label')], A),
 	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
 	retractall(inst_setting_tmp(fs, fs7(_, _, _, PD, _, _, _))),
-	assertz(inst_setting_tmp(fs, fs7(FS, A, MP, PD, CAL, MAL, CK))),
+	assertz(inst_setting_tmp(fs, fs7(FS, A, MP, PD, COL, MOL, CK))),
 	fail.
 menu_fs_action(type, PD) :- !,
 	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	inst_setting_tmp(fs, fs7(OFS, Label, MP, PD, CAL, MAL, CK)), !,
+	inst_setting_tmp(fs, fs7(OFS, Label, MP, PD, COL, MOL, CK)), !,
 	inst_setting(template(TT), TL),
 	get_bootloader(TL, B),
 	menu_select_fs(TT, B, OFS, NFS),
 	retractall(inst_setting_tmp(fs, fs7(_, _, _, PD, _, _, _))),
-	assertz(inst_setting_tmp(fs, fs7(NFS, Label, MP, PD, CAL, MAL, CK))),
+	assertz(inst_setting_tmp(fs, fs7(NFS, Label, MP, PD, COL, MOL, CK))),
 	fail.
 menu_fs_action(mount_point, PD) :- !,
 	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, CAL, MAL, CK)), !,
+	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, COL, MOL, CK)), !,
 	tui_inputbox('', MP, [title('Mount Point')], A),
 	retractall(inst_setting_tmp(fs, fs7( _, _, _, PD, _, _, _))),
-	assertz(inst_setting_tmp(fs, fs7(FS, Label, A, PD, CAL, MAL, CK))),
+	assertz(inst_setting_tmp(fs, fs7(FS, Label, A, PD, COL, MOL, CK))),
 	fail.
 menu_fs_action(create, PD) :-
 	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, CAL, MAL, _CK)), !,
+	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, COL, MOL, _CK)), !,
 	( tui_yesno('Create file system?', [sz([6, 40])]) ->
 	  FV = create
 	; FV = keep
 	),
 	retractall(inst_setting_tmp(fs, fs7( _, _, _, PD, _, _, _))),
-	assertz(inst_setting_tmp(fs, fs7(FS, Label, MP, PD, CAL, MAL, FV))),
+	assertz(inst_setting_tmp(fs, fs7(FS, Label, MP, PD, COL, MOL, FV))),
 	fail.
 
 make_tmp_part_rec(PD) :-
 	% We HAVE to get TL here.
 	inst_setting(template(_TT), TL),
 	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	memberchk(fs7(FS, Label, MP, PD, CAL, MAL, CK), TL),
+	memberchk(fs7(FS, Label, MP, PD, COL, MOL, CK), TL),
 	retractall(inst_setting_tmp(fs, fs7( _, _, _, PD, _, _, _))),
-	assertz(inst_setting_tmp(fs, fs7(FS, Label, MP, PD, CAL, MAL, CK))),
+	assertz(inst_setting_tmp(fs, fs7(FS, Label, MP, PD, COL, MOL, CK))),
 	true.
 
 make_perm_part_rec(PD) :-
 	inst_setting(template(TT), TL),
 	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, CAL, MAL, CK)),
-	maplist(replace_element(fs7( _, _, _, PD, _, _, _), fs7(FS, Label, MP, PD, CAL, MAL, CK)), TL, TL1),
+	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, _COL, _MOL, CK)),
+	get_bootloader(TL, B),
+	get_col_mol(B, FS, MP, COL, MOL),
+	maplist(replace_element(fs7( _, _, _, PD, _, _, _), fs7(FS, Label, MP, PD, COL, MOL, CK)), TL, TL1),
 	retract(inst_setting(template(TT), _)),
 	assertz(inst_setting(template(TT), TL1)),
 	true.

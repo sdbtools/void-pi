@@ -18,6 +18,10 @@ make_fstab_(S, fstab4(MP, FS, MOL, PD)) :-
 	write_fstab(FS, PD, MP, MOL, S),
 	true.
 
+% For debugging.
+% write_fstab(FS, D, MP, MOL, _S) :-
+% 	tui_msgbox_w([write_fstab, FS, D, MP, MOL]),
+% 	fail.
 write_fstab(zfs, _D, _MP, _MOL, _S) :- !,
 	% Do nothing
 	true.

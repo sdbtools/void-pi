@@ -96,7 +96,7 @@ def_settings :-
 
 	enable_template(manual, grub2),
 
-	true.
+	!.
 
 source_dependency_pkg(TT, TL, Distro, DL) :-
 	setof(D, source_dep(TT, TL, Distro, D), DL).
@@ -399,15 +399,13 @@ load_config(F) :-
 
 main :-
 	argument_list(AL),
-	( handle_cmd_args(AL) ->
-	  ( inst_setting(config_file, CF), file_exists(CF) ->
-		load_config(CF)
-	  ; def_settings
-	  ), !,
-	  do_install,
-	  os_call2([clear])
-	; true
+	handle_cmd_args(AL),
+	( inst_setting(config_file, CF), file_exists(CF) ->
+	  load_config(CF)
+	; def_settings
 	),
+	do_install,
+	os_call2([clear]),
 	halt.
 main :-
 	writenl('Installer has failed.'),
