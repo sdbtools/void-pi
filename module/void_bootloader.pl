@@ -41,10 +41,10 @@ bootloader_info(rEFInd, [
 	], [
 	]).
 bootloader_info(limine, [
-		  ext2
-		, ext3
-		, ext4
-		, vfat
+		  vfat
+		% , ext2 % Limine extX removed in 6.20231210.0 as per the ChangeLog.
+		% , ext3
+		% , ext4
 	], [
 		  manual
 		, gpt_basic
