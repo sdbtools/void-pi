@@ -70,19 +70,31 @@ gplc --min-size void-pi.pl
 
 #### mklive.sh
 
-This option is to build a custom Void Linux image from the official [void-mklive](https://github.com/void-linux/void-mklive) repository by providing the command-line option -p zfs to the mklive.sh script.
+This option is to build a custom Void Linux image from the official [void-mklive](https://github.com/void-linux/void-mklive) repository.
 
 ```sh
 $ git clone --depth=1 https://github.com/void-linux/void-mklive.git
 $ cd void-mklive
 $ make
-$ sudo ./mklive.sh -p "zfs dialog cryptsetup" -S "dhcpcd sshd"
+$ sudo ./build-x86-images.sh -- -p zfs
 ```
 
 #### hrmpf image
 
 Download a pre-built [hrmpf](https://github.com/leahneukirchen/hrmpf/releases) image.
 
+### Bcachefs Install media
+
+#### mklive.sh
+
+This option is to build a custom Void Linux image from the official [void-mklive](https://github.com/void-linux/void-mklive) repository.
+
+```sh
+$ git clone --depth=1 https://github.com/void-linux/void-mklive.git
+$ cd void-mklive
+$ make
+$ sudo ./build-x86-images.sh -- -v linux6.7
+```
 
 ## Features
 
@@ -107,7 +119,7 @@ Download a pre-built [hrmpf](https://github.com/leahneukirchen/hrmpf/releases) i
     - GRUB supports fat, btrfs, ext2, ext3, ext4, xfs and zfs file systems.
     - REFInd supports fat, btrfs, ext2, ext3, and ext4 file systems.
     - REFInd is configured to use kernel auto detection.
-    - Limine supports fat, ext2, ext3, and ext4 file systems.
+    - Limine supports fat file system. (Support of ext2, ext3, and ext4 was disabled in Limine version 6.20231210.0)
     - Syslinux supports fat, ext2, ext3, and ext4 file systems.
     - EFISTUB and Gummiboot are enabled with UEFI and support fat, ext2, ext3, ext4, f2fs, and xfs file systems. (btrfs is not supported at this time)
     - ZFSBootMenu is enabled only with "Manual" and "GPT. Basic" templates at this time.
@@ -116,6 +128,8 @@ Download a pre-built [hrmpf](https://github.com/leahneukirchen/hrmpf/releases) i
     - Requires a ZFS install media.
     - Supported by GRUB and ZFSBootMenu bootmanagers.
     - In case of GRUB only "GPT. Basic" template is supported at this time.
+- Bcachefs
+    - Requires a Bcachefs install media.
 - LUKS
     - LUKS can be used with GRUB, rEFInd, Limine, and Syslinux.
     - In case of GRUB whole system is located on LUKS, including encrypted `/boot`. LUKS1 is used because GRUB2 doesn't support LUKS2.
