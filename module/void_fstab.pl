@@ -31,6 +31,12 @@ write_fstab(btrfs, D, MP, MOL, S) :- !,
 	L = ['UUID'=U, MP, btrfs, lc(MOL), '0 0'],
 	write_fstab_line(L, S),
 	true.
+write_fstab(bcachefs, D, MP, MOL, S) :- !,
+	lx_get_dev_partuuid(D, PU),
+	format(S, '# ~w\n', [D]),
+	L = ['PARTUUID'=PU, MP, bcachefs, lc(MOL), '0 0'],
+	write_fstab_line(L, S),
+	true.
 write_fstab(swap, D, _MP, MOL, S) :- !,
 	lx_get_dev_uuid(D, U),
 	format(S, '# ~w\n', [D]),
@@ -77,7 +83,7 @@ write_fstab_line(L, S) :-
 	os_wcmdl(L, '\t', S), nl(S), nl(S).
 
 fapassno(FS, _MP, '0') :-
-	member(FS, [f2fs, xfs, btrfs]).
+	member(FS, [f2fs, xfs, btrfs, bcachefs]).
 fapassno(_FS, '/', '1').
 fapassno(_FS, _MP, '2').
 

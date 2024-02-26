@@ -73,10 +73,16 @@ grub_config_luks(TL, [
 	uses_luks(TL), !,
 	findall(M, (grub_linux_cmdline_luks(TL, L), member(M, L)), VL),
 	os_scmdl(VL, V).
-grub_config_luks(_TL, [
+grub_config_luks(TL, [
 		  v('GRUB_CMDLINE_LINUX_DEFAULT', V, 'Generic settings')
 	]) :-
-	VL = ['rd.luks'=0, loglevel=4],
+	( root_fs(TL, bcachefs) ->
+	  % root_pd(TL, PD),
+	  % lx_get_dev_partuuid(PD, PU),
+	  % VL = [root=v('PARTUUID', PU), rootfstype=bcachefs, 'rd.luks'=0, loglevel=4]
+	  VL = [rootfstype=bcachefs, 'rd.luks'=0, loglevel=4]
+	; VL = ['rd.luks'=0, loglevel=4]
+	),
 	os_scmdl(VL, V).
 
 grub_linux_cmdline_luks(TL, ['rd.luks.name'=v(PUUID, LUKS_PD)]) :-

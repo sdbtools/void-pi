@@ -69,12 +69,6 @@ boot_pref(_TL, 'boot/').
 get_mkfs_attrs([], []) :- !.
 get_mkfs_attrs(COL, [o('O', lc(COL))]).
 
-mkfs(FS, D, COL, Label) :-
-	get_mkfs_attrs(COL, OL),
-	mkfs_cl(FS, D, OL, Label, CL),
-	format_to_atom(Title, ' Creating filesystem ~w ', [FS]),
-	tui_progressbox_safe(CL, '', [title(Title), sz([12, 80])]),
-	true.
 mkfs(swap, PD, _COL, _Label) :- !,
 	os_shell2_rc([swapoff, PD, '>/dev/null', '2>&1'], _),
 	( os_shell2l([mkswap, PD, '2>&1'])
@@ -85,6 +79,12 @@ mkfs(swap, PD, _COL, _Label) :- !,
 	; tui_msgbox('ERROR: failed to activate swap'),
 	  fail
 	), !,
+	true.
+mkfs(FS, D, COL, Label) :-
+	get_mkfs_attrs(COL, OL),
+	mkfs_cl(FS, D, OL, Label, CL),
+	format_to_atom(Title, ' Creating filesystem ~w ', [FS]),
+	tui_progressbox_safe(CL, '', [title(Title), sz([12, 80])]),
 	true.
 mkfs(FS, _, _, _) :- !,
 	tui_msgbox2(['Unknown filesystem', FS]),

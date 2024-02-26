@@ -180,7 +180,6 @@ setup_sys_fs :-
 
 setup_sys_fs_list([
 	  btrfs
-	% , bcachefs
 	, ext2
 	, ext3
 	, ext4
@@ -189,8 +188,9 @@ setup_sys_fs_list([
 	, vfat
 	, xfs
 	]).
-setup_sys_fs_list([zfs]) :-
-	os_shell('modprobe zfs 2>/dev/null').
+setup_sys_fs_list([FS]) :-
+	member(FS, [bcachefs, zfs]),
+	os_shell2([modprobe, FS, '2>/dev/null']).
 
 setup_conf :-
 	setup_sys_bios_efi,

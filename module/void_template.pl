@@ -216,9 +216,11 @@ gen_efi_1(TT, FS, B, [OD4| T]) -->
 	{
 	  bootloader_boot_efi(BL),
 	  memberchk(B, BL), !,
-	  inst_setting(esp_size, ESP_SZ)
+	  % inst_setting(esp_size, ESP_SZ)
+	  % EFI partition of BOOT_SZ size.
+	  inst_setting(boot_size, BOOT_SZ)
 	},
-	gen_p4_fs7(B, sys_efi, vfat, '/boot', ESP_SZ, efi, OD4, ND4),
+	gen_p4_fs7(B, sys_efi, vfat, '/boot', BOOT_SZ, efi, OD4, ND4),
 	gen_tmpl(TT, FS, B, [ND4| T]).
 gen_efi_1(TT, FS, B, [OD4| T]) -->
 	{ inst_setting(esp_size, ESP_SZ) },
@@ -229,9 +231,15 @@ gen_boot(TT, FS, B, [OD4| T]) -->
 	{
 	  menu_zfs_encr(FS, B, E),
 	  need_boot_part(TT, B, FS, E), !,
-	  inst_setting(boot_size, BOOT_SZ)
+	  inst_setting(boot_size, BOOT_SZ),
+	  % bootloader_info(bootloade, supported_fs, supported_template, except_fs).
+	  bootloader_info(B, FSL, _, _),
+	  ( memberchk(ext4, FSL) ->
+	    BFS = ext4
+	  ; BFS = vfat
+	  )
 	},
-	gen_p4_fs7(B, linux_data, ext4, '/boot', BOOT_SZ, boot, OD4, ND4),
+	gen_p4_fs7(B, linux_data, BFS, '/boot', BOOT_SZ, boot, OD4, ND4),
 	gen_tmpl(TT, FS, B, [ND4| T]).
 gen_boot(TT, FS, B, D4L) --> gen_tmpl(TT, FS, B, D4L).
 

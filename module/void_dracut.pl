@@ -58,6 +58,11 @@ dracut_conf(fs(zfs), TL, RD, L) :-
 	uses_encr_zfs(TL), !,
 	dracut_conf_zfs_encr(TL, RD, L).
 
+dracut_conf(fs(bcachefs), _TL, _RD, [
+		  v(nofscks, yes)
+		, v(add_dracutmodules, [bcachefs])
+		, v(add_drivers, [bcachefs])
+	]) :- !.
 dracut_conf(fs(btrfs), _TL, _RD, [v(add_dracutmodules, [btrfs]), v(add_drivers, [btrfs])]) :- !.
 dracut_conf(fs(cifs), _TL, _RD, [v(add_dracutmodules, [cifs]), v(add_drivers, [cifs])]) :- !.
 dracut_conf(fs(nfs), _TL, _RD, [v(add_dracutmodules, [nfs]), v(add_drivers, [nfs])]) :- !.
