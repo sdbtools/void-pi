@@ -421,16 +421,21 @@ load_config(F) :-
 	close(S),
 	true.
 
-main :-
-	argument_list(AL),
-	handle_cmd_args(AL),
+main0 :-
 	( inst_setting(config_file, CF), file_exists(CF) ->
 	  load_config(CF)
 	; def_settings
 	),
 	do_install,
-	os_call2([clear]),
+	os_call2([clear]).
+main0 :-
+	writenl('Installer has failed.').
+
+main :-
+	argument_list(AL),
+	handle_cmd_args(AL),
+	main0,
 	halt.
 main :-
-	writenl('Installer has failed.'),
 	halt.
+
