@@ -87,7 +87,8 @@ menu_list_on_set(fs_settings_main, ev(B, _FSL), _AL, IVL, Tag, OVL) :- !,
 
 %%%%%%%%%%
 menu_list_on_all(fs_settings(FS, _MP), _EV, _IL, L) :- !,
-	findall(Tag, menu_fs_opt_info(FS, Tag, _PropGrp, _Name, _FP), L).
+	findall(Tag, menu_fs_opt_info(FS, Tag, _PropGrp, _Name, _FP), L),
+	true.
 
 % AL - "all" list.
 menu_list_on_make(fs_settings(FS, _MP), _EV, AL, _VL, OL) :- !,

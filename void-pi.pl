@@ -35,6 +35,7 @@
 :- include('lib/f2fs_common.pl').
 :- include('lib/xfs_common.pl').
 :- include('lib/vfat_common.pl').
+:- include('lib/bcachefs_common.pl').
 
 :- include('module/void_info.pl').
 :- include('module/void_cmd_arg.pl').
@@ -109,8 +110,6 @@ def_settings :-
 	% https://patchwork.kernel.org/project/xfs/patch/ce584ae1-ee62-2dcb-9366-eb0a6df6e98e@sandeen.net/
 	% assertz(inst_setting(fs_attr(xfs, _, grub2), create([attr(xfs_inode_rw, [sparse=0]), attr(xfs_rw, [force=yes])]))),
 	assertz(inst_setting(fs_attr(xfs, _, _), create([attr(xfs_rw, [force=yes])]))),
-	assertz(inst_setting(fs_attr(zfs, _, _), create([attr(zpool_rw, [force=yes, mountpoint=none])]))),
-	assertz(inst_setting(fs_attr(zfs, _, _), encr(false))),
 
 	assertz(inst_setting(source, local)),
 	assertz(inst_setting(hostname, voidpp)),

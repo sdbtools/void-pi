@@ -75,7 +75,7 @@ get_col(FS, MP, B, COL) :-
 get_col(_FS, _MP, _B, []).
 
 get_col_multi(zfs, B, COL) :- !,
-	phrase(zfs_get_col2(B), COL).
+	phrase(zfs_get_col(B), COL).
 get_col_multi(FS, B, COL) :-
 	get_col(FS, (/), B, COL).
 

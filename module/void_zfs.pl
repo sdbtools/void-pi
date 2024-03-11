@@ -75,22 +75,22 @@ zfs_has_boot_part(B) :-
 	bootloader_info(B, FSL, _, _),
 	\+ memberchk(zfs, FSL).
 
-zfs_pool_base2 --> [
+zfs_pool_base --> [
 	  force=yes
 	, mountpoint=none
 	].
 
-zfs_pool_props2 --> [
+zfs_pool_props --> [
 	  ashift=12
 	, autotrim=on
 	].
 
-zfs_pool_props2(grub2) --> [
+zfs_pool_props(grub2) --> [
 	compatibility=grub2
 	].
-zfs_pool_props2(_) --> [].
+zfs_pool_props(_) --> [].
 
-zfs_pool_feats2 --> [
+zfs_pool_feats --> [
 	  compression=lz4
 	, acltype=posixacl
 	, xattr=sa % vastly improves the performance of extended attributes
@@ -98,23 +98,23 @@ zfs_pool_feats2 --> [
 	, normalization=formD % eliminates some corner cases relating to UTF-8 filename normalization
 	].
 
-zfs_pool_feats2(grub2) --> [].
-zfs_pool_feats2(_) --> [
+zfs_pool_feats(grub2) --> [].
+zfs_pool_feats(_) --> [
 	dnodesize=auto
 	].
 
-zfs_get_col21(B) -->
-	zfs_pool_props2,
-	zfs_pool_props2(B).
-
-zfs_get_col22(B) -->
-	zfs_pool_feats2,
-	zfs_pool_feats2(B).
+zfs_get_col1(B) -->
+	zfs_pool_props,
+	zfs_pool_props(B).
 
 zfs_get_col2(B) -->
-	({ phrase(zfs_get_col21(B), PL), PL \= [], ! } -> [attr(zpool_props_rw, PL)]; []),
-	({ phrase(zfs_get_col22(B), FL), FL \= [], ! } -> [attr(zfs_rw, FL)]; []),
-	({ phrase(zfs_pool_base2, BL), BL \= [], ! } -> [attr(zpool_rw, BL)]; []).
+	zfs_pool_feats,
+	zfs_pool_feats(B).
+
+zfs_get_col(B) -->
+	({ phrase(zfs_get_col1(B), PL), PL \= [], ! } -> [attr(zpool_props_rw, PL)]; []),
+	({ phrase(zfs_get_col2(B), FL), FL \= [], ! } -> [attr(zfs_rw, FL)]; []),
+	({ phrase(zfs_pool_base, BL), BL \= [], ! } -> [attr(zpool_rw, BL)]; []).
 
 % PN - pool name.
 zfs_make_zpool_create_cmd(PN, DL, COL, OL) :-

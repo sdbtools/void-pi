@@ -32,4 +32,4 @@ prop_info_label(btrfs, btrfs_rw) :- !.
 prop_info_label(f2fs, f2fs_rw) :- !.
 prop_info_label(vfat, vfat_rw) :- !.
 prop_info_label(xfs, xfs_rw) :- !.
-% prop_info_label(bcachefs, ???_rw) :- !.
+prop_info_label(bcachefs, bcachefs_rw) :- !.
