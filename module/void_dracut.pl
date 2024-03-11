@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 dracut_conf(TL, _B, RD) :-
 	member(C, [common, luks, fs(zfs)]),
@@ -55,7 +55,7 @@ dracut_conf(fs(zfs), _TL, _RD, [
 		, v(omit_dracutmodules, [btrfs, resume])
 	]).
 dracut_conf(fs(zfs), TL, RD, L) :-
-	uses_encr_zfs(TL), !,
+	zfs_uses_encr(TL), !,
 	dracut_conf_zfs_encr(TL, RD, L).
 
 dracut_conf(fs(bcachefs), _TL, _RD, [
@@ -70,11 +70,12 @@ dracut_conf(fs(nfs), _TL, _RD, [v(add_dracutmodules, [nfs]), v(add_drivers, [nfs
 dracut_conf_zfs_encr(TL, _RD, []) :-
 	has_boot_part(TL),
 	!.
-dracut_conf_zfs_encr(_TL, RD, [
-		  v(install_items, ['/etc/zfs/zroot.key'])
+dracut_conf_zfs_encr(TL, RD, [
+		  v(install_items, [FN])
 		% , v(add_dracutmodules, [crypt]) % dracut module 'crypt' cannot be found or installed.
 		]) :-
-	zfs_setup_encr(RD).
+	zfs_pool_keylocation_file(TL, FN),
+	zfs_setup_encr(FN, RD).
 
 dracut_run(RD) :-
 	% DL = [chroot, RD, dracut, '--no-hostonly', '--force', '2>&1'],

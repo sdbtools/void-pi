@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 ux_user_root :-
 	os_shell_number('id -u', 0).

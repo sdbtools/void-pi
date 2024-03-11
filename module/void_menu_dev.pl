@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % Select devices to use
 % OL - old used/boot dev7 list.

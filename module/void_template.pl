@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % template_info(name, descr, except_fs).
 template_info(manual, 'Manual configuration of everything', []).
@@ -102,118 +102,130 @@ part_tmpl(btrfs, Name, L) :- !,
 part_tmpl(_FS, Name, L) :-
 	predef_part_tmpl(Name, L).
 
-% OT - old template
-% NT - new template
-% OB - old bootloader.
-% NB - new bootloader.
-switch_template(OT, OT, OB, OB) :- !.
-switch_template(OT, NT, _OB, NB) :-
-	% make_cmd_list(NT, NB, NTL),
-	phrase(gen_cmd_list(NT, NB), NTL),
-	retractall(inst_setting(template(OT), _)),
-	assertz(inst_setting(template(NT), NTL)),
-	!.
-switch_template(_OT, _NT, _OB, _NB) :-
-	tui_msgbox('Switching of template has failed.', [title(' ERROR ')]),
-	fail.
-
 fs2parttype(zfs, solaris_root).
 fs2parttype(_, linux_data).
 
 % need_boot_part(TemplateType, BootLoader, FileSystem, Encrypt).
-need_boot_part(TT, B, _FS, _E) :-
+need_boot_part(TT, B, _FS) :-
+	% List of bootloaders not supporting LVM and LUKS.
 	memberchk(B, [rEFInd, limine, syslinux, gummiboot]),
+	% List of LVM and LUKS templates.
 	memberchk(TT, [gpt_lvm, gpt_lvm_luks, gpt_luks, gpt_luks_lvm]),
 	!.
 % need_boot_part(_TT, grub2, zfs, true) :- !.
-need_boot_part(_TT, B, FS, _E) :-
+need_boot_part(_TT, B, FS) :-
 	% bootloader_info(bootloade, supported_fs, supported_template, except_fs).
 	bootloader_info(B, FSL, _, _),
 	\+ memberchk(FS, FSL),
 	!.
 
-gen_cmd_list(TT, B) -->
+gen_cmd_list(TT, VL) -->
+	{
+	  memberchk(bl(B), VL)
+	},
 	[
 	  state(bootloader, ctx_bl(B)),
 	  bootloader(B),
 	  state(template, ctx_tmpl(B, TT))
 	],
-	gen_cmd_list_tmpl(TT, [], B).
+	gen_cmd_list_tmpl(TT, [], VL).
 
 % OUDL - old used/boot dev7 list.
 % OFS - old file system.
-gen_cmd_list_tmpl(manual, _OUDL, _B) -->
+gen_cmd_list_tmpl(manual, _OUDL, _VL) -->
 	({ inst_setting(dev7, available([D])) } ->
 	   [state(used_d7, ctx_used([D]))]
 	;  [state(used_d7, ctx_used([]))]
 	).
-gen_cmd_list_tmpl(gpt_wizard, OUDL, _B) -->
+gen_cmd_list_tmpl(gpt_wizard, OUDL, _VL) -->
 	{ menu_dev71_checklist(' Select device(s) to use ', OUDL, DEV7L) },
 	[state(used_d7, ctx_used(DEV7L))],
 	gen_wiz_action(DEV7L).
-gen_cmd_list_tmpl(TT, OUDL, B) -->
-	gen_cmd_list4(TT, OUDL, B).
+gen_cmd_list_tmpl(TT, OUDL, VL) -->
+	gen_cmd_list3(TT, OUDL, VL).
 
-enable_template(TT, B) :-
-	% inst_setting(dev7, available(AL)),
-	% make_cmd_list(TT, B, L),
-	phrase(gen_cmd_list(TT, B), L),
+set_template(TT, B) :-
+	phrase(gen_cmd_list(TT, [bl(B)]), L),
 	retractall(inst_setting(template(_), _)),
 	assertz(inst_setting(template(TT), L)),
-	true.
+	!.
+set_template(_TT, _B) :-
+	tui_msgbox('Switching of template has failed.', [title(' ERROR ')]),
+	fail.
 
 % O7L - old list.
-gen_cmd_list4(TT, O7L, B) -->
+gen_cmd_list3(TT, O7L, VL) -->
 	{ menu_dev7_use(TT, O7L, D7L) },
 	[ state(used_d7, ctx_used(D7L)) ],
-	gen_bld(TT, B, O7L, D7L).
+	gen_bld(O7L, D7L, [tmpl(TT)| VL]).
 
-gen_bld(TT, B, O7L, D7L) -->
-	{ menu_dev7_boot_dev(D7L, O7L, DEV71)
-	  , delete(D7L, DEV71, D7L1)
-	  , DEV7L = [DEV71| D7L1]
-	  , maplist(conv_dev7_to_d4, DEV7L, D4L)
+gen_bld(O7L, D7L, VL) -->
+	{
+	  memberchk(bl(B), VL),
+	  menu_dev7_boot_dev(D7L, O7L, DEV71),
+	  delete(D7L, DEV71, D7L1),
+	  DEV7L = [DEV71| D7L1],
+	  maplist(conv_dev7_to_d4, DEV7L, D4L)
 	},
 	[ state(bootloader_dev, ctx_bld7(B, DEV71, D7L))
 	, bootloader_dev7(DEV71)
 	],
-	gen_root_fs(TT, ext4, B, D4L).
+	gen_root_fs(ext4, [d4l(D4L)| VL]).
 
-gen_root_fs(TT, OFS, B, D4L) -->
-	{ menu_select_fs(TT, B, OFS, NFS) },
-	gen_mbr(TT, NFS, B, D4L).
-
-gen_mbr(TT, FS, B, D4L) -->
+gen_root_fs(OFS, VL) -->
 	{
+	  memberchk(tmpl(TT), VL),
+	  memberchk(bl(B), VL),
+	  menu_select_fs(TT, B, OFS, NFS)
+	},
+	gen_mbr([fs(NFS)| VL]).
+
+gen_mbr(VL) -->
+	{
+	  memberchk(bl(B), VL),
 	  ( B = zfsBootMenu, inst_setting(system(bios), _) ->
 	    B1 = syslinux
 	  ; B1 = B
 	  )
 	},
-	gen_mbr_1(TT, FS, B1, D4L).
+	gen_mbr_1([bl(B1)| VL]).
 
-gen_mbr_1(TT, FS, B, D4L) -->
+gen_mbr_1(VL) -->
 	{ inst_setting(system(bios), _), ! },
-	gen_mbr_2(TT, FS, B, D4L).
-gen_mbr_1(TT, FS, B, D4L) -->
-	gen_efi(TT, FS, B, D4L).
+	gen_mbr_2(VL).
+gen_mbr_1(VL) -->
+	gen_efi(VL).
 
-gen_mbr_2(TT, FS, B, D4L) -->
-	{ memberchk(B, [syslinux, limine]) },
-	gen_efi(TT, FS, B, D4L).
-gen_mbr_2(TT, FS, B, [OD4| T]) -->
-	{ inst_setting(mbr_size, MBR_SZ) },
-	gen_p4(sys_bios_boot, MBR_SZ, OD4, _PD, ND4),
-	gen_efi(TT, FS, B, [ND4| T]).
-
-gen_efi(TT, FS, B, D4L) -->
-	{ inst_setting(system(efi), _), ! },
-	gen_efi_1(TT, FS, B, D4L).
-gen_efi(TT, FS, B, D4L) -->
-	gen_boot(TT, FS, B, D4L).
-
-gen_efi_1(TT, FS, B, [OD4| T]) -->
+gen_mbr_2(VL) -->
 	{
+	  memberchk(bl(B), VL),
+	  memberchk(B, [syslinux, limine])
+	},
+	gen_efi(VL).
+gen_mbr_2(VL) -->
+	{
+	  memberchk(d4l([OD4| T]), VL),
+	  inst_setting(mbr_size, MBR_SZ)
+	},
+	gen_p4(sys_bios_boot, MBR_SZ, OD4, _PD, ND4),
+	gen_efi([d4l([ND4| T])| VL]).
+
+gen_efi(VL) -->
+	{
+	  inst_setting(system(efi), _), !,
+	  memberchk(d4l([OD4| T]), VL)
+	},
+	gen_efi_1(OD4, T, VL).
+gen_efi(VL) -->
+	{
+	  memberchk(d4l([OD4| T]), VL)
+	},
+	gen_boot(OD4, T, VL).
+
+gen_efi_1(OD4, T, VL) -->
+	{
+	  memberchk(bl(B), VL),
+	  % List of boot managers which require mounting of EFI partition to /boot.
 	  bootloader_boot_efi(BL),
 	  memberchk(B, BL), !,
 	  % inst_setting(esp_size, ESP_SZ)
@@ -221,16 +233,22 @@ gen_efi_1(TT, FS, B, [OD4| T]) -->
 	  inst_setting(boot_size, BOOT_SZ)
 	},
 	gen_p4_fs7(B, sys_efi, vfat, '/boot', BOOT_SZ, efi, OD4, ND4),
-	gen_tmpl(TT, FS, B, [ND4| T]).
-gen_efi_1(TT, FS, B, [OD4| T]) -->
-	{ inst_setting(esp_size, ESP_SZ) },
-	gen_p4_fs7(B, sys_efi, vfat, '/boot/efi', ESP_SZ, efi, OD4, ND4),
-	gen_boot(TT, FS, B, [ND4| T]).
-
-gen_boot(TT, FS, B, [OD4| T]) -->
+	% No boot partition.
+	gen_tmpl([ND4| T], VL).
+gen_efi_1(OD4, T, VL) -->
 	{
-	  menu_zfs_encr(FS, B, E),
-	  need_boot_part(TT, B, FS, E), !,
+	  memberchk(bl(B), VL),
+	  inst_setting(esp_size, ESP_SZ)
+	},
+	gen_p4_fs7(B, sys_efi, vfat, '/boot/efi', ESP_SZ, efi, OD4, ND4),
+	gen_boot(ND4, T, VL).
+
+gen_boot(OD4, T, VL) -->
+	{
+	  memberchk(tmpl(TT), VL),
+	  memberchk(bl(B), VL),
+	  memberchk(fs(FS), VL),
+	  need_boot_part(TT, B, FS), !,
 	  inst_setting(boot_size, BOOT_SZ),
 	  % bootloader_info(bootloade, supported_fs, supported_template, except_fs).
 	  bootloader_info(B, FSL, _, _),
@@ -240,8 +258,11 @@ gen_boot(TT, FS, B, [OD4| T]) -->
 	  )
 	},
 	gen_p4_fs7(B, linux_data, BFS, '/boot', BOOT_SZ, boot, OD4, ND4),
-	gen_tmpl(TT, FS, B, [ND4| T]).
-gen_boot(TT, FS, B, D4L) --> gen_tmpl(TT, FS, B, D4L).
+	% Has boot partition.
+	gen_tmpl([ND4| T], VL).
+gen_boot(OD4, T, VL) -->
+	% No boot partition.
+	gen_tmpl([OD4| T], VL).
 
 gen_p4(PT, SZ, d4(D, SN, _SDN, N), PD, d4(D, SN, SD1, N1)) -->
 	{
@@ -253,21 +274,38 @@ gen_p4(PT, SZ, d4(D, SN, _SDN, N), PD, d4(D, SN, SD1, N1)) -->
 	[p4(PT, bd1([PD, D]), create, SZ)].
 
 gen_fs7(B, FS, MP, Label, PD) -->
-	{ get_col_mol(B, FS, MP, COL, MOL) },
-	[ fs7(FS, Label, MP, PD, COL, MOL, create) ].
+	{
+	  get_mol(FS, MP, MOL),
+	  get_col(FS, MP, B, COL),
+	  fs_set_label(FS, Label, COL, COL1)
+	  % menu_fs_settings0(FS, MP, B, COL)
+	},
+	[ fs7(FS, Label, MP, PD, COL1, MOL, create) ].
 
 gen_p4_fs7(B, PT, FS, MP, SZ, Label, OD4, ND4) -->
 	gen_p4(PT, SZ, OD4, PD, ND4),
 	gen_fs7(B, FS, MP, Label, PD).
 
-gen_tmpl(gpt_lvm, FS, B, D4L) -->
-	{ maplist(d4_to_p4_pd(linux_lvm), D4L, P4L, PDL) },
+gen_tmpl(D4L, VL) -->
+	{
+	  memberchk(tmpl(TT), VL)
+	},
+	gen_tmpl0(TT, D4L, VL).
+
+gen_tmpl0(gpt_lvm, D4L, VL) -->
+	{
+	  memberchk(bl(B), VL),
+	  memberchk(fs(FS), VL),
+	  maplist(d4_to_p4_pd(linux_lvm), D4L, P4L, PDL)
+	},
 	P4L,
 	gen_st_root_fs(gpt_lvm, FS, B),
 	gen_tmpl_lvm_init(FS, root, B, PDL, D4L),
 	gen_soft(FS, B).
-gen_tmpl(gpt_lvm_luks, FS, B, D4L) -->
+gen_tmpl0(gpt_lvm_luks, D4L, VL) -->
 	{
+	  memberchk(bl(B), VL),
+	  memberchk(fs(FS), VL),
 	  inst_setting(lvm, lv(VG, LV, SZ)),
 	  format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV]),
 	  maplist(d4_to_p4_pd(linux_lvm), D4L, P4L, PDL),
@@ -283,8 +321,10 @@ gen_tmpl(gpt_lvm_luks, FS, B, D4L) -->
 	gen_st_root_fs(gpt_lvm_luks, FS, B),
 	gen_tmpl_one_init(FS, root, B, LUKS_PD, D4L),
 	gen_soft(FS, B).
-gen_tmpl(gpt_luks, FS, B, D4L) -->
+gen_tmpl0(gpt_luks, D4L, VL) -->
 	{
+	  memberchk(bl(B), VL),
+	  memberchk(fs(FS), VL),
 	  D4L = [d4(D, _SN, SDN, N)| _T],
 	  lx_part_name(D, N, PD),
 	  luks_dev_name(SDN, LUKS_PD),
@@ -297,8 +337,10 @@ gen_tmpl(gpt_luks, FS, B, D4L) -->
 	gen_st_root_fs(gpt_luks, FS, B),
 	gen_tmpl_one_init(FS, root, B, LUKS_PD, D4L),
 	gen_soft(FS, B).
-gen_tmpl(gpt_luks_lvm, FS, B, D4L) -->
+gen_tmpl0(gpt_luks_lvm, D4L, VL) -->
 	{
+	  memberchk(bl(B), VL),
+	  memberchk(fs(FS), VL),
 	  D4L = [d4(D, _SN, SDN, N)| _T],
 	  lx_part_name(D, N, PD),
 	  luks_dev_name(SDN, LUKS_PD),
@@ -311,28 +353,33 @@ gen_tmpl(gpt_luks_lvm, FS, B, D4L) -->
 	gen_st_root_fs(gpt_luks_lvm, FS, B),
 	gen_tmpl_lvm_init(FS, root, B, [LUKS_PD], D4L),
 	gen_soft(FS, B).
-gen_tmpl(gpt_basic, FS, B, D4L) -->
+gen_tmpl0(gpt_basic, D4L, VL) -->
+	{
+	  memberchk(bl(B), VL),
+	  memberchk(fs(FS), VL)
+	},
 	gen_st_root_fs(gpt_basic, FS, B),
 	gen_tmpl_dev_init(FS, root, B, D4L),
 	gen_soft(FS, B).
 
 % Bootloader supports only one filesystem.
 gen_st_root_fs(_TT, _FS, B) -->
-	{ bootloader_info(B, [_], _, _) }.
-gen_st_root_fs(TT, FS, B) -->
+	{ bootloader_info(B, [_], _, _), ! }.
+gen_st_root_fs(TT, FS, _B) -->
 	{ tmpl_to_grp(TT, PTT) },
-	[state(root_fs, ctx_rfs(PTT, FS, B, TT))].
+	[state(root_fs, ctx_rfs(PTT, FS))].
 
 gen_tmpl_lvm(FS, PTN, B, PDL) -->
 	{
 	  memberchk(FS, [zfs, btrfs]), !,
 	  part_tmpl(FS, PTN, PTL),
-	  get_enc_attr(FS, B, E),
+	  get_col_multi(FS, B, COL),
+	  fs_set_label(FS, void, COL, COL1),
 	  inst_setting(lvm, lv(VG, LV, SZ)),
 	  format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, LV])
 	},
 	[ bdev(lvm, vg(VG, PDL, [lv(LV, SZ)]))
-	, fs5_multi(FS, void, [LVM_PD], PTL, create, B, E)
+	, fs5_multi(FS, COL1, [LVM_PD], PTL, create)
 	].
 gen_tmpl_lvm(FS, PTN, B, PDL) -->
 	{
@@ -345,16 +392,17 @@ gen_tmpl_lvm(FS, PTN, B, PDL) -->
 
 gen_tmpl_lvm_init(FS, OPTN, B, PDL, D4L) -->
 	{ menu_part_tmpl(FS, OPTN, NPTN) },
-	[state(make_part_tmpl, ctx_part(lvm, B, FS, NPTN, D4L))],
+	[state(make_part_tmpl, ctx_part4(lvm, FS, NPTN, D4L)), state(fs_settings, ctx_fs_settings(FS))],
 	gen_tmpl_lvm(FS, NPTN, B, PDL).
 
 gen_tmpl_one(FS, PTN, B, D) -->
 	{
 	  memberchk(FS, [zfs, btrfs]), !,
 	  part_tmpl(FS, PTN, PTL),
-	  get_enc_attr(FS, B, E)
+	  get_col_multi(FS, B, COL),
+	  fs_set_label(FS, void, COL, COL1)
 	},
-	[ fs5_multi(FS, void, [D], PTL, create, B, E) ].
+	[ fs5_multi(FS, COL1, [D], PTL, create) ].
 gen_tmpl_one(FS, _PTN, B, D) -->
 	{ MP = (/) },
 	gen_fs7(B, FS, MP, void, D).
@@ -364,19 +412,20 @@ gen_tmpl_one_init(FS, OPTN, B, D, D4L) -->
 	  menu_part_tmpl(FS, OPTN, NPTN)
 	; NPTN = root
 	},
-	[state(make_part_tmpl, ctx_part(one, B, FS, NPTN, D4L))],
+	[state(make_part_tmpl, ctx_part4(one, FS, NPTN, D4L)), state(fs_settings, ctx_fs_settings(FS))],
 	gen_tmpl_one(FS, NPTN, B, D).
 
 gen_tmpl_dev(FS, PTN, B, D4L) -->
 	{
 	  memberchk(FS, [zfs, btrfs]), !,
 	  part_tmpl(FS, PTN, PTL),
-	  get_enc_attr(FS, B, E),
 	  fs2parttype(FS, PT),
-	  maplist(d4_to_p4_pd(PT), D4L, P4L, PDL)
+	  maplist(d4_to_p4_pd(PT), D4L, P4L, PDL),
+	  get_col_multi(FS, B, COL),
+	  fs_set_label(FS, void, COL, COL1)
 	},
 	P4L,
-	[fs5_multi(FS, void, PDL, PTL, create, B, E)].
+	[fs5_multi(FS, COL1, PDL, PTL, create)].
 gen_tmpl_dev(FS, PTN, B, D4L) -->
 	{
 	  part_tmpl(FS, PTN, PTL),
@@ -387,7 +436,7 @@ gen_tmpl_dev(FS, PTN, B, D4L) -->
 
 gen_tmpl_dev_init(FS, OPTN, B, D4L) -->
 	{ menu_part_tmpl(FS, OPTN, NPTN) },
-	[state(make_part_tmpl, ctx_part(dev, B, FS, NPTN, D4L))],
+	[state(make_part_tmpl, ctx_part4(dev, FS, NPTN, D4L)), state(fs_settings, ctx_fs_settings(FS))],
 	gen_tmpl_dev(FS, NPTN, B, D4L).
 
 gen_tmpl_to_fs([pfs(Label, MP, _SZ)|T], B, FS, VG) -->
@@ -397,7 +446,9 @@ gen_tmpl_to_fs([pfs(Label, MP, _SZ)|T], B, FS, VG) -->
 gen_tmpl_to_fs([], _B, _FS, _VG) --> [].
 
 gen_soft(FS, B) -->
-	{ findall(S, soft_info(S, B, FS, _DepL, _Descr), SL) },
+	{
+	  findall(S, soft_info(S, B, FS, _DepL, _Descr), SL)
+	},
 	gen_soft2(SL, FS, B, []).
 
 gen_soft2([], FS, B, _IL) -->

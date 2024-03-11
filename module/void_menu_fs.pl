@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 menu_filesystem(TL) :-
 	% do not try to edit swap partition.
@@ -14,7 +14,7 @@ menu_filesystem(TL) :-
 	MT1 = ' Select the partition to edit ',
 	dialog_msg(menu, MENULABEL),
 	repeat,
-	tui_menu_tag2(edit_fs_short, ML1, MENULABEL, [cancel-label('Done'), title(MT1)], PD),
+	tui_menu_tag2_ext(edit_fs_short, ML1, MENULABEL, [cancel-label('Done'), title(MT1)], PD),
 	menu_fs_short(PD),
 	!.
 
@@ -42,7 +42,7 @@ menu_fs_short(PD) :-
 	],
 	maplist(make_menu_fs_short, ML1, ML2),
 	format_to_atom(TA, ' Set ~w filesystem parameters ', [PD]),
-	tui_menu_tag2(file_system, ML2, MENULABEL, [extra-button, extra-label('Accept'), ok-label('Edit'), title(TA)], Tag),
+	tui_menu_tag2_ext(file_system, ML2, MENULABEL, [extra-button, extra-label('Accept'), ok-label('Edit'), title(TA)], Tag),
 	menu_fs_info(CMD, Tag),
 	menu_fs_action(CMD, PD), !,
 	fail.
@@ -113,7 +113,9 @@ make_perm_part_rec(PD) :-
 	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
 	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, _COL, _MOL, CK)),
 	get_bootloader(TL, B),
-	get_col_mol(B, FS, MP, COL, MOL),
+	get_mol(FS, MP, MOL),
+	% menu_fs_settings0(FS, MP, B, COL),
+	get_col(FS, MP, B, COL),
 	maplist(replace_element(fs7( _, _, _, PD, _, _, _), fs7(FS, Label, MP, PD, COL, MOL, CK)), TL, TL1),
 	retract(inst_setting(template(TT), _)),
 	assertz(inst_setting(template(TT), TL1)),
@@ -140,17 +142,7 @@ menu_select_fs(TT, B, OFS, NFS) :-
 	bootloader_info(B, _FSL, _, EL2),
 	subtract(ML1, EL2, ML2),
 	maplist(fs_type_to_menu, ML2, ML),
-	dialog_msg(radiolist, RADIOLABEL),
-	tui_radiolist_tag2(ML, OFS, RADIOLABEL, [title(' Select the filesystem type ')], NFS),
+	dialog_msg(radiolist, LABEL),
+	tui_radiolist_tag2(ML, OFS, LABEL, [title(' Select the filesystem type ')], NFS),
 	true.
-
-get_zfs_encr(zfs, grub2, false) :- !.
-get_zfs_encr(zfs, _Bootloader, true) :-
-	tui_yesno('Enable Native ZFS Encryption?', []), !.
-get_zfs_encr(_, _, false).
-
-menu_zfs_encr(FS, B, E) :-
-	get_zfs_encr(FS, B, E),
-	retractall(inst_setting(fs_attr(zfs, '/', B), _)),
-	assertz(inst_setting(fs_attr(zfs, '/', B), encr(E))).
 

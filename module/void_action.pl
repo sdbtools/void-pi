@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % Detect that we are running void-live ISO.
 is_void_live :-
@@ -359,15 +359,22 @@ umount_filesystems(RD) :-
 umount_filesystems(_RD).
 
 wipe_disk(D) :-
-	os_shell2_lines([wipefs, '--noheadings', D], L),
+	% os_shell2_rc([sgdisk, '--zap-all', '--clear', D, '2>&1', '1>/dev/null'], _),
+	format_to_atom(Title, ' Cleaning Device ~w ', [D]),
+	tui_progressbox_safe([sgdisk, '--zap-all', '--clear', D, '2>&1'], '', [title(Title), sz([6, 40])]),
+	os_shell2([wipefs, '--all', '--force', D, '2>&1', '1>/dev/null']),
+
+	% os_shell2_rc([sgdisk, '--zap-all', '--clear', D, '2>&1', '1>/dev/null'], _),
+	% os_shell2_lines([wipefs, '--noheadings', D], L),
+
 	% os_shell2_lines([wipefs, '--all', '--force', D, '2>&1', '1>/dev/null'], L),
-	( L = [] ->
-	  % os_shell2([sgdisk, '-Zo', D])
-	  format_to_atom(Title, ' Cleaning Device ~w ', [D]),
-	  tui_progressbox_safe([sgdisk, '-Zo', D, '2>&1'], '', [title(Title), sz([6, 40])])
-	; os_shell2([wipefs, '--all', '--force', D, '2>&1', '1>/dev/null']),
-	  wipe_disk(D)
-	),
+	% ( L = [] ->
+	%   % os_shell2([sgdisk, '--zap-all', '--clear', D])
+	%   format_to_atom(Title, ' 2222 Cleaning Device ~w ', [D]),
+	%   tui_progressbox_safe([sgdisk, '--zap-all', '--clear', D, '2>&1'], '', [title(Title), sz([6, 40])])
+	% ; os_shell2([wipefs, '--all', '--force', D, '2>&1', '1>/dev/null']),
+	%   wipe_disk(D)
+	% ),
 	!.
 
 % TL - tree list.
@@ -436,7 +443,7 @@ ensure_passwd(TT, _TL) :-
 	menu_password_luks(U),
 	fail.
 ensure_passwd(_TT, TL) :-
-	uses_encr_zfs(TL),
+	zfs_uses_encr(TL),
 	U = '$_zfs_$',
 	\+ inst_setting_tmp(passwd(U), _),
 	menu_password_for('ZFS', U),

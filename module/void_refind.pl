@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 refind_install(TL, RD) :-
 	( memberchk(p4(sys_efi, bd1([EFI_PD| _]), _CK, _SZ), TL)

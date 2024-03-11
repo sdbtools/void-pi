@@ -1,5 +1,9 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
+
+tui_menu_on_off([T], [T, T]) :- !.
+tui_menu_on_off([T, V|_], [T, V]) :- !.
+tui_menu_on_off(T, [T, T]) :- !.
 
 tui_radiolist_on_off(ON, [T], [T, T, I]) :- !,
 	( T = ON ->

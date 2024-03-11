@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % generate fstab
 make_fstab(TL, RD) :-
@@ -74,10 +74,10 @@ get_col(FS, MP, B, COL) :-
 	!.
 get_col(_FS, _MP, _B, []).
 
-get_col_mol(B, FS, MP, COL, MOL) :-
-	get_col(FS, MP, B, COL),
-	get_mol(FS, MP, MOL),
-	true.
+get_col_multi(zfs, B, COL) :- !,
+	phrase(zfs_get_col2(B), COL).
+get_col_multi(FS, B, COL) :-
+	get_col(FS, (/), B, COL).
 
 write_fstab_line(L, S) :-
 	os_wcmdl(L, '\t', S), nl(S), nl(S).
@@ -99,7 +99,7 @@ get_fstab_list(TL, [fstab4(none, proc, PMOL, none), fstab4(none, tmp, TMOL, none
 	true.
 
 get_fstab_list_multi(btrfs, TL, fstab4(MP, btrfs, MOL, PD)) :-
-	member(fs5_multi(btrfs, _Label, [PD|_], PTL, _, _B, _E), TL),
+	member(fs5_multi(btrfs, _COL, [PD|_], PTL, _), TL),
 	get_fstab_list_multi_btrfs(PTL, MP, MOL),
 	true.
 

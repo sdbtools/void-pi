@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 gummiboot_install(RD) :-
 	tui_progressbox_safe([chroot, RD, gummiboot, install, '2>&1'], '', [sz([6, 60])]),

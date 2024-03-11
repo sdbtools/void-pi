@@ -1,24 +1,40 @@
 #!/usr/bin/gprolog --consult-file
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 :- initialization(main).
+% :- multifile(prop_info/3).
+:- discontiguous(prop_info/3).
+:- discontiguous([menu_list_on_all/4, menu_list_on_make/5, menu_list_on_get/5, menu_list_on_set/6]).
 
 % library
 :- include('lib/atom_common.pl').
 :- include('lib/list_common.pl').
+:- include('lib/cli_common.pl').
+
 :- include('lib/os_common.pl').
 :- include('lib/os_grub.pl').
-:- include('lib/cli_common.pl').
+
 :- include('lib/unix_common.pl').
 :- include('lib/linux_info.pl').
 :- include('lib/linux_common.pl').
 :- include('lib/linux_dracut.pl').
-:- include('lib/linux_luks.pl').
-:- include('lib/zfs_common.pl').
-:- include('lib/lvm_common.pl').
+
 :- include('lib/tui_common.pl').
 :- include('lib/tui_dialog.pl').
+:- include('lib/tui_ext.pl').
+
+:- include('lib/linux_luks.pl').
+:- include('lib/lvm_common.pl').
+
+% file systems
+:- include('lib/linux_prop_fs.pl').
+:- include('lib/zfs_common.pl').
+:- include('lib/extfs_common.pl').
+:- include('lib/btrfs_common.pl').
+:- include('lib/f2fs_common.pl').
+:- include('lib/xfs_common.pl').
+:- include('lib/vfat_common.pl').
 
 :- include('module/void_info.pl').
 :- include('module/void_cmd_arg.pl').
@@ -27,6 +43,7 @@
 :- include('module/void_menu_linux.pl').
 :- include('module/void_menu_fs.pl').
 :- include('module/void_menu_dev.pl').
+:- include('module/void_menu_prop.pl').
 :- include('module/void_menu.pl').
 
 :- include('module/void_luks.pl').
@@ -80,12 +97,20 @@ def_settings :-
 	assertz(inst_setting(fs_attr(efivarfs, _, _), mount([defaults]))),
 	assertz(inst_setting(fs_attr(swap, _, _), mount([defaults]))),
 
-	assertz(inst_setting(fs_attr(f2fs, _, _), create([extra_attr, inode_checksum, sb_checksum, compression, encrypt]))),
+	assertz(inst_setting(fs_attr(vfat, _, _), create([attr(vfat_rw, ['fat-size'=32])]))),
+	assertz(inst_setting(fs_attr(f2fs, _, _), create([attr(f2fs_feat, [extra_attr=on, inode_checksum=on, sb_checksum=on, compression=on]), attr(f2fs_rw, [force=yes])]))),
+	assertz(inst_setting(fs_attr(ext2, _, _), create([attr(extfs_rw, ['fs-type'=ext2, force=yes])]))),
+	assertz(inst_setting(fs_attr(ext3, _, _), create([attr(extfs_rw, ['fs-type'=ext3, force=yes])]))),
 	% https://wiki.syslinux.org/wiki/index.php?title=Filesystem#ext
-	assertz(inst_setting(fs_attr(ext4, '/', syslinux), create(['^64bit']))),
-	assertz(inst_setting(fs_attr(ext4, '/boot', syslinux), create(['^64bit']))),
-	assertz(inst_setting(fs_attr(zfs, '/', _), create([]))),
-	assertz(inst_setting(fs_attr(zfs, '/', _), encr(false))),
+	assertz(inst_setting(fs_attr(ext4, _, syslinux), create([attr(extfs_feat, ['64bit'=off]), attr(extfs_rw, ['fs-type'=ext4, force=yes])]))),
+	assertz(inst_setting(fs_attr(ext4, _, _), create([attr(extfs_rw, ['fs-type'=ext4, force=yes])]))),
+	assertz(inst_setting(fs_attr(btrfs, _, _), create([attr(btrfs_rw, [force=yes])]))),
+	% grub2 does not support xfs filesystems with sparse inode allocation (https://bugzilla.redhat.com/show_bug.cgi?id=1575797)
+	% https://patchwork.kernel.org/project/xfs/patch/ce584ae1-ee62-2dcb-9366-eb0a6df6e98e@sandeen.net/
+	% assertz(inst_setting(fs_attr(xfs, _, grub2), create([attr(xfs_inode_rw, [sparse=0]), attr(xfs_rw, [force=yes])]))),
+	assertz(inst_setting(fs_attr(xfs, _, _), create([attr(xfs_rw, [force=yes])]))),
+	assertz(inst_setting(fs_attr(zfs, _, _), create([attr(zpool_rw, [force=yes, mountpoint=none])]))),
+	assertz(inst_setting(fs_attr(zfs, _, _), encr(false))),
 
 	assertz(inst_setting(source, local)),
 	assertz(inst_setting(hostname, voidpp)),
@@ -94,7 +119,7 @@ def_settings :-
 	assertz(inst_setting(config_file, 'settings.pl')),
 	assertz(inst_setting(part(root), [])),
 
-	enable_template(manual, grub2),
+	set_template(manual, grub2),
 
 	!.
 
@@ -270,12 +295,12 @@ run_cmd(_TT, _TL, _RD, modprobe(FS)) :- !,
 run_cmd(_TT, _TL, _RD, mkbd(BD, CMD)) :- !, % make block device.
 	mkbd(BD, CMD),
 	!.
-run_cmd(_TT, _TL, _RD, mkfs(FS, D, COL, Label)) :- !,
-	mkfs(FS, D, COL, Label),
+run_cmd(_TT, _TL, _RD, mkfs(FS, D, COL)) :- !,
+	mkfs(FS, D, COL),
 	true.
-run_cmd(_TT, TL, RD, mkfs_multi(FS, DL, PTL, Label, B, E)) :- !,
+run_cmd(_TT, TL, RD, mkfs_multi(FS, DL, PTL, COL)) :- !,
 	format_to_atom(Title, ' Creating filesystem ~w ', [FS]),
-	mkfs_multi(FS, Title, TL, DL, PTL, Label, B, E, RD),
+	mkfs_multi(FS, Title, TL, DL, PTL, COL, RD),
 	true.
 run_cmd(_TT, _TL, RD, mount_multi(FS, D, PTL)) :- !,
 	mount_fs_multi(FS, D, PTL, RD),
@@ -341,15 +366,15 @@ make_cmd(_TT, TL, modprobe(FS)) :-
 make_cmd(_TT, TL, mkbd(BD, CMD)) :-
 	member(bdev(BD, CMD), TL),
 	true.
-make_cmd(_TT, TL, mkfs_multi(FS, DL, PTL, Label, B, E)) :-
-	member(fs5_multi(FS, Label, DL, PTL, create, B, E), TL),
+make_cmd(_TT, TL, mkfs_multi(FS, DL, PTL, COL)) :-
+	member(fs5_multi(FS, COL, DL, PTL, create), TL),
 	true.
-make_cmd(_TT, TL, mkfs(FS, D, COL, Label)) :-
+make_cmd(_TT, TL, mkfs(FS, D, COL)) :-
 	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	member(fs7(FS, Label, _MP, D, COL, _MOL, create), TL),
+	member(fs7(FS, _Label, _MP, D, COL, _MOL, create), TL),
 	true.
 make_cmd(_TT, TL, mount_multi(FS, D, PTL)) :-
-	member(fs5_multi(FS, _Label, [D|_], PTL, create, _B, _E), TL),
+	member(fs5_multi(FS, _COL, [D|_], PTL, create), TL),
 	true.
 make_cmd(_TT, TL, mount(FS, PD, MP)) :-
 	get_mp_list(TL, MPL),
@@ -367,7 +392,7 @@ run_install(TT, TL) :-
 	true.
 
 check_dialog :-
-	os_shell2([dialog, '2>/dev/null']),
+	os_shell2([dialog, '>/dev/null', '2>/dev/null']),
 	!.
 check_dialog :-
 	writenl('dialog not found.'),

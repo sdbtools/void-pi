@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 writenl(A) :-
 	write(A), nl.
@@ -83,12 +83,23 @@ read_file_codes(_, _, []).
 read_file_codes_line(S, L) :-
 	read_file_codes(S, [10], L).
 
-% Reads ALL lines
+% Reads ALL lines.
 read_file_codes_lines(S, LL) :-
 	read_file_codes_line(S, L1),
-	( L1 = []
-	-> LL = L1
+	( L1 = [] ->
+	  LL = L1
 	; read_file_codes_lines(S, L2),
+	  LL = [L1|L2]
+	).
+
+% Reads lines, skip comments.
+read_file_codes_lines_nc(S, C, LL) :-
+	read_file_codes_line(S, L1),
+	( L1 = [] ->
+	  LL = L1
+	; append(C, _, L1) ->
+	  read_file_codes_lines_nc(S, C, LL)
+	; read_file_codes_lines_nc(S, C, L2),
 	  LL = [L1|L2]
 	).
 

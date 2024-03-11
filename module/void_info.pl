@@ -1,8 +1,8 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 version :-
-	writenl('version 0.18.0').
+	writenl('version 0.19.0').
 
 fs_info(bcachefs, 'Linux Bcachefs').
 fs_info(btrfs, 'Oracle\'s Btrfs').

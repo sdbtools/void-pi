@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 menu_password_user(UL) :-
 	format_to_atom(Title, ' Enter password for user ~w ', [UL]),
@@ -94,16 +94,22 @@ keep_part_(_KL, _).
 add_part_(B, PIL, SL, [PD| T], IL, OL) :-
 	memberchk(PD, SL), !,
 	add_part_(B, PIL, SL, T, IL, OL).
-add_part_(B, PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), fs7(FS, '', MP, PD, COL, MOL, keep)| OL]) :-
+add_part_(B, PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), fs7(FS, Label, MP, PD, COL, MOL, keep)| OL]) :-
 	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
 	% dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)
 	member(dev_part(PD,name(_SNAME,_KNAME,[DL|_]),part5(_PTTYPE,PT,_PARTUUID,_UUID,FS),SZ), PIL),
 	BD1 = bd1([PD|DL]), !,
-	MP = '',
-	get_col_mol(B, FS, MP, COL, MOL),
+	guess_part_info(PT, Label, MP),
+	% menu_fs_settings0(FS, MP, B, COL),
+	get_col(FS, MP, B, COL),
+	get_mol(FS, MP, MOL),
 	add_part_(B, PIL, SL, T, IL, OL).
 add_part_(_B, _PIL, _SL, [], L, L) :-
 	true.
+
+guess_part_info(sys_efi, 'EFI', '/boot/efi') :- !.
+guess_part_info(linux_data, 'ROOT', '/') :- !.
+guess_part_info(_PT, '', '').
 
 menu_bios_efi(TT, TL) :-
 	findall([M, MT], (member(M, [bios, efi]), boot_info(M, MT)), ML),
@@ -131,7 +137,7 @@ menu_bios_efi(TT, TL) :-
 
 	  ( TT = manual
 	  ; tui_msgbox('Template will be reset to "Manual"'),
-		switch_template(TT, manual, NB, NB)
+		set_template(manual, NB)
 	  )
 	),
 	!.
@@ -299,7 +305,50 @@ menu_luks_info :-
 	assertz(inst_setting(luks, luks(NName))),
 	true.
 
-menu_btrfs :-
-	tui_msgbox2([not, implemented, yet]),
+menu_fs_settings0(FS, MP, B, OCOL, NCOL) :-
+	format_to_atom(Title, ' \'~w\' ~w settings ', [MP, FS]),
+	% get_col(FS, MP, B, OCOL),
+	% MP is used with fs_settings to create an unique key.
+	menu_list_2(fs_settings(FS, MP), Title, ev(B), OCOL, NCOL, keep),
+	( OCOL = NCOL
+	; retractall(inst_setting(fs_attr(FS, MP, B), create(_))),
+	  assertz(inst_setting(fs_attr(FS, MP, B), create(NCOL)))
+	), !,
 	true.
+
+menu_fs_settings1(TT, TL) :-
+	st_bootloader(TL, B),
+	findall(fs_sett3(MP, FS, COL), member(fs7(FS, _Label, MP, _PD, COL, _MOL, create), TL), IL1),
+	findall(fs_sett3('/', FS, COL), member(fs5_multi(FS, COL, _PDL, _PTL, create), TL), IL2),
+	append(IL1, IL2, IL),
+	menu_list_2(fs_settings_main, ' FS Settings ', ev(B, IL), IL, OL, keep),
+	( IL = OL
+	; menu_fs_settings1_(IL, OL, TL, NTL),
+	  retractall(inst_setting(template(TT), _)),
+	  assertz(inst_setting(template(TT), NTL))
+	), !,
+	true.
+
+menu_fs_settings1_([fs_sett3(MP, FS, OCOL)|T], NL, OTL, NTL) :-
+	memberchk(fs_sett3(MP, FS, NCOL), NL),
+	OCOL \= NCOL, !,
+	( memberchk(FS, [btrfs, zfs]) ->
+	  replace_fs5_multi(OTL, FS, NCOL, TL)
+	; replace_fs7(OTL, MP, FS, NCOL, TL)
+	),
+	menu_fs_settings1_(T, NL, TL, NTL).
+menu_fs_settings1_([_|T], NL, OTL, NTL) :- !,
+	menu_fs_settings1_(T, NL, OTL, NTL).
+menu_fs_settings1_([], _OL, OTL, OTL).
+
+% MP + FS = unique key.
+replace_fs7([fs7(FS, Label, MP, PD, _COL, MOL, create)|T], MP, FS, NCOL, [fs7(FS, Label, MP, PD, NCOL, MOL, create)|T]) :- !.
+replace_fs7([H|T], MP, FS, NCOL, [H|T1]) :- !,
+	replace_fs7(T, MP, FS, NCOL, T1).
+replace_fs7([], _MP, _FS, _NCOL, []).
+
+replace_fs5_multi([fs5_multi(FS, _COL1, PDL, PTL, create)|T], FS, NCOL, [fs5_multi(FS, NCOL, PDL, PTL, create)|T]) :- !.
+replace_fs5_multi([H|T], FS, NCOL, [H|T1]) :- !,
+	replace_fs5_multi(T, FS, NCOL, T1).
+replace_fs5_multi([], _FS, _NCOL, []).
 

@@ -103,6 +103,7 @@ $ sudo ./build-x86-images.sh -- -v linux6.7
 - predefined templates for LVM, LUKS, and combinations of them.
 - predefined partitioning templates.
 - selected devices will be automatically cleaned up.
+- TUI for setting of file system features and options.
 - TUI dynamically changes depending on selected template.
 - uses `/mnt` for chroot by default.
 - allows to use an alternative rootdir via `--rootdir` command line argument.
@@ -128,6 +129,8 @@ $ sudo ./build-x86-images.sh -- -v linux6.7
     - Requires a ZFS install media.
     - Supported by GRUB and ZFSBootMenu bootmanagers.
     - In case of GRUB only "GPT. Basic" template is supported at this time.
+    - Encryption can be enabled via "FS Settings".
+    - In case of GRUB encryption shouldn't be used because GRUB doesn't support it.
 - Bcachefs
     - Requires a Bcachefs install media.
 - LUKS

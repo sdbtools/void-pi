@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 :- dynamic([tui_def_args_all/1, tui_def_args/1, menu_def_item/2]).
 
@@ -52,6 +52,9 @@ dialog_rc(4, item_help) :- !.
 dialog_rc(5, timeout) :- !.
 dialog_rc(-1, error) :- !.
 
+tui_not_ok(RC) :-
+	memberchk(RC, [cancel, timeout, error]).
+
 % This is dialog-specific implementation.
 tui_make_sz2(sz(auto), ['0', '0']) :- !.
 tui_make_sz2(sz(max), ['-1', '-1']) :- !.
@@ -64,33 +67,54 @@ tui_make_sz3(sz([H|T]), L) :-
 	maplist(number_atom, [H|T], L).
 
 tui_buildlist(L, M, UA, A) :-
-	tui_list3_ind(buildlist, L, M, UA, OutL),
+	tui_list3_ind_rc(buildlist, L, M, UA, OutL, ok),
 	atom_codes(A, OutL).
 
 % NL - list of numbers.
+tui_checklist_ind_rc(L, M, UA, NL, RC) :-
+	tui_list3_ind_rc(checklist, L, M, UA, OutL, RC),
+	( tui_not_ok(RC)
+	; split_list_ne(OutL, " ", CNL),
+	  maplist(codes_number, CNL, NL)
+	), !.
+
 tui_checklist_ind(L, M, UA, NL) :-
-	tui_list3_ind(checklist, L, M, UA, OutL),
-	split_list_ne(OutL, " ", CNL),
-	maplist(codes_number, CNL, NL).
+	tui_checklist_ind_rc(L, M, UA, NL, ok).
+
+tui_checklist_tag_rc(L, M, UA, AL, RC) :-
+	tui_list3_tag_rc(checklist, L, M, UA, OutL, RC),
+	( tui_not_ok(RC)
+	; split_list_ne(OutL, " ", CL),
+	  maplist(codes_atom, CL, AL)
+	), !.
 
 tui_checklist_tag(L, M, UA, AL) :-
-	tui_list3_tag(checklist, L, M, UA, OutL),
-	split_list_ne(OutL, " ", CL),
-	maplist(codes_atom, CL, AL).
+	tui_checklist_tag_rc(L, M, UA, AL, ok).
 
 % ONL - on-list.
 tui_checklist_tag2(L, ONL, M, UA, AL) :-
 	maplist(tui_checklist_on_off(ONL), L, L1),
-	tui_checklist_tag(L1, M, [default-item(ONL)|UA], AL).
+	tui_checklist_tag(L1, M, UA, AL).
+
+tui_radiolist_ind_rc(L, M, UA, N, RC) :-
+	tui_list3_ind_rc(radiolist, L, M, UA, OutL, RC),
+	( tui_not_ok(RC)
+	; number_codes(N, OutL)
+	), !.
 
 tui_radiolist_ind(L, M, UA, N) :-
-	tui_list3_ind(radiolist, L, M, UA, OutL),
-	number_codes(N, OutL).
+	tui_radiolist_ind_rc(L, M, UA, N, ok).
+
+tui_radiolist_tag_rc(L, M, UA, A, RC) :-
+	tui_list3_tag_rc(radiolist, L, M, UA, OutL, RC),
+	( tui_not_ok(RC)
+	; atom_codes(A, OutL)
+	), !.
 
 tui_radiolist_tag(L, M, UA, A) :-
-	tui_list3_tag(radiolist, L, M, UA, OutL),
-	atom_codes(A, OutL).
+	tui_radiolist_tag_rc(L, M, UA, A, ok).
 
+% Similar to tui_menu_tag2.
 % DI - default item.
 tui_radiolist_tag2(L, DI, M, UA, A) :-
 	maplist(tui_radiolist_on_off(DI), L, L1),
@@ -107,19 +131,30 @@ tui_menu_ind(L, M, UA, N) :-
 	number_codes(N, OutL).
 
 tui_menu_tag(L, M, UA, A) :-
-	tui_menu3_tag(menu, L, M, UA, OutL),
+	tui_menu3_tag_rc(menu, L, M, UA, OutL, ok),
 	atom_codes(A, OutL).
 
 tui_menu_tag_rc(L, M, UA, A, RC) :-
 	tui_menu3_tag_rc(menu, L, M, UA, OutL, RC),
-	atom_codes(A, OutL).
+	( tui_not_ok(RC)
+	; atom_codes(A, OutL)
+	), !.
+
+% Similar to tui_radiolist_tag2.
+tui_menu_tag2(L, DI, M, UA, A) :-
+	maplist(tui_menu_on_off, L, L1),
+	tui_menu_tag_rc(L1, M, [default-item(DI)|UA], A, ok).
+
+tui_menu_tag2_rc(L, DI, M, UA, A, RC) :-
+	maplist(tui_menu_on_off, L, L1),
+	tui_menu_tag_rc(L1, M, [default-item(DI)|UA], A, RC).
 
 % Tag - menu tag
-tui_menu_tag2(Tag, L, M, UA, A1) :-
+tui_menu_tag2_ext(Tag, L, M, UA, A1) :-
 	% get default item
-	( menu_def_item(Tag, DI) -> true
+	( menu_def_item(Tag, DI)
 	; L = [[DI|_]|_]
-	),
+	), !,
 	tui_menu_tag_rc(L, M, [default-item(DI)|UA], A, RC), !,
 	RC \= error,
 	( RC = ok ->
@@ -130,31 +165,6 @@ tui_menu_tag2(Tag, L, M, UA, A1) :-
 	retractall(menu_def_item(Tag, _)),
 	assertz(menu_def_item(Tag, A1)),
 	true.
-
-% Vertical form.
-% FLen - edit field lenght
-% ILen - input field lenght
-% L - list of items
-% M - message
-% AL - atom list
-tui_form_v(FLen, ILen, L, M, UA, AL) :-
-	tui_make_form_list(FLen, ILen, L, 1, SO),
-	tui_box3(form, M, SO, UA, OutL, ok),
-	split_line_codes(OutL, LL),
-	maplist(codes_atom, LL, AL).
-
-tui_passwordform_v(FLen, ILen, L, M, UA, AL) :-
-	tui_make_form_list(FLen, ILen, L, 1, SO),
-	tui_box3(passwordform, M, SO, UA, OutL, ok),
-	split_line_codes(OutL, LL),
-	maplist(codes_atom, LL, AL).
-
-% Fields have a type: 0, 1 - hidden/password, 2 - readonly, 3.
-tui_mixedform_v(FLen, ILen, L, M, UA, AL) :-
-	tui_make_form_list_t(FLen, ILen, L, 1, SO),
-	tui_box3(mixedform, M, SO, UA, OutL, ok),
-	split_line_codes(OutL, LL),
-	maplist(codes_atom, LL, AL).
 
 tui_editbox(F, UA) :-
 	tui_spawn(editbox, F, [], UA, 0).
@@ -217,6 +227,9 @@ tui_progressbox_unsafe(PL, M, UA) :-
 tui_progressbox_safe(PL, M, UA) :-
 	tui_tailbox2_safe(PL, progressbox, M, [], UA).
 
+tui_progressbox_atom(A, M, UA) :-
+	tui_tailbox2_atom(A, progressbox, M, [], UA).
+
 % text + Yes + No
 tui_yesno(M, UA) :-
 	tui_spawn(yesno, M, [], UA, RC),
@@ -245,6 +258,8 @@ tui_msgbox2(ML, UA) :-
 	os_scmdl(ML, AL),
 	tui_msgbox(AL, UA).
 
+tui_msgbox_w([], UA) :- !,
+	tui_msgbox('[]', UA).
 tui_msgbox_w(ML, UA) :-
 	write_to_atom(A, ML),
 	tui_msgbox(A, UA).
@@ -330,14 +345,25 @@ tui_make_form_list_t(_, _, [], _, []).
 % M - message
 % UA - user attributes
 % OutL - ooutput list
-tui_list3_ind(B, L, M, UA, OutL) :-
+tui_list3_ind_rc(B, L, M, UA, OutL, RC) :-
 	tui_add_check_num_pref(1, L, SO),
-	tui_box3(B, M, SO, UA, OutL, ok),
+	tui_box3(B, M, SO, UA, OutL, RC),
 	true.
 
-tui_list3_tag(B, L, M, UA, OutL) :-
+tui_list3_tag_rc(B, L, M, UA, OutL, RC) :-
 	tui_add_check_tag_suf(L, SO),
-	tui_box3(B, M, SO, UA, OutL, ok).
+	tui_box3(B, M, SO, UA, OutL, RC).
+
+tui_shell2_safe(CL) :-
+	os_shell2_ostream_rc(CL, OA, RC),
+	% !!! os_shell2_ostream_rc has to succeed in order to get OA.
+	( RC = 0
+	; os_scmdl(CL, CLA),
+	  format_to_atom(A, '~w\n\n~w', [CLA, OA]),
+	  tui_msgbox(A, [title(' Command has failed ')]),
+	  % tui_programbox_atom(OA, PLA, [title(' Command has failed '), sz(max)]),
+	  fail
+	), !.
 
 % B - box type
 % M - message
@@ -348,9 +374,6 @@ tui_box3_ind(B, L, M, UA, OutL) :-
 	tui_add_num_pref(1, L, SO),
 	tui_box3(B, M, SO, UA, OutL, ok).
 
-tui_menu3_tag(B, L, M, UA, OutL) :-
-	tui_menu3_tag_rc(B, L, M, UA, OutL, ok).
-
 tui_menu3_tag_rc(B, L, M, UA, OutL, RA) :-
 	add_dquote_list(L, SO),
 	tui_box3(B, M, SO, UA, OutL, RA).
@@ -360,8 +383,7 @@ tui_make_box3_cmdlist(B, M, SO, UA, DL) :-
 	tui_def_args(B, DEFA),
 	tui_merge_args(DEFA, UA, MA),
 	tui_make_args3(MA, SZA, TAL),
-	add_dquote(M, M1),
-	DL = [dialog, '--stdout', TAL, oo(B), M1, SZA, SO].
+	DL = [dialog, '--stdout', TAL, oo(B), dq(M), SZA, SO].
 
 tui_box3(B, M, SO, UA, OutL, RA) :-
 	tui_make_box3_cmdlist(B, M, SO, UA, DL),
@@ -374,8 +396,7 @@ tui_make_box2_cmdlist(B, M, SO, UA, DL) :-
 	tui_def_args(B, DEFA),
 	tui_merge_args(DEFA, UA, MA),
 	tui_make_args2(MA, SZA, TAL),
-	add_dquote(M, M1),
-	DL = [dialog, '--stdout', TAL, oo(B), M1, SZA, SO].
+	DL = [dialog, '--stdout', TAL, oo(B), dq(M), SZA, SO].
 
 tui_tailbox2_unsafe(PL, B, M, SO, UA) :-
 	tui_make_box2_cmdlist(B, M, SO, UA, DL),
@@ -396,7 +417,7 @@ tui_tailbox2_safe(PL, B, M, SO, UA) :-
 
 tui_tailbox2_atom(A, B, M, SO, UA) :-
 	tui_make_box2_cmdlist(B, M, SO, UA, DL),
-	os_shell2_atom_pipe(A, DL).
+	os_shell2_atom_input(A, DL).
 
 tui_tailbox3(PL, B, M, SO, UA) :-
 	tui_make_box3_cmdlist(B, M, SO, UA, DL),

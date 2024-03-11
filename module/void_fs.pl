@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % https://wiki.archlinux.org/title/Dm-crypt
 % https://wiki.archlinux.org/title/Dm-crypt/Encrypting_an_entire_system
@@ -7,7 +7,7 @@
 % Stacking LVM volumes: https://access.redhat.com/articles/2106521
 % https://wiki.syslinux.org/wiki/index.php?title=Filesystem#ext
 % Free Software EFI/UEFI file system drivers: https://efi.akeo.ie/
-%	EfiFs - EFI File System Drivers: https://github.com/pbatard/efifs
+% EfiFs - EFI File System Drivers: https://github.com/pbatard/efifs
 
 has_boot_part(TL) :-
 	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
@@ -19,11 +19,11 @@ has_root_part(TL) :-
 	memberchk(fs7(_FS, _Label, '/', _D, _COL, _MOL, _CK), TL), !,
 	true.
 has_root_part(TL) :-
-	member(fs5_multi(btrfs, _Label, _DL, PTL, _CK, _B, _E), TL),
+	member(fs5_multi(btrfs, _COL, _DL, PTL, _CK), TL),
 	memberchk(subv(_Name, '/', _MOL, _), PTL), !,
 	true.
 has_root_part(TL) :-
-	member(fs5_multi(zfs, _Label, _DL, PTL, _CK, _B, _E), TL),
+	member(fs5_multi(zfs, _COL, _DL, PTL, _CK), TL),
 	memberchk(dataset(_, '/', _), PTL), !,
 	true.
 
@@ -37,11 +37,11 @@ root_pd(TL, PD) :-
 	memberchk(fs7(_FS, _Labe1, '/', PD, _COL, _MOL, _CK), TL),
 	!.
 root_pd(TL, PD) :-
-	member(fs5_multi(btrfs, _Label, [PD|_], PTL, _CK, _B, _E), TL),
+	member(fs5_multi(btrfs, _COL, [PD|_], PTL, _CK), TL),
 	memberchk(subv(_Name, '/', _MOL, _), PTL),
 	!.
 root_pd(TL, PD) :-
-	member(fs5_multi(zfs, _Label, [PD|_], PTL, _CK, _B, _E), TL),
+	member(fs5_multi(zfs, _COL, [PD|_], PTL, _CK), TL),
 	memberchk(dataset(_, '/', _), PTL), !,
 	true.
 root_pd(_TL, _PD) :-
@@ -53,11 +53,11 @@ root_fs(TL, FS) :-
 	memberchk(fs7(FS, _Labe1, '/', _D, _COL, _MOL, _CK), TL), !,
 	true.
 root_fs(TL, btrfs) :-
-	member(fs5_multi(btrfs, _Label, _DL, PTL, _CK, _B, _E), TL),
+	member(fs5_multi(btrfs, _COL, _DL, PTL, _CK), TL),
 	memberchk(subv(_Name, '/', _MOL, _), PTL), !,
 	true.
 root_fs(TL, zfs) :-
-	member(fs5_multi(zfs, _Label, _DL, PTL, _CK, _B, _E), TL),
+	member(fs5_multi(zfs, _COL, _DL, PTL, _CK), TL),
 	memberchk(dataset(_, '/', _), PTL), !,
 	true.
 
@@ -66,10 +66,81 @@ boot_pref(TL, '') :-
 	!.
 boot_pref(_TL, 'boot/').
 
-get_mkfs_attrs([], []) :- !.
-get_mkfs_attrs(COL, [o('O', lc(COL))]).
+get_mkfs_attrs(COL, L) :-
+	findall(LM, (member(CO, COL), get_mkfs_attrs0(CO, L0), member(LM, L0)), L),
+	true.
 
-mkfs(swap, PD, _COL, _Label) :- !,
+get_mkfs_attrs0(attr(TAG, OL), L) :-
+	prop_info(TAG, Format, _),
+	get_mkfs_attrs1(Format, TAG, OL, L),
+	true.
+
+get_mkfs_attrs1(feat3p(Opt), zpool_feat, OL, COL) :- !, % "p" stands for "prefix"
+	findall(CO, (member(F=V, OL), make_zfs_feat(V, F, O), member(CO, [Opt, O])), COL),
+	true.
+get_mkfs_attrs1(feat3p(Opt), _TAG, OL, COL) :- !, % "p" stands for "prefix"
+	findall(CO, (member(F=V, OL), make_fs_feat(V, F, O), member(CO, [Opt, O])), COL),
+	true.
+get_mkfs_attrs1(feat3s(Opt, Sep), _TAG, OL, [Opt, l(COL, Sep)]) :- !, % "s" stands for "separator"
+	findall(O, (member(F=V, OL), make_fs_feat(V, F, O)), COL),
+	true.
+get_mkfs_attrs1(opt3s(Opt, Sep), TAG, OL, [Opt, l(COL, Sep)]) :- !, % "s" stands for "separator"
+	prop_info(TAG, opt3s(Opt, Sep), PL),
+	findall(O, (member(P=V, OL), make_opt3_val(PL, P, V, O)), COL),
+	true.
+get_mkfs_attrs1(opt3p(Opt), TAG, OL, COL) :- !, % "p" stands for "prefix"
+	prop_info(TAG, opt3p(Opt), PL),
+	findall(CO, (member(P=V, OL), make_opt3_val(PL, P, V, OV), member(CO, [Opt, OV])), COL),
+	true.
+get_mkfs_attrs1(opt4s(Sep), TAG, OL, COL) :- !,
+	prop_info(TAG, opt4s(Sep), PL),
+	findall(O, (member(P=V, OL), make_opt4_val(PL, P, V, Sep, O)), COL),
+	true.
+
+make_fs_feat(off, F, FV) :- !,
+	atom_concat('^', F, FV).
+make_fs_feat(_, F, F) :- !.
+
+make_zfs_feat(V, F, FV) :- !,
+	( V = on ->
+	  VA = enabled
+	; VA = disabled
+	),
+	format_to_atom(FV, 'feature@~w=~w', [F, VA]).
+
+make_opt4_val(PL, P, V, Sep, PVL) :-
+	memberchk(opt4(P, Fmt, _, AN), PL),
+	make_opt4_val0(Fmt, AN, V, Sep, PVL),
+	true.
+
+make_opt4_val0(enable, AN, _V, _Sep, AN) :- !.
+make_opt4_val0(Fmt, AN, V, Sep, vs(AN, Sep, OV)) :-
+	make_opt_dq(Fmt, V, OV).
+
+make_opt3_val(PL, P, V, OV) :-
+	memberchk(opt3(P, Fmt, _), PL),
+	make_opt3_val0(P, V, Fmt, OV),
+	true.
+
+make_opt3_val0(keylocation, =(file, V), _Fmt, keylocation = dq(AV)) :- !,
+	atom_concat('file://', V, AV),
+	true.
+make_opt3_val0(P, =(_, V), Fmt, P = DQV) :- !,
+	make_opt_dq(Fmt, V, DQV),
+	true.
+make_opt3_val0(P, V, Fmt, P = DQV) :-
+	make_opt_dq(Fmt, V, DQV),
+	true.
+
+make_opt_dq(Fmt, V, dq(V)) :-
+	opt_require_dq(Fmt, V), !.
+make_opt_dq(_Fmt, V, V).
+
+opt_require_dq(Fmt, _V) :-
+	memberchk(Fmt, [str, file, path]),
+	true.
+
+mkfs(swap, PD, _COL) :- !,
 	os_shell2_rc([swapoff, PD, '>/dev/null', '2>&1'], _),
 	( os_shell2l([mkswap, PD, '2>&1'])
 	; tui_msgbox('ERROR: failed to create swap'),
@@ -80,46 +151,53 @@ mkfs(swap, PD, _COL, _Label) :- !,
 	  fail
 	), !,
 	true.
-mkfs(FS, D, COL, Label) :-
+mkfs(FS, D, COL) :-
 	get_mkfs_attrs(COL, OL),
-	mkfs_cl(FS, D, OL, Label, CL),
+	mkfs_cl(FS, D, OL, CL),
 	format_to_atom(Title, ' Creating filesystem ~w ', [FS]),
 	tui_progressbox_safe(CL, '', [title(Title), sz([12, 80])]),
-	true.
-mkfs(FS, _, _, _) :- !,
-	tui_msgbox2(['Unknown filesystem', FS]),
+	!.
+mkfs(FS, _, _) :- !,
+	tui_msgbox2(['Couldn\'t create filesystem', FS]),
 	fail.
 
-mkfs_cl(ext2, D, OL, Label, CL) :- !,
-	CL = ['mke2fs', o('L', dq(Label)), OL, '-F', D, '2>&1'],
+mkfs_cl(ext2, D, OL, CL) :- !,
+	CL = ['mke2fs', OL, D, '2>&1'],
 	true.
-mkfs_cl(ext3, D, OL, Label, CL) :- !,
-	CL = ['mke2fs', o('L', dq(Label)), OL, '-j', '-F', D, '2>&1'],
+mkfs_cl(ext3, D, OL, CL) :- !,
+	CL = ['mke2fs', OL, D, '2>&1'],
 	true.
-mkfs_cl(ext4, D, OL, Label, CL) :- !,
-	CL = ['mke2fs', o('L', dq(Label)), OL, o(t, ext4), '-F', D, '2>&1'],
+mkfs_cl(ext4, D, OL, CL) :- !,
+	CL = ['mke2fs', OL, D, '2>&1'],
 	true.
-mkfs_cl(f2fs, D, OL, Label, CL) :- !,
-	CL = ['mkfs.f2fs', o(l, dq(Label)), OL, '-f', D, '2>&1'],
+mkfs_cl(f2fs, D, OL, CL) :- !,
+	CL = ['mkfs.f2fs', OL, D, '2>&1'],
 	true.
-mkfs_cl(vfat, D, OL, Label, CL) :- !,
-	upper(Label, UL),
-	CL = ['mkfs.vfat', o('F', '32'), o('n', dq(UL)), OL, D, '2>&1'],
+mkfs_cl(vfat, D, OL, CL) :- !,
+	CL = ['mkfs.vfat', OL, D, '2>&1'],
 	true.
-mkfs_cl(xfs, D, OL, Label, CL) :- !,
-	CL = ['mkfs.xfs', o('L', dq(Label)), OL, '-f', '-i', 'sparse=0', D, '2>&1'],
+mkfs_cl(xfs, D, OL, CL) :- !,
+	CL = ['mkfs.xfs', OL, D, '2>&1'],
 	true.
-mkfs_cl(bcachefs, D, OL, Label, CL) :- !,
-	CL = ['mkfs.bcachefs', o('L', dq(Label)), OL, '-f', D, '2>&1'],
+mkfs_cl(bcachefs, D, OL, CL) :- !,
+	CL = ['mkfs.bcachefs', OL, D, '2>&1'],
 	true.
 
-mkfs_multi(zfs, Title, TL, DL, PTL, _Label, B, E, RD) :- !,
-	zfs_zpool_create(Title, TL, DL, PTL, B, E, RD),
+mkfs_multi(zfs, Title, TL, DL, PTL, COL, RD) :- !,
+	get_bootloader(TL, B),
+	% tui_msgbox_w(OL, [title(mkfs_multi)]),
+	( zfs_pool_encryption_col(COL) ->
+	  E = true
+	; E = false
+	),
+	PN = zroot,
+	zfs_zpool_create(E, Title, B, PN, DL, PTL, COL, RD),
 	true.
-mkfs_multi(btrfs, Title, _TL, DL, PTL, Label, _B, _E, RD) :- !,
-	btrfs_mkfs(Title, DL, PTL, Label, RD),
+mkfs_multi(btrfs, Title, _TL, DL, PTL, COL, RD) :- !,
+	get_mkfs_attrs(COL, OL),
+	btrfs_mkfs(Title, DL, PTL, OL, RD),
 	true.
-mkfs_multi(FS, _Title, _TL, _DL, _PTL, _Label, _B, _E, _RD) :- !,
+mkfs_multi(FS, _Title, _TL, _DL, _PTL, _COL, _RD) :- !,
 	tui_msgbox2(['Unknown filesystem', FS]),
 	fail.
 
@@ -190,17 +268,20 @@ mount_fs(FS, D, MP, RD) :-
 	( inst_setting(fs_attr(FS, MP, _), mount(OL))
 	; OL = [rw, noatime]
 	),
-	os_shell2([mount, o(t, FS), o(o, lc(OL)), D, MP1, '2>&1']),
+	CL = [mount, o(t, FS), o(o, lc(OL)), D, MP1, '2>&1'],
+	% os_shell2(CL),
+	tui_shell2_safe(CL),
 	!.
 mount_fs(FS, D, MP, _RD) :-
 	tui_msgbox2(['mount_fs has failed.', [FS, D, MP]], [sz([6, 40])]),
 	fail.
 
 mount_fs_multi(zfs, _D, _PTL, RD) :-
-	zfs_mount_muli(RD),
+	PN = zroot,
+	zfs_mount_multi(PN, RD),
 	!.
 mount_fs_multi(btrfs, D, PTL, RD) :-
-	btrfs_mount_muli(D, PTL, RD),
+	btrfs_mount_multi(D, PTL, RD),
 	!.
 mount_fs_multi(FS, D, _PTL, _RD) :-
 	tui_msgbox2(['mount_fs_multi has failed.', FS, D], [sz([6, 40])]),
@@ -216,7 +297,7 @@ umount_mnt(_RD).
 
 % vg(Name, [PhysicalVolumeList], [LogicalVolumeList])
 ensure_lvm(TL) :-
-	% Check for already tacken VG-LV pairs.
+	% Check for already taken VG-LV pairs.
 	lx_list_dev_part(PL),
 	member(bdev(lvm, vg(VG, _, LVL)), TL),
 	member(lv(LV, _SZ), LVL),
@@ -227,7 +308,7 @@ ensure_lvm(TL) :-
 	tui_msgbox(M, [title(' Ensure LVM ERROR ')]), !,
 	fail.
 ensure_lvm(TL) :-
-	% Check for already tacken VG.
+	% Check for already taken VG.
 	findall(VG1, member(bdev(lvm, vg(VG1, _, _LVL)), TL), VGL),
 	sort(VGL, SVGL),
 	lvm_pvs(L),
@@ -247,7 +328,7 @@ get_boot_part(TL, PD) :-
 	% memberchk(p4(_, bd1([PD| _]), _CK2, _SZ), TL),
 	!.
 get_boot_part(TL, PD) :-
-	member(fs5_multi(FS, _Label, [PD|_], PTL, _CK1, _B, _E), TL),
+	member(fs5_multi(FS, _COL, [PD|_], PTL, _CK1), TL),
 	get_boot_part_1(FS, PTL),
 	!.
 

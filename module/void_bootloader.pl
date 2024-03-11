@@ -1,10 +1,10 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % List of boot managers which require mounting of EFI partition to /boot.
 bootloader_boot_efi([syslinux, efistub, gummiboot]).
 
-% bootloader_info(bootloade, supported_fs, supported_template, except_fs).
+% bootloader_info(bootloader, supported_fs, supported_template, except_fs).
 bootloader_info(grub2, [
 		  btrfs
 		, ext2
@@ -13,7 +13,7 @@ bootloader_info(grub2, [
 		% , f2fs % drub doesn't support extra_attr
 		, swap
 		, vfat
-		, xfs
+		% , xfs % GRUB2 Fails to boot off XFS Partition (https://bugzilla.redhat.com/show_bug.cgi?id=2254370)
 		, zfs
 	], [
 		  manual
@@ -24,7 +24,8 @@ bootloader_info(grub2, [
 		, gpt_luks_lvm
 		% , gpt_wizard
 		% , gpt_raid
-	], []).
+	], [
+	]).
 bootloader_info(rEFInd, [
 		  btrfs
 		, ext2
@@ -42,7 +43,7 @@ bootloader_info(rEFInd, [
 	]).
 bootloader_info(limine, [
 		  vfat
-		% , ext2 % Limine extX is removed in 6.20231210.0 as per the ChangeLog.
+		% , ext2 % Limine extX support is removed in 6.20231210.0 as per the ChangeLog.
 		% , ext3
 		% , ext4
 	], [
@@ -242,7 +243,7 @@ bootloader_kernel_params_luks(_TL, ['rd.auto'=1]) :-
 
 bootloader_kernel_params_root(TL, [root='zfs:AUTO']) :-
 	uses_zfs(TL),
-	has_boot_part(TL),
+	% has_boot_part(TL),
 	!.
 bootloader_kernel_params_root(TL, [root=v('UUID', RPID)]) :-
 	root_pd(TL, ROOT_PD),

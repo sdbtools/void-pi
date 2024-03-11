@@ -1,5 +1,5 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 :- dynamic([get_log/1]).
 
@@ -177,9 +177,24 @@ os_shell_lines_codes(C, CL) :-
 	),
 	true.
 
+% Reads lines, skip comments.
+os_shell_lines_codes_nc(C, CMNT, CL) :-
+	popen(C, read, RS),
+	( at_end_of_stream(RS) ->
+	  CL = []
+	; read_file_codes_lines_nc(RS, CMNT, CL),
+	  close(RS)
+	),
+	true.
+
 os_shell2_lines_codes(IL, CL) :-
 	os_scmdl(IL, LA),
 	os_shell_lines_codes(LA, CL),
+	true.
+
+os_shell2_lines_codes_nc(IL, CMNT, CL) :-
+	os_scmdl(IL, LA),
+	os_shell_lines_codes_nc(LA, CMNT, CL),
 	true.
 
 % Always succeeds. Returns [] if there are no lines.
@@ -196,6 +211,12 @@ os_shell2_lines(IL, AL) :-
 	os_shell2_lines_codes(IL, CL),
 	maplist(codes_atom, CL, AL).
 
+os_shell2_lines_nc(IL, CMNT, AL) :-
+	os_shell2_lines_codes_nc(IL, CMNT, CL),
+	maplist(codes_atom, CL, AL).
+
+% Pipe output of the command C1 into the command C2.
+% OA - output atom
 os_shell_pipe_rc(C1, C2, OA, RC) :-
 	exec(C1, SI, SO, SE, Pid),
 	popen(C2, write, WS),
@@ -219,8 +240,30 @@ os_shell_pipe_rc(C1, C2, OA, RC) :-
 	),
 	!.
 
-% Pipe input stream to a command.
-os_shell_stream_pipe(RS, C2) :-
+% OA - output atom
+os_shell_ostream_rc(C1, OA, RC) :-
+	exec(C1, SI, SO, SE, Pid),
+	open_output_atom_stream(AS),
+	set_stream_type(SO, binary),
+	set_stream_buffering(SO, block),
+	add_stream_mirror(SO, AS),
+	repeat,
+	get_byte(SO, -1),
+	close(SI),
+	close(SO),
+	close(SE),
+	close_output_atom_stream(AS, OA),
+	( wait(Pid, RC)
+	; RC = -12345
+	),
+	!.
+
+os_shell2_ostream_rc(IL, OA, RC) :-
+	os_scmdl(IL, ILA),
+	os_shell_ostream_rc(ILA, OA, RC).
+
+% Pipe input stream into a command.
+os_shell_istream(RS, C2) :-
 	popen(C2, write, WS),
 	set_stream_type(RS, binary),
 	set_stream_type(WS, binary),
@@ -234,9 +277,9 @@ os_shell_stream_pipe(RS, C2) :-
 	!.
 
 % Pipe atom to a command.
-os_shell_atom_pipe(A, C2) :-
+os_shell_atom_input(A, C2) :-
 	open_input_atom_stream(A, SO),
-	os_shell_stream_pipe(SO, C2),
+	os_shell_istream(SO, C2),
 	close_input_atom_stream(SO).
 
 os_shell2_pipe_rc(IL1, IL2, OA, RC) :-
@@ -244,13 +287,13 @@ os_shell2_pipe_rc(IL1, IL2, OA, RC) :-
 	os_scmdl(IL2, IL2A),
 	os_shell_pipe_rc(IL1A, IL2A, OA, RC).
 
-os_shell2_stream_pipe(SI, IL2) :-
+os_shell2_istream(SI, IL2) :-
 	os_scmdl(IL2, IL2A),
-	os_shell_stream_pipe(SI, IL2A).
+	os_shell_istream(SI, IL2A).
 
-os_shell2_atom_pipe(A, IL2) :-
+os_shell2_atom_input(A, IL2) :-
 	os_scmdl(IL2, IL2A),
-	os_shell_atom_pipe(A, IL2A).
+	os_shell_atom_input(A, IL2A).
 
 os_ccmdl(IL, OL) :-
 	phrase(os_cmdl(IL), OL), !.
@@ -280,15 +323,20 @@ os_cmd(oo(O)) --> { atom_concat('--', O, O1) }, [O1].
 os_cmd(oo(O, V)) --> { phrase(os_cmd(V), [V1]), format_to_atom(O1, '--~w=~w', [O, V1]) }, [O1].
 % double-quoted
 os_cmd(dq(V)) --> { phrase(os_cmd(V), [V1]), format_to_atom(QV, '"~w"', [V1]) }, [QV].
+% list with separator
+os_cmd(l(L, S)) --> { os_ccmdl(L, OL), join_atoms(OL, S, A) }, [A].
 % comma-separated list
 os_cmd(lc(L)) --> { os_ccmdl(L, OL), join_atoms(OL, ',', A) }, [A].
 % value assignment
 os_cmd(v(O, V)) --> { phrase(os_cmd(V), [V1]), format_to_atom(O1, '~w=~w', [O, V1]) }, [O1].
 os_cmd(O = V) --> { phrase(os_cmd(V), [V1]), format_to_atom(O1, '~w=~w', [O, V1]) }, [O1].
+% value assignment with a separator
+os_cmd(vs(O, Sep, V)) --> { phrase(os_cmd(V), [V1]), format_to_atom(O1, '~w~w~w', [O, Sep, V1]) }, [O1].
 % concat
 os_cmd(concat(V1, V2)) --> { phrase(os_cmd(V1), [V11]), phrase(os_cmd(V2), [V21]), atom_concat(V11, V21, V3) }, [V3].
 os_cmd(V1 + V2) --> { phrase(os_cmd(V1), [V11]), phrase(os_cmd(V2), [V21]), atom_concat(V11, V21, V3) }, [V3].
 
 os_cmd(V) --> { is_list(V) }, os_cmdl(V).
+os_cmd(V) --> { number(V), number_atom(V, A) }, [A].
 os_cmd(V) --> [V].
 

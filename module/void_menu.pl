@@ -1,11 +1,11 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
-dialog_msg(menu, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and ENTER or SPACE to select.') :- !.
-dialog_msg(list, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and ENTER or SPACE to select.') :- !.
-dialog_msg(radiolist, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and SPACE to select.') :- !.
-dialog_msg(checklist, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and SPACE to select.') :- !.
-dialog_msg(form, 'Use UP and DOWN arrows (or Ctrl/N, Ctrl/P) to move between fields. Use TAB to move between windows.') :- !.
+dialog_msg(menu, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and ENTER or SPACE to select.').
+dialog_msg(list, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and ENTER or SPACE to select.').
+dialog_msg(radiolist, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and SPACE to select.').
+dialog_msg(checklist, 'Use UP and DOWN arrows to navigate menus. Use TAB to switch between buttons and SPACE to select.').
+dialog_msg(form, 'Use UP and DOWN arrows (or Ctrl/N, Ctrl/P) to move between fields. Use TAB to move between windows.').
 
 action_info(common_settings, 'Common Attrs', 'Common settings').
 action_info(template, 'Template', 'Predefined configurations').
@@ -16,6 +16,7 @@ action_info(bootloader, 'Bootloader', 'Set bootloader application').
 action_info(save, extra, 'Save settings on disk').
 action_info(install, 'Install', 'Start installation').
 action_info(root_fs, 'Root FS', 'Set root file system').
+action_info(fs_settings, 'FS Settings', 'Set FS features and options').
 action_info(make_lvm_vg, 'VG', 'Create LVM volume group').
 action_info(make_lvm_lv, 'LV', 'Create LVM logical volume').
 action_info(make_luks, 'LUKS', 'Create LUKS device').
@@ -40,7 +41,6 @@ action_info_common(timezone, 'Timezone', 'Set system time zone', bool).
 action_info_common(root_passwd, 'Root Password', 'Set system root password', passwd).
 action_info_common(user_passwd, 'User Password', 'Set user password', passwd).
 action_info_common(luks_passwd, 'LUKS Password', 'Set LUKS password', passwd).
-action_info_common(btrfs_opt, 'Btrfs', 'Btrfs as root options', bool).
 action_info_common(useraccount, 'User Account', 'Set primary user name and password', bool).
 action_info_common(luks_info, 'LUKS Mapping Name', 'Set LUKS mapping name', bool).
 action_info_common(mbr_size, 'MBR Size', 'Set MBR size', int).
@@ -147,6 +147,7 @@ menu_soft_(S, [S, Descr]) :-
 menu_edit_main(C, OTL) :-
 	% menu_edit_main_4(OTL, C, [], OTL, NTL),
 	phrase(gen_edit(OTL, C, [], no_fu, OTL), NTL),
+	% tui_msgbox_w(NTL, [sz(max)]),
 	memberchk(state(template, ctx_tmpl(_B, NT)), NTL),
 	retractall(inst_setting(template(_), _)),
 	assertz(inst_setting(template(NT), NTL)),
@@ -180,7 +181,7 @@ gen_edit([state(template, CTX)|T], template, VL, FU, OTL) -->
 		st_used_d7(OTL, UL)
 		% , st_root_fs(OTL, OFS)
 	  },
-	  gen_cmd_list_tmpl(NT, UL, VB)
+	  gen_cmd_list_tmpl(NT, UL, [bl(VB)])
 	).
 gen_edit([state(used_d7, CTX)|T], used_d7, VL, FU, OTL) -->
 	{
@@ -209,27 +210,31 @@ gen_edit([state(bootloader_dev, CTX), bootloader_dev7(OBD)|T], bootloader_dev, V
 	( { FU = no_fu, OBD = NBD, D7L = VD7L } ->
 	  T
 	% ; gen_edit(T, root_fs, [d4l(VD4L), bld7(NBD)|VL], fu, OTL)
-	; { memberchk(tmpl(TT), VL)
-		, st_root_fs(OTL, OFS)
+	; {
+		memberchk(tmpl(TT), VL),
+		st_root_fs(OTL, OFS)
 	  }
-	, gen_root_fs(TT, OFS, VB, VD4L)
+	, gen_root_fs(OFS, [d4l(VD4L), tmpl(TT), bl(VB)])
 	).
+
+% !!! gen_edit chain is broken here !!!
+
 gen_edit([state(root_fs, CTX)|T], root_fs, VL, FU, OTL) -->
 	{
-	  CTX = ctx_rfs(PTT, OFS, B, TT),
-	  ( memberchk(bl(VB), VL); VB = B ), !,
-	  ( memberchk(tmpl(VTT), VL); VTT = TT ), !,
+	  CTX = ctx_rfs(PTT, OFS),
+	  memberchk(bl(VB), VL),
+	  memberchk(tmpl(VTT), VL),
 	  menu_select_fs(VTT, VB, OFS, NFS)
 	},
-	[state(root_fs, ctx_rfs(PTT, NFS, VB, VTT))],
+	[state(root_fs, ctx_rfs(PTT, NFS))],
 	( { FU = no_fu, OFS = NFS } ->
 	  T
 	; gen_edit(T, make_part_tmpl, [fs(NFS)|VL], FU, OTL)
 	).
-gen_edit([state(make_part_tmpl, CTX)|T], make_part_tmpl, VL, FU, _OTL) -->
+gen_edit([state(make_part_tmpl, CTX), state(fs_settings, ctx_fs_settings(_FS))|T], make_part_tmpl, VL, FU, _OTL) -->
 	{
-	  CTX = ctx_part(PTT, B, FS, OPTN, D4L),
-	  ( memberchk(bl(VB), VL); VB = B ), !,
+	  CTX = ctx_part4(PTT, FS, OPTN, D4L),
+	  memberchk(bl(VB), VL),
 	  ( memberchk(fs(VFS), VL); VFS = FS ), !,
 	  ( memberchk(d4l(VD4L), VL); VD4L = D4L ), !,
 	  % !!! PTT can change !!!
@@ -239,12 +244,16 @@ gen_edit([state(make_part_tmpl, CTX)|T], make_part_tmpl, VL, FU, _OTL) -->
 	  ; menu_part_tmpl(VFS, OPTN, NPTN)
 	  )
 	},
-	[state(make_part_tmpl, ctx_part(PTT, VB, VFS, NPTN, VD4L))],
+	[state(make_part_tmpl, ctx_part4(PTT, VFS, NPTN, VD4L)), state(fs_settings, ctx_fs_settings(VFS))],
 	( { FU = no_fu, VFS = FS, VD4L = D4L, OPTN = NPTN } ->
 	  T
-	; gen_tmpl_ptt(PTT, VFS, NPTN, VB, VD4L)
-	  , { st_skip_till(T, soft, SL) }
-	  , gen_edit(SL, soft, VL, FU, SL)
+	; gen_tmpl_ptt(PTT, VFS, NPTN, VB, VD4L),
+	  {
+		% Clean fs_settings_main menu up.
+		retractall(tui_setting_tmp(menu_list(fs_settings_main), _)),
+		st_skip_till(T, soft, SL)
+	  },
+	  gen_edit(SL, soft, VL, FU, SL)
 	  % , gen_soft(VFS, VB)
 	).
 gen_edit([state(soft, ctx_soft(FS, B, OSL))|T], soft, VL, _FU, _OTL) -->
@@ -276,14 +285,6 @@ gen_tmpl_ptt(one, FS, PTN, B, D) -->
 menu_edit_soft(FS, L, B, NSL) :-
 	findall(S, member(soft(S), L), OSL),
 	menu_soft(B, FS, OSL, NSL),
-	true.
-
-% OTL - old template list
-% OB - old bootloader.
-% NB - new bootloader.
-menu_template(OT, OB, NB) :-
-	menu_select_template(NB, OT, NT),
-	switch_template(OT, NT, OB, NB),
 	true.
 
 menu_select_template(B, OT, NT) :-
@@ -354,8 +355,7 @@ menu_common_opt(_TT, _TL, [mbr_size]) :-
 menu_common_opt(TT, TL, [boot_size]) :-
 	root_fs(TL, FS),
 	get_bootloader(TL, B),
-	get_enc_attr(FS, B, E),
-	need_boot_part(TT, B, FS, E).
+	need_boot_part(TT, B, FS).
 menu_common_opt(_TT, _TL, [root_size]).
 % menu_common_opt(_TT, _TL, [root_size]) :-
 % 	inst_setting(part_tmpl(root_home), _).
@@ -365,17 +365,13 @@ menu_common_opt(gpt_luks, _TL, [luks_info, luks_passwd]).
 menu_common_opt(gpt_luks_lvm, _TL, [lvm_info, luks_info, luks_passwd]).
 menu_common_opt(gpt_lvm_luks, _TL, [lvm_info, luks_info, luks_passwd]).
 
-get_enc_attr(FS, B, E) :-
-	inst_setting(fs_attr(FS, '/', B), encr(E)), !.
-get_enc_attr(_FS, _B, false).
-
 menu_common(TT, TL) :-
 	findall(M0, (menu_common_opt(TT, TL, ML0), member(M0, ML0)), M),
 	dialog_msg(menu, LABEL),
 	repeat,
 	inst_setting(template(_TT1), TL1),
 	maplist(menu_tag_common(TL1), M, ML),
-	tui_menu_tag2(main_common, ML, LABEL, [cancel-label('Return'), title(' Common installation settings ')], Tag),
+	tui_menu_tag2_ext(main_common, ML, LABEL, [cancel-label('Return'), title(' Common installation settings ')], Tag),
 	action_info_common(A, Tag, _, _),
 	cmd_action_common(A),
 	!.
@@ -395,11 +391,12 @@ menu_main_skip(bootloader_dev, TL) :-
 	% Skip bootloader_dev if only one device is used.
 	st_used_d7(TL, [_]).
 menu_main_skip(soft, TL) :-
-	memberchk(state(root_fs, ctx_rfs(_PTT, FS, B, _TT)), TL),
+	st_root_fs(TL, FS),
+	st_bootloader(TL, B),
 	% Skip if there is no software to install.
 	findall(S, soft_info(S, B, FS, _DepL, _Descr), []).
 menu_main_skip(make_part_tmpl, TL) :-
-	memberchk(state(make_part_tmpl, ctx_part(PTT, _B, FS, _OPTN, _D4L)), TL),
+	memberchk(state(make_part_tmpl, ctx_part4(PTT, FS, _OPTN, _D4L)), TL),
 	PTT = one,
 	\+ memberchk(FS, [zfs, btrfs]).
 
@@ -410,7 +407,7 @@ menu_main :-
 	findall(MI, (menu_main_info(TT, TL, MIL), member(MI, MIL)), M1),
 
 	maplist(menu_tag, M1, ML),
-	tui_menu_tag2(main, ML, LABEL, [extra-button, extra-label('Save'), cancel-label('Exit'), title(' Void Linux installation menu ')], Tag),
+	tui_menu_tag2_ext(main, ML, LABEL, [extra-button, extra-label('Save'), cancel-label('Exit'), title(' Void Linux installation menu ')], Tag),
 	action_info(A, Tag, _),
 	cmd_action(A, TT, TL),
 	true.
@@ -418,8 +415,8 @@ menu_main :-
 cmd_menu(root_fs, _TT, TL) :- !,
 	menu_edit_main(root_fs, TL),
 	true.
-cmd_menu(btrfs_opt, _TT, _TL) :- !,
-	menu_btrfs,
+cmd_menu(fs_settings, TT, TL) :- !,
+	menu_fs_settings1(TT, TL),
 	true.
 cmd_menu(common_settings, TT, TL) :- !,
 	menu_common(TT, TL),

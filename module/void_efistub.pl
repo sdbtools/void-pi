@@ -1,8 +1,9 @@
 % vi: noexpandtab:tabstop=4:ft=gprolog
-% Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license.
+% Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 % https://wiki.archlinux.org/title/EFISTUB
 % https://mth.st/blog/void-efistub
+% EFI Stub - booting without a bootloader (https://forums.gentoo.org/viewtopic-p-8805827.html#8805827)
 
 efistub_install(RD) :-
 	lx_kernel_ver(RD, LV),
