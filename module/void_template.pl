@@ -69,28 +69,35 @@ setup_fs_template :-
 		])),
 
 	% subv(name, mount_point, mount_attrs, cow)
+	% btrfs independent attribute
+	BIA1 = attr(mnt_indpn_feat, [atime=off]),
+	BIA2 = attr(mnt_indpn_feat, [atime=off, dev=off]),
+	BIA3 = attr(mnt_indpn_feat, [atime=off, dev=off, suid=off]),
+	BIA4 = attr(mnt_indpn_feat, [atime=off, dev=off, suid=off, exec=off]),
+	% btrfs-specific attribute
+	BSA1 = attr(mnt_btrfs_opt, ['compress-force'=zstd]),
 	assertz(inst_setting(part_tmpl_btrfs(root), [
-		  subv('@', '/', [rw, noatime, 'compress-force=zstd:3', space_cache=v2], cow)
-		, subv('@snapshots', '/.snapshots', [nosuid, nodev, noexec, rw, noatime, 'compress-force=zstd:3', space_cache=v2], nodatacow)
+		  subv('@', '/', [BIA1, BSA1], cow)
+		, subv('@snapshots', '/.snapshots', [BIA4, BSA1], nodatacow)
 		])),
 	assertz(inst_setting(part_tmpl_btrfs(root_home), [
-		  subv('@', '/', [rw, noatime, 'compress-force=zstd:3', space_cache=v2], cow)
-		, subv('@home', '/home', [nosuid, nodev, rw, noatime, space_cache=v2], cow)
-		, subv('@snapshots', '/.snapshots', [nosuid, nodev, noexec, rw, noatime, 'compress-force=zstd:3', space_cache=v2], nodatacow)
+		  subv('@', '/', [BIA1, BSA1], cow)
+		, subv('@home', '/home', [BIA3], cow)
+		, subv('@snapshots', '/.snapshots', [BIA4, BSA1], nodatacow)
 		])),
 	assertz(inst_setting(part_tmpl_btrfs(max), [
-		  subv('@', '/', [rw, noatime, 'compress-force=zstd:3', space_cache=v2], cow)
-		, subv('@home', '/home', [nosuid, nodev, rw, noatime, space_cache=v2], cow)
-		, subv('@opt', '/opt', [nodev, rw, noatime, 'compress-force=zstd:3', space_cache=v2], cow)
-		, subv('@srv', '/srv', [nosuid, nodev, noexec, rw, noatime, 'compress-force=zstd:3', space_cache=v2], nodatacow)
-		, subv('@var', '/var', [nosuid, nodev, noexec, rw, noatime, 'compress-force=zstd:3', space_cache=v2], cow)
-		, subv('@var-cache-xbps', '/var/cache/xbps', [nosuid, nodev, noexec, rw, noatime, 'compress-force=zstd:3', space_cache=v2], cow)
-		, subv('@var-lib-ex', '/var/lib/ex', [nosuid, nodev, noexec, rw, noatime, 'compress-force=zstd:3', space_cache=v2], nodatacow)
-		, subv('@var-log', '/var/log', [nosuid, nodev, noexec, rw, noatime, 'compress-force=zstd:3', space_cache=v2], nodatacow)
-		, subv('@var-opt', '/var/opt', [nosuid, nodev, noexec, rw, noatime, 'compress-force=zstd:3', space_cache=v2], cow)
-		, subv('@var-spool', '/var/spool', [nosuid, nodev, noexec, rw, noatime, 'compress-force=zstd:3', space_cache=v2], nodatacow)
-		, subv('@var-tmp', '/var/tmp', [nosuid, nodev, noexec, rw, noatime, 'compress-force=zstd:3', space_cache=v2], nodatacow)
-		, subv('@snapshots', '/.snapshots', [nosuid, nodev, noexec, rw, noatime, 'compress-force=zstd:3', space_cache=v2], nodatacow)
+		  subv('@', '/', [BIA1, BSA1], cow)
+		, subv('@home', '/home', [BIA3], cow)
+		, subv('@opt', '/opt', [BIA2, BSA1], cow)
+		, subv('@srv', '/srv', [BIA4, BSA1], nodatacow)
+		, subv('@var', '/var', [BIA4, BSA1], cow)
+		, subv('@var-cache-xbps', '/var/cache/xbps', [BIA4, BSA1], cow)
+		, subv('@var-lib-ex', '/var/lib/ex', [BIA4, BSA1], nodatacow)
+		, subv('@var-log', '/var/log', [BIA4, BSA1], nodatacow)
+		, subv('@var-opt', '/var/opt', [BIA4, BSA1], cow)
+		, subv('@var-spool', '/var/spool', [BIA4, BSA1], nodatacow)
+		, subv('@var-tmp', '/var/tmp', [BIA4, BSA1], nodatacow)
+		, subv('@snapshots', '/.snapshots', [BIA4, BSA1], nodatacow)
 		])),
 
 	true.
@@ -119,11 +126,24 @@ need_boot_part(_TT, B, FS) :-
 	\+ memberchk(FS, FSL),
 	!.
 
+set_template(TT, B) :-
+	phrase(gen_cmd_list(TT, [bl(B)]), L),
+	retractall(inst_setting(template(_), _)),
+	assertz(inst_setting(template(TT), L)),
+	!.
+set_template(_TT, _B) :-
+	tui_msgbox('Switching of template has failed.', [title(' ERROR ')]),
+	fail.
+
 gen_cmd_list(TT, VL) -->
 	{
+	  get_mol(proc, _, PMOL),
+	  get_mol(tmpfs, _, TMOL),
 	  memberchk(bl(B), VL)
 	},
 	[
+	  fs6(proc, '/proc', none, [], PMOL, keep),
+	  fs6(tmpfs, '/tmp', none, [], TMOL, keep),
 	  state(bootloader, ctx_bl(B)),
 	  bootloader(B),
 	  state(template, ctx_tmpl(B, TT))
@@ -143,15 +163,6 @@ gen_cmd_list_tmpl(gpt_wizard, OUDL, _VL) -->
 	gen_wiz_action(DEV7L).
 gen_cmd_list_tmpl(TT, OUDL, VL) -->
 	gen_cmd_list3(TT, OUDL, VL).
-
-set_template(TT, B) :-
-	phrase(gen_cmd_list(TT, [bl(B)]), L),
-	retractall(inst_setting(template(_), _)),
-	assertz(inst_setting(template(TT), L)),
-	!.
-set_template(_TT, _B) :-
-	tui_msgbox('Switching of template has failed.', [title(' ERROR ')]),
-	fail.
 
 % O7L - old list.
 gen_cmd_list3(TT, O7L, VL) -->
@@ -232,7 +243,7 @@ gen_efi_1(OD4, T, VL) -->
 	  % EFI partition of BOOT_SZ size.
 	  inst_setting(boot_size, BOOT_SZ)
 	},
-	gen_p4_fs7(B, sys_efi, vfat, '/boot', BOOT_SZ, efi, OD4, ND4),
+	gen_p4_fs6(B, sys_efi, vfat, '/boot', BOOT_SZ, efi, OD4, ND4),
 	% No boot partition.
 	gen_tmpl([ND4| T], VL).
 gen_efi_1(OD4, T, VL) -->
@@ -240,7 +251,7 @@ gen_efi_1(OD4, T, VL) -->
 	  memberchk(bl(B), VL),
 	  inst_setting(esp_size, ESP_SZ)
 	},
-	gen_p4_fs7(B, sys_efi, vfat, '/boot/efi', ESP_SZ, efi, OD4, ND4),
+	gen_p4_fs6(B, sys_efi, vfat, '/boot/efi', ESP_SZ, efi, OD4, ND4),
 	gen_boot(ND4, T, VL).
 
 gen_boot(OD4, T, VL) -->
@@ -257,7 +268,7 @@ gen_boot(OD4, T, VL) -->
 	  ; BFS = vfat
 	  )
 	},
-	gen_p4_fs7(B, linux_data, BFS, '/boot', BOOT_SZ, boot, OD4, ND4),
+	gen_p4_fs6(B, linux_data, BFS, '/boot', BOOT_SZ, boot, OD4, ND4),
 	% Has boot partition.
 	gen_tmpl([ND4| T], VL).
 gen_boot(OD4, T, VL) -->
@@ -273,18 +284,18 @@ gen_p4(PT, SZ, d4(D, SN, _SDN, N), PD, d4(D, SN, SD1, N1)) -->
 	},
 	[p4(PT, bd1([PD, D]), create, SZ)].
 
-gen_fs7(B, FS, MP, Label, PD) -->
+gen_fs6(B, FS, MP, Label, PD) -->
 	{
 	  get_mol(FS, MP, MOL),
 	  get_col(FS, MP, B, COL),
 	  fs_set_label(FS, Label, COL, COL1)
 	  % menu_fs_settings0(FS, MP, B, COL)
 	},
-	[ fs7(FS, Label, MP, PD, COL1, MOL, create) ].
+	[ fs6(FS, MP, PD, COL1, MOL, create) ].
 
-gen_p4_fs7(B, PT, FS, MP, SZ, Label, OD4, ND4) -->
+gen_p4_fs6(B, PT, FS, MP, SZ, Label, OD4, ND4) -->
 	gen_p4(PT, SZ, OD4, PD, ND4),
-	gen_fs7(B, FS, MP, Label, PD).
+	gen_fs6(B, FS, MP, Label, PD).
 
 gen_tmpl(D4L, VL) -->
 	{
@@ -392,7 +403,7 @@ gen_tmpl_lvm(FS, PTN, B, PDL) -->
 
 gen_tmpl_lvm_init(FS, OPTN, B, PDL, D4L) -->
 	{ menu_part_tmpl(FS, OPTN, NPTN) },
-	[state(make_part_tmpl, ctx_part4(lvm, FS, NPTN, D4L)), state(fs_settings, ctx_fs_settings(FS))],
+	[state(make_part_tmpl, ctx_part4(lvm, FS, NPTN, D4L)), state(fs_settings, ctx_fs_settings(FS)), state(mnt_opts, ctx_mnt_opts)],
 	gen_tmpl_lvm(FS, NPTN, B, PDL).
 
 gen_tmpl_one(FS, PTN, B, D) -->
@@ -405,14 +416,14 @@ gen_tmpl_one(FS, PTN, B, D) -->
 	[ fs5_multi(FS, COL1, [D], PTL, create) ].
 gen_tmpl_one(FS, _PTN, B, D) -->
 	{ MP = (/) },
-	gen_fs7(B, FS, MP, void, D).
+	gen_fs6(B, FS, MP, void, D).
 
 gen_tmpl_one_init(FS, OPTN, B, D, D4L) -->
 	{ memberchk(FS, [zfs, btrfs]) -> 
 	  menu_part_tmpl(FS, OPTN, NPTN)
 	; NPTN = root
 	},
-	[state(make_part_tmpl, ctx_part4(one, FS, NPTN, D4L)), state(fs_settings, ctx_fs_settings(FS))],
+	[state(make_part_tmpl, ctx_part4(one, FS, NPTN, D4L)), state(fs_settings, ctx_fs_settings(FS)), state(mnt_opts, ctx_mnt_opts)],
 	gen_tmpl_one(FS, NPTN, B, D).
 
 gen_tmpl_dev(FS, PTN, B, D4L) -->
@@ -436,12 +447,12 @@ gen_tmpl_dev(FS, PTN, B, D4L) -->
 
 gen_tmpl_dev_init(FS, OPTN, B, D4L) -->
 	{ menu_part_tmpl(FS, OPTN, NPTN) },
-	[state(make_part_tmpl, ctx_part4(dev, FS, NPTN, D4L)), state(fs_settings, ctx_fs_settings(FS))],
+	[state(make_part_tmpl, ctx_part4(dev, FS, NPTN, D4L)), state(fs_settings, ctx_fs_settings(FS)), state(mnt_opts, ctx_mnt_opts)],
 	gen_tmpl_dev(FS, NPTN, B, D4L).
 
 gen_tmpl_to_fs([pfs(Label, MP, _SZ)|T], B, FS, VG) -->
 	{ format_to_atom(LVM_PD, '/dev/mapper/~w-~w', [VG, Label]) },
-	gen_fs7(B, FS, MP, Label, LVM_PD),
+	gen_fs6(B, FS, MP, Label, LVM_PD),
 	gen_tmpl_to_fs(T, B, FS, VG).
 gen_tmpl_to_fs([], _B, _FS, _VG) --> [].
 
@@ -464,7 +475,7 @@ gen_soft2(SL, FS, B, IL) -->
 	OL2.
 
 gen_tmpl_to_p4_fs([pfs(Label, MP, SZ)|T], B, FS, PT, OD4) -->
-	gen_p4_fs7(B, PT, FS, MP, SZ, Label, OD4, ND4),
+	gen_p4_fs6(B, PT, FS, MP, SZ, Label, OD4, ND4),
 	gen_tmpl_to_p4_fs(T, B, FS, PT, ND4).
 gen_tmpl_to_p4_fs([], _B, _FS, _PT, _D) --> [].
 

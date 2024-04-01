@@ -45,7 +45,7 @@ menu_part_manually :-
 	os_call2([S, LN]),
 	retract(inst_setting(template(TT), TL)),
 	% Remove all selected partitions and file systems.
-	findall(E, (member(E, TL), E \= p4(_, _, _, _), E \= fs7(_, _, _, _, _, _, _)), NTL),
+	findall(E, (member(E, TL), E \= p4(_, _, _, _), E \= fs6(_, _, _, _, _, _)), NTL),
 	assertz(inst_setting(template(TT), NTL)),
 	true.
 
@@ -65,8 +65,8 @@ menu_part_select(TL) :-
 	maplist(part2taglist, PIL, ML1),
 	MT1 = ' Select partition(s) to use ',
 	dialog_msg(checklist, LABEL),
-	tui_checklist_tag2(ML1, OPL, LABEL, [title(MT1)], PLO),
-	update_part_info(PIL, OPL, PLO, TL, NTL),
+	tui_checklist_tag2(ML1, OPL, LABEL, [title(MT1)], NPL),
+	update_part_info(PIL, OPL, NPL, TL, NTL),
 	retract(inst_setting(template(TN), _)),
 	assertz(inst_setting(template(TN), NTL)),
 	!.
@@ -77,16 +77,18 @@ menu_part_select(_TL) :-
 part2taglist(dev_part(PD,_,_,SZ), [PD, SZ]).
 
 update_part_info(_PIL, OPL, OPL, IL, IL) :- !.
-update_part_info(PIL, OPL, PLO, IL, OL) :-
-	findall(M, (member(M, IL), keep_part_(PLO, M)), IL1),
+update_part_info(PIL, OPL, NPL, IL, OL) :-
+	findall(M, (member(M, IL), keep_part_(NPL, M)), IL1),
 	get_bootloader(IL, B),
-	add_part_(B, PIL, OPL, PLO, IL1, OL),
+	add_part_(B, PIL, OPL, NPL, IL1, OL),
 	true.
 
 % KL - list of partitions to keep.
 keep_part_(KL, p4(_PT, bd1([PD| _]), _CK, _SZ)) :- !,
 	memberchk(PD, KL).
-keep_part_(KL, fs7(_, _, _, PD, _, _, _)) :- !,
+keep_part_(KL, fs6(_, _, PD, _, _, _)) :- !,
+	memberchk(PD, KL).
+keep_part_(KL, fs5_multi(_FS, _COL, [PD| _], _PTL, _CK)) :- !,
 	memberchk(PD, KL).
 keep_part_(_KL, _).
 
@@ -94,17 +96,29 @@ keep_part_(_KL, _).
 add_part_(B, PIL, SL, [PD| T], IL, OL) :-
 	memberchk(PD, SL), !,
 	add_part_(B, PIL, SL, T, IL, OL).
-add_part_(B, PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), fs7(FS, Label, MP, PD, COL, MOL, keep)| OL]) :-
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+add_part_(B, PIL, SL, [PD| T], IL, [p4(PT, BD1, keep, SZ), FSX| OL]) :-
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
 	% dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)
-	member(dev_part(PD,name(_SNAME,_KNAME,[DL|_]),part5(_PTTYPE,PT,_PARTUUID,_UUID,FS),SZ), PIL),
+	member(dev_part(PD, name(_SNAME, _KNAME, [DL|_]), part5(_PTTYPE, PT, _PARTUUID, _UUID, FS), SZ), PIL),
 	BD1 = bd1([PD|DL]), !,
+	add_part_fs(FS, B, PT, PD, FSX),
+	add_part_(B, PIL, SL, T, IL, OL).
+add_part_(_B, _PIL, _SL, [], L, L) :-
+	true.
+
+add_part_fs(FS, B, PT, PD, fs5_multi(FS, COL1, [PD], PTL, keep)) :- 
+	memberchk(FS, [zfs, btrfs]), !,
+	guess_part_info(PT, Label, _MP),
+	get_col_multi(FS, B, COL),
+	fs_set_label(FS, Label, COL, COL1),
+	part_tmpl(FS, root, PTL),
+	true.
+add_part_fs(FS, B, PT, PD, fs6(FS, MP, PD, COL1, MOL, keep)) :-
 	guess_part_info(PT, Label, MP),
 	% menu_fs_settings0(FS, MP, B, COL),
 	get_col(FS, MP, B, COL),
 	get_mol(FS, MP, MOL),
-	add_part_(B, PIL, SL, T, IL, OL).
-add_part_(_B, _PIL, _SL, [], L, L) :-
+	fs_set_label(FS, Label, COL, COL1),
 	true.
 
 guess_part_info(sys_efi, 'EFI', '/boot/efi') :- !.
@@ -305,47 +319,66 @@ menu_luks_info :-
 	assertz(inst_setting(luks, luks(NName))),
 	true.
 
+menu_mnt_opts(_TT, TL) :-
+	st_bootloader(TL, B),
+	findall(mnt_opt3(MP, FS, MOL), member(fs6(FS, MP, _PD, _COL, MOL, _CK), TL), IL1),
+	% findall(mnt_opt3('/', FS, COL), (member(fs5_multi(FS, COL, _PDL, _PTL, _CK), TL), FS=btrfs), IL2),
+	% append(IL1, IL2, IL),
+	IL = IL1,
+	menu_list_2(mnt_opts_main, ev(B, IL), IL, _OL, [title(' Mount Options '), cancel-label('Return'), ok-label('Edit')]),
+	true.
+
+menu_mnt_opts0(FS, MP, B, OMOL, NMOL) :-
+	format_to_atom(Title, ' \'~w\' ~w mount options ', [MP, FS]),
+	% MP is used with mnt_opts to create an unique key.
+	menu_list_2(mnt_opts(FS, MP), ev(B), OMOL, NMOL, [title(Title), cancel-label('Return'), ok-label('Edit'), no-tags]),
+	( OMOL = NMOL
+	; retractall(inst_setting(fs_attr(FS, MP, B), mount(_))),
+	  assertz(inst_setting(fs_attr(FS, MP, B), mount(NMOL)))
+	), !,
+	true.
+
 menu_fs_settings0(FS, MP, B, OCOL, NCOL) :-
 	format_to_atom(Title, ' \'~w\' ~w settings ', [MP, FS]),
 	% get_col(FS, MP, B, OCOL),
 	% MP is used with fs_settings to create an unique key.
-	menu_list_2(fs_settings(FS, MP), Title, ev(B), OCOL, NCOL, keep),
+	menu_list_2(fs_settings(FS, MP), ev(B), OCOL, NCOL, [title(Title), cancel-label('Return'), ok-label('Edit'), no-tags]),
 	( OCOL = NCOL
 	; retractall(inst_setting(fs_attr(FS, MP, B), create(_))),
 	  assertz(inst_setting(fs_attr(FS, MP, B), create(NCOL)))
 	), !,
 	true.
 
-menu_fs_settings1(TT, TL) :-
+menu_fs_settings(TT, TL) :-
 	st_bootloader(TL, B),
-	findall(fs_sett3(MP, FS, COL), member(fs7(FS, _Label, MP, _PD, COL, _MOL, create), TL), IL1),
+	findall(fs_sett3(MP, FS, COL), member(fs6(FS, MP, _PD, COL, _MOL, create), TL), IL1),
 	findall(fs_sett3('/', FS, COL), member(fs5_multi(FS, COL, _PDL, _PTL, create), TL), IL2),
 	append(IL1, IL2, IL),
-	menu_list_2(fs_settings_main, ' FS Settings ', ev(B, IL), IL, OL, keep),
+	menu_list_2(fs_settings_main, ev(B, IL), IL, OL, [title(' FS Settings '), cancel-label('Return'), ok-label('Edit')]),
 	( IL = OL
-	; menu_fs_settings1_(IL, OL, TL, NTL),
+	; menu_fs_settings_(IL, OL, TL, NTL),
 	  retractall(inst_setting(template(TT), _)),
 	  assertz(inst_setting(template(TT), NTL))
 	), !,
 	true.
 
-menu_fs_settings1_([fs_sett3(MP, FS, OCOL)|T], NL, OTL, NTL) :-
+menu_fs_settings_([fs_sett3(MP, FS, OCOL)|T], NL, OTL, NTL) :-
 	memberchk(fs_sett3(MP, FS, NCOL), NL),
 	OCOL \= NCOL, !,
 	( memberchk(FS, [btrfs, zfs]) ->
 	  replace_fs5_multi(OTL, FS, NCOL, TL)
-	; replace_fs7(OTL, MP, FS, NCOL, TL)
+	; replace_fs6(OTL, MP, FS, NCOL, TL)
 	),
-	menu_fs_settings1_(T, NL, TL, NTL).
-menu_fs_settings1_([_|T], NL, OTL, NTL) :- !,
-	menu_fs_settings1_(T, NL, OTL, NTL).
-menu_fs_settings1_([], _OL, OTL, OTL).
+	menu_fs_settings_(T, NL, TL, NTL).
+menu_fs_settings_([_|T], NL, OTL, NTL) :- !,
+	menu_fs_settings_(T, NL, OTL, NTL).
+menu_fs_settings_([], _OL, OTL, OTL).
 
 % MP + FS = unique key.
-replace_fs7([fs7(FS, Label, MP, PD, _COL, MOL, create)|T], MP, FS, NCOL, [fs7(FS, Label, MP, PD, NCOL, MOL, create)|T]) :- !.
-replace_fs7([H|T], MP, FS, NCOL, [H|T1]) :- !,
-	replace_fs7(T, MP, FS, NCOL, T1).
-replace_fs7([], _MP, _FS, _NCOL, []).
+replace_fs6([fs6(FS, MP, PD, _COL, MOL, create)|T], MP, FS, NCOL, [fs6(FS, MP, PD, NCOL, MOL, create)|T]) :- !.
+replace_fs6([H|T], MP, FS, NCOL, [H|T1]) :- !,
+	replace_fs6(T, MP, FS, NCOL, T1).
+replace_fs6([], _MP, _FS, _NCOL, []).
 
 replace_fs5_multi([fs5_multi(FS, _COL1, PDL, PTL, create)|T], FS, NCOL, [fs5_multi(FS, NCOL, PDL, PTL, create)|T]) :- !.
 replace_fs5_multi([H|T], FS, NCOL, [H|T1]) :- !,

@@ -9,7 +9,7 @@ usage :-
 	writenl('Void Linux installer implemented in GNU Prolog.'), nl,
 	cmd_arg_usage_long(S),
 	writenl(S), nl,
-	writenl('Copyright (c) 2023 Sergey Sikorskiy, released under the GNU GPLv2 license'),
+	writenl('Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license'),
 	true.
 
 % cmd_arg_info(alias, short, long, value_descr, descr)

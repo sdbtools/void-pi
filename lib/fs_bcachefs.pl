@@ -50,4 +50,10 @@ prop_info(bcachefs_rw, opt4s('='), [
 	, opt4(fs_size, size, 0, '--fs_size') % Create the filesystem using size bytes on the subsequent device.
 	]).
 
+prop_info(mnt_bcachefs_feat, feat4s('--options', ',', on_off), [
+	  prop_feat4(degraded, off, std, none)
+	, prop_feat4(very_degraded, off, std, none)
+	, prop_feat4(nochanges, off, std, none)
+	]).
+
 

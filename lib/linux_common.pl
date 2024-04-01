@@ -254,10 +254,14 @@ lx_list_dev_part_(IL, dev_part(NAME,name(SNAME,KNAME,DL),ET,SIZE)) :-
 	true.
 
 % PTTYPE: gpt, dos, sun, sgi
-lx_dev_part_type(part, NAME, part5(PTTYPE,TYPE,PARTUUID,UUID,FSTYPE)) :- !,
+lx_dev_part_type(part, NAME, part5(PTTYPE,TYPE,PARTUUID,UUID,FSTYPE_1)) :- !,
 	os_shell2_codes_line(['lsblk -dnr -o PTTYPE,PARTUUID,UUID,PARTTYPE,FSTYPE', NAME], CL),
 	split_atom(" ", CL, [PTTYPE,PARTUUID,UUID,PARTTYPE,FSTYPE]),
 	lx_part_type(PTTYPE, PARTTYPE, TYPE),
+	( FSTYPE = zfs_member ->
+	  FSTYPE_1 = zfs
+	; FSTYPE_1 = FSTYPE
+	),
 	true.
 lx_dev_part_type(crypt, NAME, crypt(UUID)) :- !,
 	% !!! UUID doesn't seem to exist.

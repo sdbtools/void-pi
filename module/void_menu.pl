@@ -13,9 +13,10 @@ action_info(review, 'Review', 'Show current settings').
 action_info(filesystem, 'Filesystem', 'Configure filesystems and mount points').
 action_info(bootloader_dev, 'Bootloader Dev', 'Select disk to install bootloader').
 action_info(bootloader, 'Bootloader', 'Set bootloader application').
-action_info(save, extra, 'Save settings on disk').
+action_info(save, 'Save', 'Save settings on disk').
 action_info(install, 'Install', 'Start installation').
 action_info(root_fs, 'Root FS', 'Set root file system').
+action_info(mnt_opts, 'Mount Options', 'Set Mount options').
 action_info(fs_settings, 'FS Settings', 'Set FS features and options').
 action_info(make_lvm_vg, 'VG', 'Create LVM volume group').
 action_info(make_lvm_lv, 'LV', 'Create LVM logical volume').
@@ -28,7 +29,6 @@ action_info(part_use, 'Partitions', 'Partitions to use during installation').
 action_info(bios_efi, 'BIOS/EFI', 'Support either BIOS or EFI, or both').
 action_info(soft, 'Software', 'Select software to install').
 action_info(used_d7, 'Used devices', 'Select device(s) to use').
-action_info(exit, cancel, 'Exit installation').
 
 % action_info_common(tag, short_name, long_name, data_type)
 action_info_common(hostonly, 'Host-only', 'Install only what is needed for booting the local host', bool).
@@ -48,7 +48,6 @@ action_info_common(esp_size, 'ESP Size', 'Set EFI system partition size', int).
 action_info_common(boot_size, 'Boot Size', 'Set boot partition size', int).
 action_info_common(root_size, 'Root Size', 'Set root partition size', int).
 action_info_common(lvm_info, 'LVM Info', 'Set LVM info', bool).
-action_info_common(exit, cancel, 'Exit Menu', bool).
 
 boot_info(bios, 'Old BIOS boot method').
 boot_info(efi, 'New EFI boot method').
@@ -231,7 +230,7 @@ gen_edit([state(root_fs, CTX)|T], root_fs, VL, FU, OTL) -->
 	  T
 	; gen_edit(T, make_part_tmpl, [fs(NFS)|VL], FU, OTL)
 	).
-gen_edit([state(make_part_tmpl, CTX), state(fs_settings, ctx_fs_settings(_FS))|T], make_part_tmpl, VL, FU, _OTL) -->
+gen_edit([state(make_part_tmpl, CTX), state(fs_settings, ctx_fs_settings(_FS)), state(mnt_opts, ctx_mnt_opts)|T], make_part_tmpl, VL, FU, _OTL) -->
 	{
 	  CTX = ctx_part4(PTT, FS, OPTN, D4L),
 	  memberchk(bl(VB), VL),
@@ -244,13 +243,15 @@ gen_edit([state(make_part_tmpl, CTX), state(fs_settings, ctx_fs_settings(_FS))|T
 	  ; menu_part_tmpl(VFS, OPTN, NPTN)
 	  )
 	},
-	[state(make_part_tmpl, ctx_part4(PTT, VFS, NPTN, VD4L)), state(fs_settings, ctx_fs_settings(VFS))],
+	[state(make_part_tmpl, ctx_part4(PTT, VFS, NPTN, VD4L)), state(fs_settings, ctx_fs_settings(VFS)), state(mnt_opts, ctx_mnt_opts)],
 	( { FU = no_fu, VFS = FS, VD4L = D4L, OPTN = NPTN } ->
 	  T
 	; gen_tmpl_ptt(PTT, VFS, NPTN, VB, VD4L),
 	  {
 		% Clean fs_settings_main menu up.
 		retractall(tui_setting_tmp(menu_list(fs_settings_main), _)),
+		% Clean mnt_opts_main menu up.
+		retractall(tui_setting_tmp(menu_list(mnt_opts_main), _)),
 		st_skip_till(T, soft, SL)
 	  },
 	  gen_edit(SL, soft, VL, FU, SL)
@@ -297,12 +298,12 @@ menu_select_template(B, OT, NT) :-
 	true.
 
 menu_save :-
-	( tui_yesno('Save settings?', [sz([6, 40])]) ->
-	  open('settings.pl', write, S),
-	  save_settings(S),
-	  close(S)
-	; true
-	), !.
+	tui_yesno('Save settings?', [sz([6, 40])]), !,
+	open('settings.pl', write, S),
+	save_settings(S),
+	close(S),
+	!.
+menu_save.
 
 menu_tag(A, [T,D]) :-
 	action_info(A,T,D), !.
@@ -365,23 +366,17 @@ menu_common_opt(gpt_luks, _TL, [luks_info, luks_passwd]).
 menu_common_opt(gpt_luks_lvm, _TL, [lvm_info, luks_info, luks_passwd]).
 menu_common_opt(gpt_lvm_luks, _TL, [lvm_info, luks_info, luks_passwd]).
 
-menu_common(TT, TL) :-
-	findall(M0, (menu_common_opt(TT, TL, ML0), member(M0, ML0)), M),
-	dialog_msg(menu, LABEL),
-	repeat,
-	inst_setting(template(_TT1), TL1),
-	maplist(menu_tag_common(TL1), M, ML),
-	tui_menu_tag2_ext(main_common, ML, LABEL, [cancel-label('Return'), title(' Common installation settings ')], Tag),
-	action_info_common(A, Tag, _, _),
-	cmd_action_common(A),
-	!.
+menu_common :-
+	Title = ' Common installation settings ',
+	menu_list_2(menu_common, [], [], [], [title(Title), cancel-label('Return'), ok-label('Edit')]),
+	true.
 
 menu_main_info(_TT, _TL, [bios_efi]).
 menu_main_info(_TT, TL, [ST]) :-
 	member(state(ST, _), TL),
 	\+ menu_main_skip(ST, TL).
 menu_main_info(manual, _TL, [bootloader_dev, make_part_manually, part_select, filesystem]).
-menu_main_info(_TT, _TL, [common_settings, review, install]).
+menu_main_info(_TT, _TL, [common_settings, review, save, install]).
 
 menu_main_skip(used_d7, _TL) :-
 	% Skip used_d7 if only one device is available.
@@ -401,25 +396,21 @@ menu_main_skip(make_part_tmpl, TL) :-
 	\+ memberchk(FS, [zfs, btrfs]).
 
 menu_main :-
-	dialog_msg(menu, LABEL),
-	repeat,
-	inst_setting(template(TT), TL),
-	findall(MI, (menu_main_info(TT, TL, MIL), member(MI, MIL)), M1),
-
-	maplist(menu_tag, M1, ML),
-	tui_menu_tag2_ext(main, ML, LABEL, [extra-button, extra-label('Save'), cancel-label('Exit'), title(' Void Linux installation menu ')], Tag),
-	action_info(A, Tag, _),
-	cmd_action(A, TT, TL),
+	Title = ' Void Linux installation menu ',
+	menu_list_2(menu_main, [], [], [], [title(Title), cancel-label('Exit')]),
 	true.
 
 cmd_menu(root_fs, _TT, TL) :- !,
 	menu_edit_main(root_fs, TL),
 	true.
-cmd_menu(fs_settings, TT, TL) :- !,
-	menu_fs_settings1(TT, TL),
+cmd_menu(mnt_opts, TT, TL) :- !,
+	menu_mnt_opts(TT, TL),
 	true.
-cmd_menu(common_settings, TT, TL) :- !,
-	menu_common(TT, TL),
+cmd_menu(fs_settings, TT, TL) :- !,
+	menu_fs_settings(TT, TL),
+	true.
+cmd_menu(common_settings, _TT, _TL) :- !,
+	menu_common,
 	true.
 cmd_menu(template, _TT, TL) :- !,
 	menu_edit_main(template, TL),
@@ -463,19 +454,13 @@ cmd_menu(save, _TT, _TL) :- !,
 cmd_menu(install, TT, TL) :- !,
 	run_install(TT, TL),
 	true.
-cmd_menu(exit, _TT, _TL) :- !,
-	% tui_yesno('Exit installer?', [sz([6, 40])]),
-	true.
 
 cmd_action(install, TT, TL) :- !,
 	cmd_menu(install, TT, TL),
 	true.
-cmd_action(exit, TT, TL) :- !,
-	cmd_menu(exit, TT, TL),
-	true.
 cmd_action(A, TT, TL) :- !,
 	cmd_menu(A, TT, TL),
-	fail.
+	true.
 
 cmd_menu_common(hostonly) :- !,
 	menu_hostonly,
@@ -529,11 +514,4 @@ cmd_menu_common(boot_size) :- !,
 cmd_menu_common(root_size) :- !,
 	menu_setting(root_size),
 	true.
-
-cmd_action_common(exit) :- !,
-	% cmd_menu_common(exit, TT, TL),
-	true.
-cmd_action_common(A) :- !,
-	cmd_menu_common(A),
-	fail.
 

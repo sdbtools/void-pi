@@ -2,6 +2,7 @@
 % Copyright (c) 2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 :- dynamic(tui_setting_tmp/2).
+:- discontiguous([menu_list_on_init/4, menu_list_on_pre/5, menu_list_on_post/7]).
 
 % Vertical form.
 % FLen - edit field lenght
@@ -30,11 +31,14 @@ tui_mixedform_v(FLen, ILen, L, M, UA, AL) :-
 
 % IL - input list
 % OL - output list or a value
-% R - reset/keep stored settings
-menu_list_2(TAG, Title, EV, IL, OL, R) :-
+% EV - external value
+% UA - user attributes
+menu_list_2(TAG, EV, IL, OL, UA) :-
 	dialog_msg(menu, LABEL),
-	% AL - "all" list.
-	menu_list_on_all(TAG, EV, IL, AL),
+	% LV - local value
+	menu_list_on_init(TAG, EV, IL, LV),
+	% R - reset/keep stored settings
+	R = keep,
 	( tui_setting_tmp(menu_list(TAG), v(_, _IL0)), R \= reset
 	; retractall(tui_setting_tmp(menu_list(TAG), _)),
 	  assertz(tui_setting_tmp(menu_list(TAG), v(none, IL)))
@@ -42,22 +46,25 @@ menu_list_2(TAG, Title, EV, IL, OL, R) :-
 	repeat,
 	% VL - value list.
 	retract(tui_setting_tmp(menu_list(TAG), v(DI, VL))),
-	menu_list_on_make(TAG, EV, AL, VL, PL),
-	tui_menu_tag_rc(PL, LABEL, [default-item(DI), cancel-label('Return'), ok-label('Edit'), title(Title)], Tag, RC),
-	( RC = cancel ->
+	menu_list_on_pre(TAG, EV, LV, VL, PL),
+	tui_menu_tag_rc(PL, LABEL, [default-item(DI)| UA], Tag, RC),
+	( memberchk(RC, [cancel, esc]) ->
 	  % Accept
-	  menu_list_on_get(TAG, EV, VL, Tag, OL),
+	  % Tag is invalid here.
+	  menu_list_on_post(TAG, get, EV, LV, VL, DI, OL),
 	  assertz(tui_setting_tmp(menu_list(TAG), v(DI, VL)))
-	; menu_list_on_set(TAG, EV, AL, VL, Tag, OL1),
+	; menu_list_on_post(TAG, set, EV, LV, VL, Tag, OL1),
 	  assertz(tui_setting_tmp(menu_list(TAG), v(Tag, OL1))),
 	  fail
 	), !.
 
 % IL - input list
 % OL - output list or a value
-menu_list_3(TAG, Title, Label, EV, IL, OL) :-
-	% AL - "all" list.
-	menu_list_on_all(TAG, EV, IL, AL),
+% EV - external value
+% UA - user attributes
+menu_list_3(TAG, Label, EV, IL, OL, UA) :-
+	% LV - local value
+	menu_list_on_init(TAG, EV, IL, LV),
 	( tui_setting_tmp(menu_list(TAG), v(DI0, IL0))
 	; IL0 = IL,
 	  DI0 = none,
@@ -66,37 +73,38 @@ menu_list_3(TAG, Title, Label, EV, IL, OL) :-
 	repeat,
 	% VL - value list.
 	retract(tui_setting_tmp(menu_list(TAG), v(DI, VL))),
-	menu_list_on_make(TAG, EV, AL, VL, PL),
-	tui_menu_tag_rc(PL, Label, [default-item(DI), extra-button, extra-label('Accept'), ok-label('Edit'), title(Title)], Tag, RC),
+	menu_list_on_pre(TAG, EV, LV, VL, PL),
+	tui_menu_tag_rc(PL, Label, [default-item(DI), extra-button| UA], Tag, RC),
 	( RC = extra ->
 	  % Accept
-	  menu_list_on_get(TAG, EV, VL, Tag, OL),
+	  menu_list_on_post(TAG, get, EV, LV, VL, Tag, OL),
 	  assertz(tui_setting_tmp(menu_list(TAG), v(DI, VL)))
-	; RC = cancel ->
-	  menu_list_on_get(TAG, EV, IL0, DI0, OL),
+	; memberchk(RC, [cancel, esc]) ->
+	  % Tag is invalid here.
+	  % Restore initial state.
+	  menu_list_on_post(TAG, cancel, EV, LV, IL0, DI0, OL),
 	  assertz(tui_setting_tmp(menu_list(TAG), v(DI, IL0)))
-	; menu_list_on_set(TAG, EV, AL, VL, Tag, OL1),
+	; menu_list_on_post(TAG, set, EV, LV, VL, Tag, OL1),
 	  assertz(tui_setting_tmp(menu_list(TAG), v(Tag, OL1))),
 	  false
-	),
-	!.
+	), !.
 
+% EV - external value
 checklist_2(TAG, Title, EV, IL, OL) :-
 	dialog_msg(checklist, LABEL),
-	% AL - "all" list.
-	checklist_on_all(TAG, EV, AL),
+	% LV - local value
+	checklist_on_all(TAG, EV, LV),
 	( retract(tui_setting_tmp(check_list(TAG), VL))
 	; VL = IL
 	), !,
 	% Convert prop-list into checklist format.
-	checklist_on_make(TAG, EV, AL, VL, PL),
+	checklist_on_make(TAG, EV, LV, VL, PL),
 	tui_checklist_tag_rc(PL, LABEL, [no-tags, title(Title)], OL1, RC),
 	( RC = cancel ->
 	  assertz(tui_setting_tmp(check_list(TAG), VL)),
 	  OL = VL
-	; checklist_on_set(TAG, EV, AL, OL1, OL),
+	; checklist_on_set(TAG, EV, LV, OL1, OL),
 	  assertz(tui_setting_tmp(check_list(TAG), OL))
-	),
-	!.
+	), !.
 
 

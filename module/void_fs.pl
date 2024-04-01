@@ -10,13 +10,13 @@
 % EfiFs - EFI File System Drivers: https://github.com/pbatard/efifs
 
 has_boot_part(TL) :-
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	memberchk(fs7(_FS, _Label, '/boot', _D, _COL, _MOL, _CK), TL), !,
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	memberchk(fs6(_FS, '/boot', _D, _COL, _MOL, _CK), TL), !,
 	true.
 
 has_root_part(TL) :-
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	memberchk(fs7(_FS, _Label, '/', _D, _COL, _MOL, _CK), TL), !,
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	memberchk(fs6(_FS, '/', _D, _COL, _MOL, _CK), TL), !,
 	true.
 has_root_part(TL) :-
 	member(fs5_multi(btrfs, _COL, _DL, PTL, _CK), TL),
@@ -28,13 +28,13 @@ has_root_part(TL) :-
 	true.
 
 has_usr_part(TL) :-
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	memberchk(fs7(_FS, _Label, '/usr', _D, _COL, _MOL, _CK), TL), !,
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	memberchk(fs6(_FS, '/usr', _D, _COL, _MOL, _CK), TL), !,
 	true.
 
 root_pd(TL, PD) :-
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	memberchk(fs7(_FS, _Labe1, '/', PD, _COL, _MOL, _CK), TL),
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	memberchk(fs6(_FS, '/', PD, _COL, _MOL, _CK), TL),
 	!.
 root_pd(TL, PD) :-
 	member(fs5_multi(btrfs, _COL, [PD|_], PTL, _CK), TL),
@@ -49,8 +49,8 @@ root_pd(_TL, _PD) :-
 	fail.
 
 root_fs(TL, FS) :-
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	memberchk(fs7(FS, _Labe1, '/', _D, _COL, _MOL, _CK), TL), !,
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	memberchk(fs6(FS, '/', _D, _COL, _MOL, _CK), TL), !,
 	true.
 root_fs(TL, btrfs) :-
 	member(fs5_multi(btrfs, _COL, _DL, PTL, _CK), TL),
@@ -59,6 +59,26 @@ root_fs(TL, btrfs) :-
 root_fs(TL, zfs) :-
 	member(fs5_multi(zfs, _COL, _DL, PTL, _CK), TL),
 	memberchk(dataset(_, '/', _), PTL), !,
+	true.
+
+get_boot_part(TL, PD) :-
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	member(fs6(_FS, MP, PD, _, _, _CK1), TL),
+	( MP = '/boot'; MP = (/) ), !,
+	% memberchk(p4(_, bd1([PD| _]), _CK2, _SZ), TL),
+	!.
+get_boot_part(TL, PD) :-
+	member(fs5_multi(FS, _COL, [PD|_], PTL, _CK1), TL),
+	get_boot_part_1(FS, PTL),
+	!.
+
+get_boot_part_1(zfs, PTL) :- !,
+	member(dataset(_, MP, _), PTL),
+	( MP = '/boot'; MP = (/) ), !,
+	true.
+get_boot_part_1(btrfs, PTL) :- !,
+	member(subv(_, MP, _, _), PTL),
+	( MP = '/boot'; MP = (/) ), !,
 	true.
 
 boot_pref(TL, '') :-
@@ -71,35 +91,50 @@ get_mkfs_attrs(COL, L) :-
 	true.
 
 get_mkfs_attrs0(attr(TAG, OL), L) :-
-	prop_info(TAG, Format, _),
-	get_mkfs_attrs1(Format, TAG, OL, L),
+	prop_info(TAG, Format, FL),
+	get_mkfs_attrs1(Format, TAG, FL, OL, L),
 	true.
 
-get_mkfs_attrs1(feat3p(Opt), zpool_feat, OL, COL) :- !, % "p" stands for "prefix"
+get_mkfs_attrs1(feat4p(Opt, _Fmt), zpool_feat, _FL, OL, COL) :- !, % "p" stands for "prefix"
 	findall(CO, (member(F=V, OL), make_zfs_feat(V, F, O), member(CO, [Opt, O])), COL),
 	true.
-get_mkfs_attrs1(feat3p(Opt), _TAG, OL, COL) :- !, % "p" stands for "prefix"
-	findall(CO, (member(F=V, OL), make_fs_feat(V, F, O), member(CO, [Opt, O])), COL),
+get_mkfs_attrs1(feat4p(Opt, Fmt), _TAG, FL, OL, COL) :- !, % "p" stands for "prefix"
+	findall(CO, (member(F=V, OL), memberchk(prop_feat4(F, _, LFmt, _), FL), make_fs_feat(LFmt, Fmt, F, V, O), member(CO, [Opt, O])), COL),
 	true.
-get_mkfs_attrs1(feat3s(Opt, Sep), _TAG, OL, [Opt, l(COL, Sep)]) :- !, % "s" stands for "separator"
-	findall(O, (member(F=V, OL), make_fs_feat(V, F, O)), COL),
+get_mkfs_attrs1(feat4s(Opt, Sep, Fmt), _TAG, FL, OL, [Opt, l(COL, Sep)]) :- !, % "s" stands for "separator"
+	findall(O, (member(F=V, OL), memberchk(prop_feat4(F, _, LFmt, _), FL), make_fs_feat(LFmt, Fmt, F, V, O)), COL),
 	true.
-get_mkfs_attrs1(opt3s(Opt, Sep), TAG, OL, [Opt, l(COL, Sep)]) :- !, % "s" stands for "separator"
-	prop_info(TAG, opt3s(Opt, Sep), PL),
-	findall(O, (member(P=V, OL), make_opt3_val(PL, P, V, O)), COL),
+get_mkfs_attrs1(opt3s(Opt, Sep), _TAG, FL, OL, [Opt, l(COL, Sep)]) :- !, % "s" stands for "separator"
+	findall(O, (member(P=V, OL), make_opt3_val(FL, P, V, O)), COL),
 	true.
-get_mkfs_attrs1(opt3p(Opt), TAG, OL, COL) :- !, % "p" stands for "prefix"
-	prop_info(TAG, opt3p(Opt), PL),
-	findall(CO, (member(P=V, OL), make_opt3_val(PL, P, V, OV), member(CO, [Opt, OV])), COL),
+get_mkfs_attrs1(opt3p(Opt), _TAG, FL, OL, COL) :- !, % "p" stands for "prefix"
+	findall(CO, (member(P=V, OL), make_opt3_val(FL, P, V, OV), member(CO, [Opt, OV])), COL),
 	true.
-get_mkfs_attrs1(opt4s(Sep), TAG, OL, COL) :- !,
-	prop_info(TAG, opt4s(Sep), PL),
-	findall(O, (member(P=V, OL), make_opt4_val(PL, P, V, Sep, O)), COL),
+get_mkfs_attrs1(opt4s(Sep), _TAG, FL, OL, COL) :- !,
+	findall(O, (member(P=V, OL), make_opt4_val(FL, P, V, Sep, O)), COL),
 	true.
+get_mkfs_attrs1(Format, _TAG, _FL, _OL, _COL) :-
+	format_to_atom(A, 'Invalid formatter: ~w', [Format]),
+	tui_msgbox(A, [title(' ERROR ')]),
+	fail.
 
-make_fs_feat(off, F, FV) :- !,
-	atom_concat('^', F, FV).
-make_fs_feat(_, F, F) :- !.
+% make_fs_feat(LocalFormat, Format, V, F, FV).
+make_fs_feat(std, Fmt, F, V, FV) :- !,
+	make_fs_feat0(V, Fmt, F, FV).
+make_fs_feat(LFmt, _Fmt, F, V, FV) :-
+	make_fs_feat0(V, LFmt, F, FV).
+
+make_fs_feat0(off, on_off, _F, '') :- !,
+	fail.
+make_fs_feat0(off, pref1(P), F, FV) :- !,
+	atom_concat(P, F, FV).
+make_fs_feat0(off, v2(_ON, OFF), _F, OFF) :- !.
+make_fs_feat0(off, Fmt, _F, '') :- !,
+	format_to_atom(A, 'Invalid formatter: ~w', [Fmt]),
+	tui_msgbox(A, [title(' ERROR ')]),
+	fail.
+make_fs_feat0(on, v2(ON, _OFF), _F, ON) :- !.
+make_fs_feat0(_, _Fmt, F, F) :- !.
 
 make_zfs_feat(V, F, FV) :- !,
 	( V = on ->
@@ -118,7 +153,9 @@ make_opt4_val0(Fmt, AN, V, Sep, vs(AN, Sep, OV)) :-
 	make_opt_dq(Fmt, V, OV).
 
 make_opt3_val(PL, P, V, OV) :-
-	memberchk(opt3(P, Fmt, _), PL),
+	( memberchk(opt3(P, Fmt, _), PL)
+	; memberchk(opt3a(P, Fmt, _, _), PL)
+	), !,
 	make_opt3_val0(P, V, Fmt, OV),
 	true.
 
@@ -136,8 +173,9 @@ make_opt_dq(Fmt, V, dq(V)) :-
 	opt_require_dq(Fmt, V), !.
 make_opt_dq(_Fmt, V, V).
 
-opt_require_dq(Fmt, _V) :-
+opt_require_dq(Fmt, V) :-
 	memberchk(Fmt, [str, file, path]),
+	sub_atom(V, _Before, _Length, _After, ' '), !,
 	true.
 
 mkfs(swap, PD, _COL) :- !,
@@ -161,15 +199,9 @@ mkfs(FS, _, _) :- !,
 	tui_msgbox2(['Couldn\'t create filesystem', FS]),
 	fail.
 
-mkfs_cl(ext2, D, OL, CL) :- !,
-	CL = ['mke2fs', OL, D, '2>&1'],
-	true.
-mkfs_cl(ext3, D, OL, CL) :- !,
-	CL = ['mke2fs', OL, D, '2>&1'],
-	true.
-mkfs_cl(ext4, D, OL, CL) :- !,
-	CL = ['mke2fs', OL, D, '2>&1'],
-	true.
+mkfs_cl(ext2, D, OL, ['mke2fs', OL, D, '2>&1']) :- !.
+mkfs_cl(ext3, D, OL, ['mke2fs', OL, D, '2>&1']) :- !.
+mkfs_cl(ext4, D, OL, ['mke2fs', OL, D, '2>&1']) :- !.
 mkfs_cl(f2fs, D, OL, CL) :- !,
 	CL = ['mkfs.f2fs', OL, D, '2>&1'],
 	true.
@@ -181,6 +213,9 @@ mkfs_cl(xfs, D, OL, CL) :- !,
 	true.
 mkfs_cl(bcachefs, D, OL, CL) :- !,
 	CL = ['mkfs.bcachefs', OL, D, '2>&1'],
+	true.
+mkfs_cl(nilfs2, D, OL, CL) :- !,
+	CL = ['mkfs.nilfs2', OL, D, '2>&1'],
 	true.
 
 mkfs_multi(zfs, Title, TL, DL, PTL, COL, RD) :- !,
@@ -250,14 +285,14 @@ mk_lvm_lvcreate(VG, lv(LV, _SZ)) :-
 % Get list of mounting points in order in which they should be mounted (except of swap).
 get_mp_list(TL, MPL1) :-
 	% Ignore swap partition
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	findall(MP, (member(fs7(FS, _Label, MP, _D, _COL, _MOL, _CK), TL), FS \= swap), MPL0),
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	findall(MP, (member(fs6(FS, MP, _D, _COL, _MOL, _CK), TL), FS \= swap), MPL0),
 	sort(MPL0, MPL1),
 	true.
 
 % Ignore swap partition.
-mount_fs(swap, _D, _MP, _RD) :-
-	!.
+mount_fs(FS, _D, _MP, _RD) :-
+	memberchk(FS, [proc, tmpfs, swap]), !.
 % Ignore empty mount point.
 mount_fs(_FS, _D, '', _RD) :-
 	!.
@@ -265,10 +300,7 @@ mount_fs(FS, D, MP, RD) :-
 	memberchk(FS, [vfat, ext2, ext3, ext4, f2fs, xfs, bcachefs]),
 	atom_concat(RD, MP, MP1),
 	os_mkdir_p(MP1),
-	( inst_setting(fs_attr(FS, MP, _), mount(OL))
-	; OL = [rw, noatime]
-	),
-	CL = [mount, o(t, FS), o(o, lc(OL)), D, MP1, '2>&1'],
+	CL = [mount, o(t, FS), D, MP1, '2>&1'],
 	% os_shell2(CL),
 	tui_shell2_safe(CL),
 	!.
@@ -319,25 +351,5 @@ ensure_lvm(TL) :-
 	fail.
 ensure_lvm(_TL) :-
 	% halt,
-	true.
-
-get_boot_part(TL, PD) :-
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	member(fs7(_FS, _Label, MP, PD, _, _, _CK1), TL),
-	( MP = '/boot'; MP = (/) ), !,
-	% memberchk(p4(_, bd1([PD| _]), _CK2, _SZ), TL),
-	!.
-get_boot_part(TL, PD) :-
-	member(fs5_multi(FS, _COL, [PD|_], PTL, _CK1), TL),
-	get_boot_part_1(FS, PTL),
-	!.
-
-get_boot_part_1(zfs, PTL) :- !,
-	member(dataset(_, MP, _), PTL),
-	( MP = '/boot'; MP = (/) ), !,
-	true.
-get_boot_part_1(btrfs, PTL) :- !,
-	member(subv(_, MP, _, _), PTL),
-	( MP = '/boot'; MP = (/) ), !,
 	true.
 

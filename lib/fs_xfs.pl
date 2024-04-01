@@ -84,8 +84,48 @@ prop_info(xfs_sector_size_rw, opt3s('-s', ','), [
 
 prop_info(xfs_rw, opt4s(' '), [
 	  opt4(label, str, '', '-L')
-	, opt4('no discard', enable, no, '-K')
+	, opt4(discard, enable, yes, '-K')
 	, opt4(quite, enable, no, '-q')
 	, opt4(force, enable, no, '-f')
 	]).
+
+prop_info(mnt_xfs_feat, feat4s('--options', ',', on_off), [
+	  prop_feat4(attr2, off, pref1(no), none)
+	, prop_feat4(bsdgroups, off, std, none)
+	, prop_feat4(discard, off, pref1(no), none)
+	, prop_feat4(filestreams, off, std, none)
+	, prop_feat4(gqnoenforce, off, std, none)
+	, prop_feat4(gquota, off, std, none)
+	, prop_feat4(grpid, off, pref1(no), none)
+	, prop_feat4(grpquota, off, std, none)
+	, prop_feat4(inode64, on, v2(inode64, inode32), none)
+	, prop_feat4(largeio, off, pref1(no), none)
+	, prop_feat4(noalign, off, std, none)
+	, prop_feat4(noquota, off, std, none)
+	, prop_feat4(norecovery, off, std, none)
+	, prop_feat4(nouuid, off, std, none)
+	, prop_feat4(pqnoenforce, off, std, none)
+	, prop_feat4(pquota, off, std, none)
+	, prop_feat4(prjquota, off, std, none)
+	, prop_feat4(qnoenforce, off, std, none)
+	, prop_feat4(quota, off, std, none)
+	, prop_feat4(swalloc, off, std, none)
+	, prop_feat4(sysvgroups, off, std, none)
+	, prop_feat4(uqnoenforce, off, std, none)
+	, prop_feat4(uquota, off, std, none)
+	, prop_feat4(usrquota, off, std, none)
+	, prop_feat4(wsync, off, std, none)
+	]).
+
+prop_info(mnt_xfs_opt, opt3s('--options', ','), [
+	  opt3(allocsize, size, '4KB')
+	, opt3(dax, enum([inode, never, always]), inode)
+	, opt3(logbufs, enum([2, 3, 4, 5, 6, 7, 8]), 8)
+	, opt3(logbsize, size, 32768)
+	, opt3(logdev, str, '')
+	, opt3(rtdev, str, '')
+	, opt3(sunit, int, 0)
+	, opt3(swidth, int, 0)
+	]).
+
 

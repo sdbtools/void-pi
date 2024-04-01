@@ -2,127 +2,148 @@
 % Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 menu_filesystem(TL) :-
-	% do not try to edit swap partition.
-	findall(PD, (member(p4(PT, bd1([PD| _]), _CK, _SZ), TL), PT \= linux_swap), PL0),
-	( PL0 = [] ->
-	  tui_msgbox('No partitions was selected.'),
-	  fail
-	; sort(PL0, PL1)
-	),
-	lx_list_part(PIL),
-	maplist(part2menu_tag(PIL), PL1, ML1),
 	MT1 = ' Select the partition to edit ',
-	dialog_msg(menu, MENULABEL),
-	repeat,
-	tui_menu_tag2_ext(edit_fs_short, ML1, MENULABEL, [cancel-label('Done'), title(MT1)], PD),
-	menu_fs_short(PD),
+	menu_list_2(edit_fs_short, TL, [], [], [title(MT1), cancel-label('Done')]),
 	!.
 
 part2menu_tag(PIL, PD, [PD, SZ]) :-
 	memberchk(dev_part(PD,_,_,SZ), PIL),
 	true.
 
-menu_fs_short(cancel) :- !,
-	true.
 menu_fs_short(PD) :-
-	dialog_msg(menu, MENULABEL),
-	make_tmp_part_rec(PD),
-	repeat,
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, _COL, _MOL, CK)),
+	dialog_msg(menu, LABEL),
+	format_to_atom(TA, ' Set ~w filesystem parameters ', [PD]),
+	menu_fs_short_pre(PD, IL),
+	menu_list_3(file_system(PD), LABEL, [], IL, OL, [title(TA), extra-label('Accept'), ok-label('Edit')]),
+	menu_fs_short_post(PD, IL, OL),
+	!.
+
+menu_fs_short_pre(PD, [
+		label = Label,
+		type = FS,
+		mount_point = MP,
+		create = FV
+	]) :-
+	% We HAVE to get TL here.
+	inst_setting(template(_TT), TL),
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	( memberchk(fs6(FS, MP, PD, COL, _MOL, CK), TL)
+	; memberchk(fs5_multi(FS, COL, [PD], _PTL, CK), TL),
+	  MP = ''
+	), !,
+	fs_get_label(FS, COL, Label),
 	( CK = create ->
 	  FV = yes
 	; FV = no
 	),
-	ML1 = [
-		[label, Label],
-		[type, FS],
-		[mount_point, MP],
-		[create, FV]
-	],
-	maplist(make_menu_fs_short, ML1, ML2),
-	format_to_atom(TA, ' Set ~w filesystem parameters ', [PD]),
-	tui_menu_tag2_ext(file_system, ML2, MENULABEL, [extra-button, extra-label('Accept'), ok-label('Edit'), title(TA)], Tag),
-	menu_fs_info(CMD, Tag),
-	menu_fs_action(CMD, PD), !,
-	fail.
-
-make_menu_fs_short([T, V], [N, V]) :-
-	menu_fs_info(T, N),
 	true.
 
-menu_fs_info(create, 'Create FS') :- !.
-menu_fs_info(mount_point, 'Mount point') :- !.
-menu_fs_info(type, 'Type') :- !.
-menu_fs_info(label, 'Label') :- !.
-menu_fs_info(save, extra) :- !.
-menu_fs_info(exit, cancel) :- !.
-
-menu_fs_action(exit, _) :- !,
-	true.
-menu_fs_action(save, PD) :-
-	make_perm_part_rec(PD), !,
-	tui_msgbox('Settings are saved.'),
-	true.
-menu_fs_action(label, PD) :- !,
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, COL, MOL, CK)), !,
-	tui_inputbox('', Label, [title('Label')], A),
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	retractall(inst_setting_tmp(fs, fs7(_, _, _, PD, _, _, _))),
-	assertz(inst_setting_tmp(fs, fs7(FS, A, MP, PD, COL, MOL, CK))),
-	fail.
-menu_fs_action(type, PD) :- !,
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	inst_setting_tmp(fs, fs7(OFS, Label, MP, PD, COL, MOL, CK)), !,
-	inst_setting(template(TT), TL),
+menu_fs_short_post(_PD, IL, IL) :- !.
+menu_fs_short_post(PD, _IL, OL) :-
+	retract(inst_setting(template(TT), TL)),
 	get_bootloader(TL, B),
-	menu_select_fs(TT, B, OFS, NFS),
-	retractall(inst_setting_tmp(fs, fs7(_, _, _, PD, _, _, _))),
-	assertz(inst_setting_tmp(fs, fs7(NFS, Label, MP, PD, COL, MOL, CK))),
-	fail.
-menu_fs_action(mount_point, PD) :- !,
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, COL, MOL, CK)), !,
-	tui_inputbox('', MP, [title('Mount Point')], A),
-	retractall(inst_setting_tmp(fs, fs7( _, _, _, PD, _, _, _))),
-	assertz(inst_setting_tmp(fs, fs7(FS, Label, A, PD, COL, MOL, CK))),
-	fail.
-menu_fs_action(create, PD) :-
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, COL, MOL, _CK)), !,
-	( tui_yesno('Create file system?', [sz([6, 40])]) ->
-	  FV = create
-	; FV = keep
-	),
-	retractall(inst_setting_tmp(fs, fs7( _, _, _, PD, _, _, _))),
-	assertz(inst_setting_tmp(fs, fs7(FS, Label, MP, PD, COL, MOL, FV))),
-	fail.
-
-make_tmp_part_rec(PD) :-
-	% We HAVE to get TL here.
-	inst_setting(template(_TT), TL),
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	memberchk(fs7(FS, Label, MP, PD, COL, MOL, CK), TL),
-	retractall(inst_setting_tmp(fs, fs7( _, _, _, PD, _, _, _))),
-	assertz(inst_setting_tmp(fs, fs7(FS, Label, MP, PD, COL, MOL, CK))),
-	true.
-
-make_perm_part_rec(PD) :-
-	inst_setting(template(TT), TL),
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	inst_setting_tmp(fs, fs7(FS, Label, MP, PD, _COL, _MOL, CK)),
-	get_bootloader(TL, B),
-	get_mol(FS, MP, MOL),
-	% menu_fs_settings0(FS, MP, B, COL),
-	get_col(FS, MP, B, COL),
-	maplist(replace_element(fs7( _, _, _, PD, _, _, _), fs7(FS, Label, MP, PD, COL, MOL, CK)), TL, TL1),
-	retract(inst_setting(template(TT), _)),
+	findall(E2, (member(E1, TL), replace_pd(E1, E2, PD, B, OL)), TL1),
 	assertz(inst_setting(template(TT), TL1)),
 	true.
 
+% menu_fs_info(tag, name, format)
+menu_fs_info(create, 'Create FS', enable) :- !.
+menu_fs_info(mount_point, 'Mount point', str) :- !.
+menu_fs_info(type, 'Type', fmt(select_fs)) :- !.
+menu_fs_info(label, 'Label', str) :- !.
+
 replace_element(E1, E2, E1, E2) :- !.
 replace_element(_, _, E1, E1) :- !.
+
+replace_pd(fs6(FS, _MP, PD, COL, MOL, _CK), fs6(FS, MP, PD, COL1, MOL, CK), PD, _B, OL) :-
+	memberchk(type=FS, OL), !, % fs6 -> fs6. FS type hasn't changed.
+	OL = [
+		label=Label,
+		type=FS,
+		mount_point=MP,
+		create=FV
+	],
+	( FV = yes ->
+	  CK = create
+	; CK = keep
+	),
+	fs_set_label(FS, Label, COL, COL1),
+	true.
+replace_pd(fs6(_FS, _MP, PD, _COL, _MOL, _CK), fs5_multi(FS, COL1, [PD], PTL, CK), PD, B, OL) :-
+	memberchk(type=FS, OL),
+	memberchk(FS, [zfs, btrfs]), !, % fs6 -> fs5_multi
+	OL = [
+		label=Label,
+		type=FS,
+		mount_point=_MP,
+		create=FV
+	],
+	( FV = yes ->
+	  CK = create
+	; CK = keep
+	),
+	get_col_multi(FS, B, COL),
+	fs_set_label(FS, Label, COL, COL1),
+	part_tmpl(FS, root, PTL),
+	true.
+replace_pd(fs6(_FS, _MP, PD, _COL, _MOL, _CK), fs6(FS, MP, PD, COL1, MOL, CK), PD, B, OL) :- !,
+	% fs6 -> fs6. FS type HAS changed.
+	OL = [
+		label=Label,
+		type=FS,
+		mount_point=MP,
+		create=FV
+	],
+	( FV = yes ->
+	  CK = create
+	; CK = keep
+	),
+	get_col(FS, MP, B, COL),
+	get_mol(FS, MP, MOL),
+	fs_set_label(FS, Label, COL, COL1),
+	true.
+replace_pd(fs5_multi(FS, COL, [PD], PTL, _CK), fs5_multi(FS, COL, [PD], PTL, CK), PD, _B, OL) :-
+	memberchk(type=FS, OL), !, % fs5_multi -> fs5_multi. FS type hasn't changed.
+	memberchk(create=FV, OL),
+	( FV = yes ->
+	  CK = create
+	; CK = keep
+	),
+	true.
+replace_pd(fs5_multi(_FS, _COL, [PD], _PTL, _CK), fs5_multi(FS, COL1, [PD], PTL, CK), PD, B, OL) :-
+	memberchk(type=FS, OL),
+	memberchk(FS, [zfs, btrfs]), !, % fs5_multi -> fs5_multi. FS type HAS changed.
+	OL = [
+		label=Label,
+		type=FS,
+		mount_point=_MP,
+		create=FV
+	],
+	( FV = yes ->
+	  CK = create
+	; CK = keep
+	),
+	get_col_multi(FS, B, COL),
+	fs_set_label(FS, Label, COL, COL1),
+	part_tmpl(FS, root, PTL),
+	true.
+replace_pd(fs5_multi(_FS, _COL, [PD], _PTL, _CK), fs6(FS, MP, PD, COL1, MOL, CK), PD, B, OL) :-
+	% fs5_multi -> fs6
+	OL = [
+		label=Label,
+		type=FS,
+		mount_point=MP,
+		create=FV
+	],
+	( FV = yes ->
+	  CK = create
+	; CK = keep
+	),
+	get_col(FS, MP, B, COL),
+	get_mol(FS, MP, MOL),
+	fs_set_label(FS, Label, COL, COL1),
+	true.
+replace_pd(E1, E1, _PD, _B, _OL) :- !.
 
 fs_type_to_menu(FST, [FST, Descr]) :-
 	fs_info(FST, Descr),

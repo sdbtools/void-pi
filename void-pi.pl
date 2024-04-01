@@ -3,9 +3,6 @@
 % Copyright (c) 2023-2024 Sergey Sikorskiy, released under the GNU GPLv2 license.
 
 :- initialization(main).
-% :- multifile(prop_info/3).
-:- discontiguous(prop_info/3).
-:- discontiguous([menu_list_on_all/4, menu_list_on_make/5, menu_list_on_get/5, menu_list_on_set/6]).
 
 % library
 :- include('lib/atom_common.pl').
@@ -16,8 +13,8 @@
 :- include('lib/os_grub.pl').
 
 :- include('lib/unix_common.pl').
-:- include('lib/linux_info.pl').
 :- include('lib/linux_common.pl').
+:- include('lib/linux_info.pl').
 :- include('lib/linux_dracut.pl').
 
 :- include('lib/tui_common.pl').
@@ -25,17 +22,21 @@
 :- include('lib/tui_ext.pl').
 
 :- include('lib/linux_luks.pl').
-:- include('lib/lvm_common.pl').
+:- include('lib/linux_lvm.pl').
 
 % file systems
 :- include('lib/linux_prop_fs.pl').
-:- include('lib/zfs_common.pl').
-:- include('lib/extfs_common.pl').
-:- include('lib/btrfs_common.pl').
-:- include('lib/f2fs_common.pl').
-:- include('lib/xfs_common.pl').
-:- include('lib/vfat_common.pl').
-:- include('lib/bcachefs_common.pl').
+:- include('lib/fs_proc.pl').
+:- include('lib/fs_tmpfs.pl').
+:- include('lib/fs_zfs.pl').
+:- include('lib/fs_extfs.pl').
+:- include('lib/fs_btrfs.pl').
+:- include('lib/fs_f2fs.pl').
+:- include('lib/fs_xfs.pl').
+:- include('lib/fs_vfat.pl').
+:- include('lib/fs_bcachefs.pl').
+:- include('lib/fs_nilfs2.pl').
+:- include('lib/fs_exfat.pl').
 
 :- include('module/void_info.pl').
 :- include('module/void_cmd_arg.pl').
@@ -89,14 +90,20 @@ def_settings :-
 	assertz(inst_setting(hostonly, no)),
 
 	% fs_attr(Name, MountPoint, Bootloader)
-	assertz(inst_setting(fs_attr(btrfs, '/', _), mount([rw, noatime, 'compress-force'=zstd, space_cache=v2, commit=60]))),
-	assertz(inst_setting(fs_attr(vfat, '/boot', _), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
-	assertz(inst_setting(fs_attr(vfat, '/boot/efi', _), mount([rw, nosuid, nodev, noexec, relatime, fmask='0022', dmask='0022', codepage=437, iocharset='iso8859-1', shortname=mixed, utf8, errors='remount-ro']))),
-	assertz(inst_setting(fs_attr(f2fs, _, _), mount([rw, compress_algorithm=lz4, compress_chksum, atgc, gc_merge, lazytime]))),
-	assertz(inst_setting(fs_attr(tmp, _, _), mount([defaults, nosuid, nodev]))),
-	assertz(inst_setting(fs_attr(proc, _, _), mount([nodev, noexec, nosuid, hidepid=2, gid=proc]))),
-	assertz(inst_setting(fs_attr(efivarfs, _, _), mount([defaults]))),
-	assertz(inst_setting(fs_attr(swap, _, _), mount([defaults]))),
+	assertz(inst_setting(fs_attr(btrfs, '/', _), mount([attr(mnt_indpn_feat, [atime=off]), attr(mnt_btrfs_opt, ['compress-force'=zstd, space_cache=v2, commit=60])]))),
+	assertz(inst_setting(fs_attr(vfat, '/boot', _), mount([attr(mnt_indpn_feat, [atime=off, suid=off, dev=off, exec=off]), attr(mnt_vfat_feat, [utf8=on])]))),
+	assertz(inst_setting(fs_attr(vfat, '/boot/efi', _), mount([attr(mnt_indpn_feat, [atime=off, suid=off, dev=off, exec=off]), attr(mnt_vfat_feat, [utf8=on])]))),
+	assertz(inst_setting(fs_attr(f2fs, _, _), mount([attr(mnt_indpn_feat, [atime=off, lazytime=on]), attr(mnt_f2fs_opt, [compress_algorithm=lz4]), attr(mnt_f2fs_feat, [compress_chksum=on, atgc=on, gc_merge=on])]))),
+	assertz(inst_setting(fs_attr(ext2, _, _), mount([attr(mnt_indpn_feat, [atime=off])]))),
+	assertz(inst_setting(fs_attr(ext3, _, _), mount([attr(mnt_indpn_feat, [atime=off])]))),
+	assertz(inst_setting(fs_attr(ext4, _, _), mount([attr(mnt_indpn_feat, [atime=off])]))),
+	assertz(inst_setting(fs_attr(nilfs2, _, _), mount([attr(mnt_indpn_feat, [atime=off])]))),
+	assertz(inst_setting(fs_attr(exfat, _, _), mount([attr(mnt_indpn_feat, [atime=off])]))),
+
+	assertz(inst_setting(fs_attr(tmpfs, '/tmp', _), mount([attr(mnt_indpn_feat, [suid=off, dev=off, exec=off,strictatime=on]), attr(mnt_tmpfs_opt, [mode=1777])]))),
+	assertz(inst_setting(fs_attr(proc, '/proc', _), mount([attr(mnt_indpn_feat, [suid=off, dev=off, exec=off]), attr(mnt_proc_opt, [hidepid=2,gid=proc])]))),
+	assertz(inst_setting(fs_attr(efivarfs, _, _), mount([]))),
+	assertz(inst_setting(fs_attr(swap, _, _), mount([]))),
 
 	assertz(inst_setting(fs_attr(vfat, _, _), create([attr(vfat_rw, ['fat-size'=32])]))),
 	assertz(inst_setting(fs_attr(f2fs, _, _), create([attr(f2fs_feat, [extra_attr=on, inode_checksum=on, sb_checksum=on, compression=on]), attr(f2fs_rw, [force=yes])]))),
@@ -110,6 +117,8 @@ def_settings :-
 	% https://patchwork.kernel.org/project/xfs/patch/ce584ae1-ee62-2dcb-9366-eb0a6df6e98e@sandeen.net/
 	% assertz(inst_setting(fs_attr(xfs, _, grub2), create([attr(xfs_inode_rw, [sparse=0]), attr(xfs_rw, [force=yes])]))),
 	assertz(inst_setting(fs_attr(xfs, _, _), create([attr(xfs_rw, [force=yes])]))),
+	assertz(inst_setting(fs_attr(nilfs2, _, _), create([attr(nilfs2_rw, [force=yes])]))),
+	assertz(inst_setting(fs_attr(exfat, _, _), create([attr(exfat_rw, [])]))),
 
 	assertz(inst_setting(source, local)),
 	assertz(inst_setting(hostname, voidpp)),
@@ -127,8 +136,8 @@ source_dependency_pkg(TT, TL, Distro, DL) :-
 
 source_dep(_TT, TL, Distro, D) :-
 	% Collect all used filesystems.
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	findall(FS, member(fs7(FS, _Label, _MP, _D, _COL, _MOL, _CK), TL), FSL0),
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	findall(FS, member(fs6(FS, _MP, _D, _COL, _MOL, _CK), TL), FSL0),
 	sort(FSL0, FSL),
 	% tui_msgbox2(PTL),
 	member(F, FSL),
@@ -211,6 +220,8 @@ setup_sys_fs_list([
 	, swap
 	, vfat
 	, xfs
+	, nilfs2
+	, exfat
 	]).
 setup_sys_fs_list([FS]) :-
 	member(FS, [bcachefs, zfs]),
@@ -357,8 +368,8 @@ make_cmd(TT, TL, part(D, SPL)) :-
 	sort(PL0, SPL),
 	true.
 make_cmd(_TT, TL, modprobe(FS)) :-
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	findall(FS0, (member(fs7(FS0, _Label, _MP, _D, _COL, _MOL, _CK), TL), \+ memberchk(FS0, [swap, lvm, luks])), FSL),
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	findall(FS0, (member(fs6(FS0, _MP, _D, _COL, _MOL, _CK), TL), \+ memberchk(FS0, [proc, tmpfs, swap, lvm, luks])), FSL),
 	sort(FSL, SFSL),
 	member(FS, SFSL),
 	true.
@@ -369,8 +380,8 @@ make_cmd(_TT, TL, mkfs_multi(FS, DL, PTL, COL)) :-
 	member(fs5_multi(FS, COL, DL, PTL, create), TL),
 	true.
 make_cmd(_TT, TL, mkfs(FS, D, COL)) :-
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	member(fs7(FS, _Label, _MP, D, COL, _MOL, create), TL),
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	member(fs6(FS, _MP, D, COL, _MOL, create), TL),
 	true.
 make_cmd(_TT, TL, mount_multi(FS, D, PTL)) :-
 	member(fs5_multi(FS, _COL, [D|_], PTL, create), TL),
@@ -378,8 +389,8 @@ make_cmd(_TT, TL, mount_multi(FS, D, PTL)) :-
 make_cmd(_TT, TL, mount(FS, PD, MP)) :-
 	get_mp_list(TL, MPL),
 	member(MP, MPL),
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	member(fs7(FS, _Label, MP, PD, _COL, _MOL, _CK), TL),
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	member(fs6(FS, MP, PD, _COL, _MOL, _CK), TL),
 	true.
 make_cmd(_TT, _TL, install_pkg(IM)) :-
 	inst_setting(source, IM),

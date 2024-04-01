@@ -24,11 +24,11 @@ prop_info_zfs_feat(off, L) :- !,
 	prop_info(zpool_feat, _, L).
 prop_info_zfs_feat(legacy, L) :- !,
 	prop_info(zpool_feat, _, L1),
-	findall(prop_feat(Tag, off, Attr), member(prop_feat(Tag, _, Attr), L1), L).
+	findall(prop_feat4(Tag, off, Fmt, Attr), member(prop_feat4(Tag, _, Fmt, Attr), L1), L).
 prop_info_zfs_feat(C, L) :- !,
 	os_shell2_lines_nc([cat, '/usr/share/zfs/compatibility.d/' + C], "#", CL),
 	prop_info(zpool_feat, _, L1),
-	findall(prop_feat(Tag, E, Attr), (member(prop_feat(Tag, _, Attr), L1), (memberchk(Tag, CL) -> E = on; E = off)), L).
+	findall(prop_feat4(Tag, E, Fmt, Attr), (member(prop_feat4(Tag, _, Fmt, Attr), L1), (memberchk(Tag, CL) -> E = on; E = off)), L).
 
 % prop_info_zfs(TAG, _FS, L) :-
 % 	prop_info(TAG, _, L).
@@ -76,46 +76,46 @@ prop_info(zpool_props_rw, opt3p('-o'), [
 % zpool_feat(name, depends_list)
 % man zpool-features
 % Feature flags implementation per OS: https://openzfs.github.io/openzfs-docs/Basic%20Concepts/Feature%20Flags.html
-prop_info(zpool_feat, feat3p('-o'), [
-	  prop_feat(allocation_classes, on, attr([], ''))
-	, prop_feat(async_destroy, on, attr([], ''))
-	, prop_feat(blake3, on, attr([extensible_dataset], ''))
-	, prop_feat(block_cloning, on, attr([], ''))
-	, prop_feat(bookmarks, on, attr([extensible_dataset], ''))
-	, prop_feat(bookmark_v2, on, attr([bookmark, extensible_dataset], ''))
-	, prop_feat(bookmark_written, on, attr([bookmark, extensible_dataset, bookmark_v2], ''))
-	, prop_feat(device_rebuild, on, attr([], ''))
-	, prop_feat(device_removal, on, attr([], ''))
-	, prop_feat(draid, on, attr([], ''))
-	, prop_feat(edonr, on, attr([extensible_dataset], ''))
-	, prop_feat(embedded_data, on, attr([], ''))
-	, prop_feat(empty_bpobj, on, attr([], ''))
-	, prop_feat(enabled_txg, on, attr([], ''))
-	, prop_feat(encryption, on, attr([bookmark_v2, extensible_dataset], ''))
-	, prop_feat(extensible_dataset, on, attr([], ''))
-	, prop_feat(filesystem_limits, on, attr([extensible_dataset], ''))
-	, prop_feat(head_errlog, on, attr([], ''))
-	, prop_feat(hole_birth, on, attr([enabled_txg], ''))
-	, prop_feat(large_blocks, on, attr([extensible_dataset], ''))
-	, prop_feat(large_dnode, on, attr([extensible_dataset], ''))
-	, prop_feat(livelist, on, attr([], ''))
-	, prop_feat(log_spacemap, on, attr([spacemap_v2], ''))
-	, prop_feat(lz4_compress, on, attr([], ''))
-	, prop_feat(multi_vdev_crash_dump, on, attr([], ''))
-	, prop_feat(obsolete_counts, on, attr([device_removal], ''))
-	, prop_feat(project_quota, on, attr([extensible_dataset], ''))
-	, prop_feat(redaction_bookmarks, on, attr([bookmarks, extensible_dataset], ''))
-	, prop_feat(redacted_datasets, on, attr([extensible_dataset], ''))
-	, prop_feat(resilver_defer, on, attr([], ''))
-	, prop_feat(sha512, on, attr([extensible_dataset], ''))
-	, prop_feat(skein, on, attr([extensible_dataset], ''))
-	, prop_feat(spacemap_histogram, on, attr([], ''))
-	, prop_feat(spacemap_v2, on, attr([], ''))
-	, prop_feat(userobj_accounting, on, attr([extensible_dataset], ''))
-	, prop_feat(vdev_zaps_v2, on, attr([], ''))
-	, prop_feat(zilsaxattr, on, attr([extensible_dataset], ''))
-	, prop_feat(zpool_checkpoint, on, attr([], ''))
-	, prop_feat(zstd_compress, on, attr([extensible_dataset], ''))
+prop_info(zpool_feat, feat4p('-o', on_off), [
+	  prop_feat4(allocation_classes, on, std, attr([], ''))
+	, prop_feat4(async_destroy, on, std, attr([], ''))
+	, prop_feat4(blake3, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(block_cloning, on, std, attr([], ''))
+	, prop_feat4(bookmarks, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(bookmark_v2, on, std, attr([bookmark, extensible_dataset], ''))
+	, prop_feat4(bookmark_written, on, std, attr([bookmark, extensible_dataset, bookmark_v2], ''))
+	, prop_feat4(device_rebuild, on, std, attr([], ''))
+	, prop_feat4(device_removal, on, std, attr([], ''))
+	, prop_feat4(draid, on, std, attr([], ''))
+	, prop_feat4(edonr, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(embedded_data, on, std, attr([], ''))
+	, prop_feat4(empty_bpobj, on, std, attr([], ''))
+	, prop_feat4(enabled_txg, on, std, attr([], ''))
+	, prop_feat4(encryption, on, std, attr([bookmark_v2, extensible_dataset], ''))
+	, prop_feat4(extensible_dataset, on, std, attr([], ''))
+	, prop_feat4(filesystem_limits, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(head_errlog, on, std, attr([], ''))
+	, prop_feat4(hole_birth, on, std, attr([enabled_txg], ''))
+	, prop_feat4(large_blocks, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(large_dnode, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(livelist, on, std, attr([], ''))
+	, prop_feat4(log_spacemap, on, std, attr([spacemap_v2], ''))
+	, prop_feat4(lz4_compress, on, std, attr([], ''))
+	, prop_feat4(multi_vdev_crash_dump, on, std, attr([], ''))
+	, prop_feat4(obsolete_counts, on, std, attr([device_removal], ''))
+	, prop_feat4(project_quota, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(redaction_bookmarks, on, std, attr([bookmarks, extensible_dataset], ''))
+	, prop_feat4(redacted_datasets, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(resilver_defer, on, std, attr([], ''))
+	, prop_feat4(sha512, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(skein, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(spacemap_histogram, on, std, attr([], ''))
+	, prop_feat4(spacemap_v2, on, std, attr([], ''))
+	, prop_feat4(userobj_accounting, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(vdev_zaps_v2, on, std, attr([], ''))
+	, prop_feat4(zilsaxstd, attr, on, std, attr([extensible_dataset], ''))
+	, prop_feat4(zpool_checkpoint, on, std, attr([], ''))
+	, prop_feat4(zstd_compress, on, std, attr([extensible_dataset], ''))
 	]).
 
 % zfs_prop(name, format)

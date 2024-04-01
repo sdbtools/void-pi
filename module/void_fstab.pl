@@ -14,8 +14,36 @@ make_fstab(_TL, _) :-
 	tui_msgbox('Making of fstab has failed.'),
 	fail.
 
+get_fstab_attrs(COL, L) :-
+	findall(LM, (member(CO, COL), get_fstab_attrs0(CO, L0), member(LM, L0)), L1),
+	( L1 = [] ->
+	  L = [defaults]
+	; L = L1
+	), !,
+	true.
+
+get_fstab_attrs0(attr(TAG, OL), L) :-
+	prop_info(TAG, Format, FL),
+	get_fstab_attrs1(Format, FL, OL, L),
+	true.
+
+get_fstab_attrs1(feat4s(_Opt, _Sep, Fmt), FL, OL, COL) :- !, % "s" stands for "separator"
+	findall(O, (member(F=V, OL), memberchk(prop_feat4(F, _, LFmt, _), FL), make_fs_feat(LFmt, Fmt, F, V, O)), COL),
+	true.
+get_fstab_attrs1(opt3s(_Opt, _Sep), FL, OL, COL) :- !, % "s" stands for "separator"
+	findall(O, (member(P=V, OL), make_opt3_val(FL, P, V, O)), COL),
+	true.
+get_fstab_attrs1(opt3p(_Opt), FL, OL, COL) :- !, % "p" stands for "prefix"
+	findall(O, (member(P=V, OL), make_opt3_val(FL, P, V, O)), COL),
+	true.
+get_fstab_attrs1(Format, _FL, _OL, _COL) :-
+	format_to_atom(A, 'Invalid formatter: ~w', [Format]),
+	tui_msgbox(A, [title(' ERROR ')]),
+	fail.
+
 make_fstab_(S, fstab4(MP, FS, MOL, PD)) :-
-	write_fstab(FS, PD, MP, MOL, S),
+	get_fstab_attrs(MOL, MOL1),
+	write_fstab(FS, PD, MP, MOL1, S),
 	true.
 
 % For debugging.
@@ -48,7 +76,7 @@ write_fstab(proc, _, _, MOL, S) :- !,
 	L = [proc, '/proc', proc, lc(MOL), '0 0'],
 	write_fstab_line(L, S),
 	true.
-write_fstab(tmp, _, _, MOL, S) :- !,
+write_fstab(tmpfs, _, _, MOL, S) :- !,
 	L = [tmpfs, '/tmp', tmpfs, lc(MOL), '0 0'],
 	write_fstab_line(L, S),
 	true.
@@ -67,7 +95,7 @@ write_fstab(FS, D, MP, MOL, S) :- !,
 get_mol(FS, MP, MOL) :-
 	inst_setting(fs_attr(FS, MP, _), mount(MOL)),
 	!.
-get_mol(_FS, _MP, [rw, noatime]).
+get_mol(_FS, _MP, []).
 
 get_col(FS, MP, B, COL) :-
 	inst_setting(fs_attr(FS, MP, B), create(COL)),
@@ -88,11 +116,10 @@ fapassno(_FS, '/', '1').
 fapassno(_FS, _MP, '2').
 
 % Similar to get_mp_list but including swap.
-get_fstab_list(TL, [fstab4(none, proc, PMOL, none), fstab4(none, tmp, TMOL, none)| MPL3]) :-
-	get_mol(proc, _, PMOL),
-	get_mol(tmp, _, TMOL),
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	findall(fstab4(MP, FS, MOL, PD), member(fs7(FS, _Label, MP, PD, _COL, MOL, _CK), TL), MPL0),
+% fstab4(MP, FS, MOL, PD)
+get_fstab_list(TL, MPL3) :-
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	findall(fstab4(MP, FS, MOL, PD), member(fs6(FS, MP, PD, _COL, MOL, _CK), TL), MPL0),
 	findall(FSTAB4, get_fstab_list_multi(FS, TL, FSTAB4), MPL1),
 	append(MPL0, MPL1, MPL2),
 	sort(MPL2, MPL3),
@@ -103,8 +130,9 @@ get_fstab_list_multi(btrfs, TL, fstab4(MP, btrfs, MOL, PD)) :-
 	get_fstab_list_multi_btrfs(PTL, MP, MOL),
 	true.
 
-get_fstab_list_multi_btrfs(PTL, MP, [subvol=concat('/', SV)|MOL]) :-
+get_fstab_list_multi_btrfs(PTL, MP, MOL1) :-
 	member(subv(SV, MP, MOL, _), PTL),
+	attr_list_set(MOL, mnt_btrfs_opt, subvol, SV, MOL1),
 	true.
-get_fstab_list_multi_btrfs(_PTL, '/mnt/btr_pool', [subvolid=5, noatime]).
+get_fstab_list_multi_btrfs(_PTL, '/mnt/btr_pool', [attr(mnt_indpn_feat, [atime=off]), attr(mnt_btrfs_opt, [subvolid=5])]).
 

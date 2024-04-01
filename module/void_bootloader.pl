@@ -15,6 +15,7 @@ bootloader_info(grub2, [
 		, vfat
 		% , xfs % GRUB2 Fails to boot off XFS Partition (https://bugzilla.redhat.com/show_bug.cgi?id=2254370)
 		, zfs
+		% , nilfs2
 	], [
 		  manual
 		, gpt_basic
@@ -25,6 +26,8 @@ bootloader_info(grub2, [
 		% , gpt_wizard
 		% , gpt_raid
 	], [
+		  nilfs2
+		, exfat
 	]).
 bootloader_info(rEFInd, [
 		  btrfs
@@ -40,6 +43,8 @@ bootloader_info(rEFInd, [
 		, gpt_luks
 		, gpt_luks_lvm
 	], [
+		  nilfs2
+		, exfat
 	]).
 bootloader_info(limine, [
 		  vfat
@@ -55,6 +60,8 @@ bootloader_info(limine, [
 		, gpt_luks_lvm
 	], [
 		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
+		, nilfs2
+		, exfat
 	]).
 bootloader_info(efistub, [
 		  ext2
@@ -70,6 +77,8 @@ bootloader_info(efistub, [
 		, gpt_luks_lvm
 	], [
 		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
+		, nilfs2
+		, exfat
 	]).
 bootloader_info(syslinux, [
 		  % btrfs
@@ -90,6 +99,8 @@ bootloader_info(syslinux, [
 	], [
 		  % btrfs % It boots with the current configuration of btrfs + EFI. Doesn't boot with BIOS.
 		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
+		, nilfs2
+		, exfat
 		% , f2fs % Not supported by syslinux
 		% , xfs % Won't boot with BIOS
 	]).
@@ -111,12 +122,14 @@ bootloader_info(gummiboot, [
 		, gpt_luks_lvm
 	], [
 		  btrfs % Error: dracut /sysroot has no proper rootfs layout. Can't mount root filesystem.
+		, nilfs2
+		, exfat
 	]).
 bootloader_info(zfsBootMenu, [
 		  zfs
 	], [
 		  % manual
-		gpt_basic
+		  gpt_basic
 	], []).
 
 % Get bootloader name/dependency

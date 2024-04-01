@@ -58,8 +58,8 @@ validate_efi(TL) :-
 	), !,
 	get_bootloader(TL, B),
 	get_bootloader_mp(B, MP),
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	( memberchk(fs7(FS, _Label, MP, PD, _COL, _MOL, _CK), TL)
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	( memberchk(fs6(FS, MP, PD, _COL, _MOL, _CK), TL)
 	; tui_msgbox2(['The EFI System Partition', PD, 'has not yet been configured, please mount it at', MP], [title(' ERROR ')]),
 	  fail
 	), !,
@@ -413,7 +413,7 @@ wipe_dev_part(linux_lvm, _FSTYPE, D) :- !,
 	lvm_pvremove_unsafe(D),
 	% wipe_disk(D),
 	true.
-wipe_dev_part(solaris_root, zfs_member, D) :- !,
+wipe_dev_part(solaris_root, zfs, D) :- !,
 	% tui_msgbox(D),
 	zfs_zpool_destroy_all,
 	wipe_disk(D),

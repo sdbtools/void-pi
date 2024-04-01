@@ -103,7 +103,8 @@ $ sudo ./build-x86-images.sh -- -v linux6.7
 - predefined templates for LVM, LUKS, and combinations of them.
 - predefined partitioning templates.
 - selected devices will be automatically cleaned up.
-- TUI for setting of file system features and options.
+- TUI for setting up of file system features and options.
+- TUI for setting up of mount options.
 - TUI dynamically changes depending on selected template.
 - uses `/mnt` for chroot by default.
 - allows to use an alternative rootdir via `--rootdir` command line argument.

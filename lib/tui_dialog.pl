@@ -50,10 +50,11 @@ dialog_rc(2, help) :- !.
 dialog_rc(3, extra) :- !.
 dialog_rc(4, item_help) :- !.
 dialog_rc(5, timeout) :- !.
+dialog_rc(255, esc) :- !.
 dialog_rc(-1, error) :- !.
 
 tui_not_ok(RC) :-
-	memberchk(RC, [cancel, timeout, error]).
+	memberchk(RC, [esc, cancel, timeout, error]).
 
 % This is dialog-specific implementation.
 tui_make_sz2(sz(auto), ['0', '0']) :- !.

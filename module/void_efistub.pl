@@ -23,8 +23,8 @@ efistub_configure(TL, RD) :-
 	true.
 
 efistub_write_cfg(TL, S) :-
-	% fs7(Name, Label, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
-	member(fs7(vfat, _efi, '/boot', PD, _COL, _MOL, _CK), TL),
+	% fs6(Name, MountPoint, Dev, [CreateOptList], [MountOptList], create/keep)
+	member(fs6(vfat, '/boot', PD, _COL, _MOL, _CK), TL),
 	lx_parent_dev_name(PD, N, PD0),
 	write(S, 'MODIFY_EFI_ENTRIES="1"'), nl(S),
 	write(S, 'OPTIONS="'), bootloader_write_cmdline(TL, S), write(S, '"'), nl(S),
