@@ -105,7 +105,7 @@ prop_info(extfs_cs_ext_opts, opt3s('-E', ','), [
 	% , opt3(root_owner, int, 2048)
 	, opt3(test_fs, enable, no)
 	, opt3(orphan_file_size, int, 0)
-	, opt3(discard, enable, no)
+	% , opt3(discard, enable, yes) % This is a default value.
 	, opt3(nodiscard, enable, no)
 	% , opt3(quotatype, int, 2048)
 	]).

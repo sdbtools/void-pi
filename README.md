@@ -118,7 +118,8 @@ $ sudo ./build-x86-images.sh -- -v linux6.7
 - Boot managers
     - Uses GRUB, rEFInd, Limine, Syslnux, or Gummiboot as a boot manager.
     - Uses EFISTUB as a boot loader.
-    - GRUB supports fat, btrfs, ext2, ext3, ext4, xfs and zfs file systems.
+    - GRUB supports fat, btrfs, ext2, ext3, ext4, xfs, nilfs2 and zfs file systems.
+    - Gummiboot supports fat, btrfs, ext2, ext3, ext4, xfs, nilfs2 and f2fs file systems.
     - REFInd supports fat, btrfs, ext2, ext3, and ext4 file systems.
     - REFInd is configured to use kernel auto detection.
     - Limine supports fat file system. (Support of ext2, ext3, and ext4 was disabled in Limine version 6.20231210.0)

@@ -43,7 +43,7 @@ zfsbootmenu_install_efi(BD, RD) :-
 	true.
 
 zfsbootmenu_install_bios(TL, BD, RD) :-
-	soft_install_soft([syslinux], RD),
+	soft_install_soft_chroot([syslinux], RD),
 	syslinux_install_bios(TL, BD, RD),
 	tui_progressbox_safe(['xbps-reconfigure', o(r, RD), '-f', zfsbootmenu, '2>&1'], '', [title(' Reconfigure zfsBootMenu '), sz([18, 60])]),
 	true.

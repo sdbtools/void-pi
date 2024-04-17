@@ -172,33 +172,33 @@ tui_editbox(F, UA) :-
 
 tui_inputbox(M, I, UA, A) :-
 	add_dquote(I, I1),
-	tui_box2(inputbox, M, I1, UA, OutL),
+	tui_box2(inputbox, M, I1, UA, OutL, ok),
 	atom_codes(A, OutL).
 
 tui_passwordbox(M, I, UA, A) :-
 	add_dquote(I, I1),
-	tui_box2(passwordbox, M, I1, UA, OutL),
+	tui_box2(passwordbox, M, I1, UA, OutL, ok),
 	atom_codes(A, OutL).
 
 tui_calendar(Msg, D, M, Y, UA, A) :-
 	number_atom(D, Da),
 	number_atom(M, Ma),
 	number_atom(Y, Ya),
-	tui_box2(calendar, Msg, [Da, Ma, Ya], UA, OutL),
+	tui_box2(calendar, Msg, [Da, Ma, Ya], UA, OutL, ok),
 	atom_codes(A, OutL).
 
 tui_rangebox(Msg, Min, Max, Def, UA, N) :-
 	number_atom(Min, MinA),
 	number_atom(Max, MaxA),
 	number_atom(Def, DefA),
-	tui_box2(rangebox, Msg, [MinA, MaxA, DefA], UA, OutL),
+	tui_box2(rangebox, Msg, [MinA, MaxA, DefA], UA, OutL, ok),
 	number_codes(N, OutL).
 
 tui_timebox(Msg, H, M, S, UA, A) :-
 	number_atom(H, Ha),
 	number_atom(M, Ma),
 	number_atom(S, Sa),
-	tui_box2(timebox, Msg, [Ha, Ma, Sa], UA, OutL),
+	tui_box2(timebox, Msg, [Ha, Ma, Sa], UA, OutL, ok),
 	atom_codes(A, OutL).
 
 tui_gauge_safe(PL, M, UA) :-
@@ -281,11 +281,11 @@ tui_infobox(M, UA) :-
 	tui_spawn(infobox, M, [], UA, _).
 
 tui_fselect(P, UA, A) :-
-	tui_box2(fselect, P, [], UA, OutL),
+	tui_box2(fselect, P, [], UA, OutL, ok),
 	atom_codes(A, OutL).
 
 tui_dselect(P, UA, A) :-
-	tui_box2(dselect, P, [], UA, OutL),
+	tui_box2(dselect, P, [], UA, OutL, ok),
 	atom_codes(A, OutL).
 
 tui_make_form_list(FLen, ILen, [item(Name)|T], N, [[NQ, NA, '1', '""', NA, NEA, FLA, ILA]|T1]) :- !,
@@ -431,10 +431,11 @@ tui_tailbox3(PL, B, M, SO, UA) :-
 % SO - suffix options 
 % UA - user attributes
 % OutL - ooutput list
-tui_box2(B, M, SO, UA, OutL) :-
+tui_box2(B, M, SO, UA, OutL, RA) :-
 	tui_make_box2_cmdlist(B, M, SO, UA, DL),
 	os_scmdl(DL, AA),
-	os_shell_codes(AA, OutL).
+	os_shell_codes_rc(AA, OutL, RC),
+	dialog_rc(RC, RA).
 
 % PO - prefix options
 % SO - suffix options

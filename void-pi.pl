@@ -257,7 +257,7 @@ source_local :-
 	inst_setting(source, local),
 	!.
 
-target_dep(_TL, 'base-system') :-
+target_dep('base-system') :-
 	\+ inst_setting(source, local),
 	true.
 
@@ -319,6 +319,10 @@ run_cmd(_TT, _TL, RD, mount(FS, PD, MP)) :- !,
 	mount_fs(FS, PD, MP, RD),
 	true.
 run_cmd(_TT, TL, RD, install_pkg(IM)) :- !,
+	run_cmd_install_pkg(TL, IM, RD),
+	true.
+
+run_cmd_install_pkg(TL, IM, RD) :-
 	install_pkg(TL, IM, RD),
 	make_fstab(TL, RD),
 	% set up keymap, locale, timezone, hostname, root passwd and user account.
@@ -341,7 +345,9 @@ run_cmd(_TT, TL, RD, install_pkg(IM)) :- !,
 	umount_filesystems(RD),
 	tui_msgbox('Void Linux has been installed successfully!', [sz([6, 40])]),
 	os_call(clear, []),
-	true.
+	!.
+run_cmd_install_pkg(_TL, _IM, _RD) :-
+	tui_msgbox('Void Linux installation has FAILED!', [title(' ERROR '), sz([6, 40])]).
 
 run_cmdl(TT, TL, L) :-
 	inst_setting(root_dir, RD),

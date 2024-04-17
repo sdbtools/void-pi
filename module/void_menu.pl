@@ -97,11 +97,11 @@ on_inst_method(net) :-
 on_inst_method(_).
 
 menu_pkg_inst_method :-
-	dialog_msg(radiolist, RADIOLABEL),
+	dialog_msg(radiolist, LABEL),
 	findall([Tag, Label], inst_method_tag(_, _, Tag, Label), L1),
 	inst_setting(source, OM),
 	inst_method_tag(_, OM, OMT, _),
-	tui_radiolist_tag2(L1, OMT, RADIOLABEL, [title(' Select installation source ')], MT),
+	tui_radiolist_tag2(L1, OMT, LABEL, [title(' Select installation source ')], MT),
 	inst_method_tag(_, A, MT, _),
 
 	on_inst_method(A),

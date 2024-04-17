@@ -23,7 +23,7 @@ soft_install(TL, RD) :-
 	% Add dependencies to the list.
 	findall(S1, (member(S0, SL), soft_info(S0, _, _, PKGL, _), member(S1, PKGL)), SL1),
 	dedup(SL1, SL2),
-	soft_install_soft(SL2, RD),
+	soft_install_soft_chroot(SL2, RD),
 	maplist(soft_configure(RD), SL2),
 	true.
 soft_install(_TL, _RD) :-
@@ -41,6 +41,15 @@ soft_update(RD) :-
 soft_install_soft([], _RD) :- !.
 soft_install_soft(SL, RD) :-
 	inst_setting(system(arch), ARCH),
+	make_chroot_inst_pref(ARCH, Pref),
+	% This is mandatory.
+	tui_progressbox_safe([Pref, 'xbps-install', o(r, RD), '-uy', xbps, '2>&1'], '', [title(' Update xbps '), sz([12, 80])]),
+	tui_progressbox_safe([Pref, 'xbps-install', o(r, RD), '-Sy', SL, '2>&1'], '', [title(' Install Software '), sz([12, 80])]),
+	true.
+
+soft_install_soft_chroot([], _RD) :- !.
+soft_install_soft_chroot(SL, RD) :-
+	inst_setting(system(arch), ARCH),
 	make_chroot_inst_pref_chroot(ARCH, Pref, RD),
 	% This is mandatory.
 	tui_progressbox_safe([Pref, 'xbps-install', '-uy', xbps, '2>&1'], '', [title(' Update xbps '), sz([12, 80])]),
@@ -52,6 +61,10 @@ soft_install_deps(Pref, D) :-
 	% This is mandatory.
 	tui_progressbox_safe([Pref, 'xbps-install', '-uy', xbps, '2>&1'], '', [title(' Update xbps '), sz([12, 80])]),
 	tui_progressbox_safe([Pref, 'xbps-install', '-SyU', D, '2>&1'], '', [title(' Install Dependencies '), sz([12, 80])]).
+
+soft_install_deps_rd(_, [], _RD) :- !.
+soft_install_deps_rd(Pref, D, RD) :-
+	tui_progressbox_safe([Pref, 'xbps-install', o(r, RD), '-SyU', D, '2>&1'], '', [title(' Install Dependencies '), sz([12, 80])]).
 
 soft_configure(RD, snooze) :- !,
 	os_call2([chroot, RD, ln, '-sf', '/etc/sv/snooze-daily', '/var/service']),

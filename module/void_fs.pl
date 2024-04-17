@@ -297,7 +297,7 @@ mount_fs(FS, _D, _MP, _RD) :-
 mount_fs(_FS, _D, '', _RD) :-
 	!.
 mount_fs(FS, D, MP, RD) :-
-	memberchk(FS, [vfat, ext2, ext3, ext4, f2fs, xfs, bcachefs]),
+	memberchk(FS, [vfat, ext2, ext3, ext4, f2fs, xfs, bcachefs, nilfs2]),
 	atom_concat(RD, MP, MP1),
 	os_mkdir_p(MP1),
 	CL = [mount, o(t, FS), D, MP1, '2>&1'],

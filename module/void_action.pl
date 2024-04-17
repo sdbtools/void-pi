@@ -130,8 +130,8 @@ install_pkg(TL, rootfs, RD) :-
 	% dracut stuff.
 	dracut_conf(TL, B, RD),
 
-	install_target_dep(TL, RD),
-	install_target_soft(TL, RD),
+	install_target_dep_chroot(RD),
+	install_target_soft_chroot(TL, RD),
 	setup_bootloader(B, TL, RD),
 
 	% Remove stuff
@@ -148,21 +148,18 @@ install_pkg(TL, net, RD) :-
 	os_mkdir_p([RD + '/var/db/xbps/keys', RD + '/usr/share']),
 	os_call2([cp, '-a', '/usr/share/xbps.d', RD + '/usr/share/']),
 	os_shell2([cp, '/var/db/xbps/keys/*.plist', RD + '/var/db/xbps/keys']),
-	( get_bootloader(TL, grub2) ->
-	  os_mkdir_p(RD + '/boot/grub')
-	; true
-	),
 
 	get_bootloader(TL, B),
-	% dracut stuff.
-	dracut_conf(TL, B, RD),
 
-	install_target_dep(TL, RD),
+	% !!! DO NOT use chroot here !!!
+	install_target_dep(RD),
 	install_target_soft(TL, RD),
-	setup_bootloader(B, TL, RD),
 
 	tui_progressbox_safe(['xbps-reconfigure', o(r, RD), '-f', 'base-files', '2>&1'], '', [title(' Reconfigure base-files '), sz(max)]),
 	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-a', '2>&1'], '', [title(' Reconfigure all '), sz(max)]),
+	% dracut stuff.
+	dracut_setup(TL, B, RD),
+	setup_bootloader(B, TL, RD),
 
 	true.
 
@@ -193,8 +190,8 @@ install_pkg(TL, local, RD) :-
 	% dracut stuff.
 	dracut_setup(TL, B, RD),
 
-	install_target_dep(TL, RD),
-	install_target_soft(TL, RD),
+	install_target_dep_chroot(RD),
+	install_target_soft_chroot(TL, RD),
 	setup_bootloader(B, TL, RD),
 
 	% Remove stuff
@@ -205,10 +202,19 @@ install_pkg(TL, local, RD) :-
 	),
 	true.
 
-install_target_dep(TL, RD) :-
+install_target_dep(RD) :-
+	inst_setting(system(arch), ARCH),
+	make_chroot_inst_pref(ARCH, Pref),
+	( setof(D, target_dep(D), TPL) ->
+	  soft_install_deps_rd(Pref, TPL, RD)
+	; true
+	),
+	true.
+
+install_target_dep_chroot(RD) :-
 	inst_setting(system(arch), ARCH),
 	make_chroot_inst_pref_chroot(ARCH, Pref, RD),
-	( setof(D, target_dep(TL, D), TPL) ->
+	( setof(D, target_dep(D), TPL) ->
 	  soft_install_deps(Pref, TPL)
 	; true
 	),
@@ -219,6 +225,12 @@ install_target_soft(TL, RD) :-
 	soft_install_soft(SL, RD),
 	!.
 install_target_soft(_TL, _RD).
+
+install_target_soft_chroot(TL, RD) :-
+	setof(D, target_soft(TL, D), SL),
+	soft_install_soft_chroot(SL, RD),
+	!.
+install_target_soft_chroot(_TL, _RD).
 
 make_agetty_generic_run(RD) :-
 	atom_concat(RD, '/etc/sv/agetty-generic/run', F),
