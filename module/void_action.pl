@@ -130,12 +130,13 @@ install_pkg(TL, rootfs, RD) :-
 	% dracut stuff.
 	dracut_conf(TL, B, RD),
 
+	% Remove stuff
+	% It must be removed before new software is installed because of an "in transaction breaks installed pkg" problem
+	soft_remove_pkg_list(['base-voidstrap'], RD),
+
 	install_target_dep_chroot(RD),
 	install_target_soft_chroot(TL, RD),
 	setup_bootloader(B, TL, RD),
-
-	% Remove stuff
-	soft_remove_pkg_list(['base-voidstrap'], RD),
 
 	tui_progressbox_safe(['xbps-reconfigure', o(r, RD), '-f', 'base-files', '2>&1'], '', [title(' Reconfigure base-files '), sz(max)]),
 	tui_progressbox_safe([chroot, RD, 'xbps-reconfigure', '-a', '2>&1'], '', [title(' Reconfigure all '), sz(max)]),
@@ -190,16 +191,17 @@ install_pkg(TL, local, RD) :-
 	% dracut stuff.
 	dracut_setup(TL, B, RD),
 
-	install_target_dep_chroot(RD),
-	install_target_soft_chroot(TL, RD),
-	setup_bootloader(B, TL, RD),
-
 	% Remove stuff
+	% It must be removed before new software is installed because of an "in transaction breaks installed pkg" problem
 	( HN = hrmpf
 	; % Remove temporary packages from target
 	  findall(P, (need_to_remove_pkg(TL, PL0), member(P, PL0)), PL),
 	  soft_remove_pkg_list(PL, RD)
 	),
+
+	install_target_dep_chroot(RD),
+	install_target_soft_chroot(TL, RD),
+	setup_bootloader(B, TL, RD),
 	true.
 
 install_target_dep(RD) :-

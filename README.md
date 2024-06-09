@@ -118,15 +118,21 @@ $ sudo ./build-x86-images.sh -- -v linux6.7
 - Boot managers
     - Uses GRUB, rEFInd, Limine, Syslnux, or Gummiboot as a boot manager.
     - Uses EFISTUB as a boot loader.
-    - GRUB supports fat, btrfs, ext2, ext3, ext4, xfs, nilfs2 and zfs file systems.
-    - Gummiboot supports fat, btrfs, ext2, ext3, ext4, xfs, nilfs2 and f2fs file systems.
-    - REFInd supports fat, btrfs, ext2, ext3, and ext4 file systems.
-    - REFInd is configured to use kernel auto detection.
-    - Limine supports fat file system. (Support of ext2, ext3, and ext4 was disabled in Limine version 6.20231210.0)
-    - Syslinux supports fat, ext2, ext3, and ext4 file systems.
-    - EFISTUB and Gummiboot are enabled with UEFI and support fat, ext2, ext3, ext4, f2fs, and xfs file systems. (btrfs is not supported at this time)
-    - ZFSBootMenu is enabled only with "Manual" and "GPT. Basic" templates at this time.
+    - rEFInd is configured to use kernel auto detection.
+    - Only GRUB can have `/boot` on LVM or LUKS.
+    - ZFSBootMenu is enabled only with the "GPT. Basic" template at this time.
     - If a boot manager doesn't support a file system (or LVM, or LUKS), then installer will create an ext4 `/boot` partition.
+
+Boot manager | Supported /boot filesystems
+------------ | ----------------------------------------------------------------------------------
+GRUB         | fat, btrfs, ext2, ext3, ext4, xfs, nilfs2, and zfs (zfs has limited support)
+Gummiboot    | fat, ext2, ext3, ext4, xfs, nilfs2, and f2fs (btrfs is not supported at this time)
+rEFInd       | fat, btrfs, ext2, ext3, and ext4
+Limine       | fat, (Support of ext2, ext3, and ext4 was disabled in Limine version 6.20231210.0)
+Syslinux     | fat, ext2, ext3, and ext4, and xfs (btrfs is not supported at this time)
+EFISTUB      | fat, ext2, ext3, ext4, f2fs, and xfs (btrfs is not supported at this time)
+ZFSBootMenu  | zfs
+
 - ZFS
     - Requires a ZFS install media.
     - Supported by GRUB and ZFSBootMenu bootmanagers.
@@ -135,10 +141,6 @@ $ sudo ./build-x86-images.sh -- -v linux6.7
     - In case of GRUB encryption shouldn't be used because GRUB doesn't support it.
 - Bcachefs
     - Requires a Bcachefs install media.
-- LUKS
-    - LUKS can be used with GRUB, rEFInd, Limine, and Syslinux.
-    - In case of GRUB whole system is located on LUKS, including encrypted `/boot`. LUKS1 is used because GRUB2 doesn't support LUKS2.
-    - In case of rEFInd and Limine installer will create an unencrypted ext4 `/boot` partition. LUKS2 is used.
 - Syslinux
     - In case of UEFI the kernel and initramfs files are located in the EFI system partition (aka ESP), as Syslinux does not (currently) have the ability to access files outside its own partition.
     - IA32 (32-bit) is currently unsupported.
@@ -151,6 +153,13 @@ $ sudo ./build-x86-images.sh -- -v linux6.7
 - ZFSBootMenu
     - Only direct EFI booting is supported at this time.
     - Enabled only with "Manual" and "GPT. Basic" templates at this time.
+- LUKS
+    - LUKS can be used with GRUB, rEFInd, Limine, and Syslinux.
+    - Only GRUB can have `/boot` on LUKS.
+    - In case of GRUB whole system is located on LUKS, including encrypted `/boot`. LUKS1 is used because GRUB2 doesn't support LUKS2.
+    - In case of rEFInd and Limine installer will create an unencrypted ext4 `/boot` partition. LUKS2 is used.
+- LVM
+    - Only GRUB can have `/boot` on LVM.
 - Multi-device support
     - Multi-device configurations are available with BTRFS and LVM.
 - Additional software
@@ -160,7 +169,7 @@ $ sudo ./build-x86-images.sh -- -v linux6.7
 
 Last tested | ISO                                                                                | Result
 ----------- | ---------------------------------------------------------------------------------- | ------
-2023-10-10  | [void-live-x86_64-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20221001-base.iso) | PASS
+2024-06-08  | [void-live-x86_64-20240229-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-20240229-base.iso) | PASS
 2023-06-29  | [void-live-x86_64-musl-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-x86_64-musl-20221001-base.iso) | PASS
 2023-10-21  | [void-live-i686-20230628-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20230628-base.iso) | PASS
 2023-06-29  | [void-live-i686-20221001-base.iso](https://repo-default.voidlinux.org/live/current/void-live-i686-20221001-base.iso) | N/A

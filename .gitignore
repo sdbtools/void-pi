@@ -1,2 +1,4 @@
 void-pi
 .projections.json
+*.tgz
+*.tgz.*
