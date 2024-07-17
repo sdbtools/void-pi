@@ -6,7 +6,7 @@
 menu_dev7_use(TT, OL, DL) :-
 	% multi-device templates.
 	% memberchk(TT, [gpt_basic, gpt_wizard, gpt_lvm, gpt_lvm_luks, gpt_luks_lvm]), !,
-	memberchk(TT, [gpt_basic, gpt_wizard, gpt_lvm, gpt_lvm_luks]), !,
+	memberchk(TT, [gpt_basic, gpt_wizard, gpt_lvm, gpt_lvm_luks, gpt_luks, gpt_luks_lvm]), !,
 	menu_dev71_checklist(' Select device(s) to use ', OL, DL),
 	true.
 menu_dev7_use(_TT, _OL, DL) :-

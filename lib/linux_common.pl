@@ -62,14 +62,15 @@ lx_gen_efi(EFI_TARGET) :-
 lx_parent_dev_name(D, N, PD) :-
 	% sub_atom(Atom, Before, Length, After, SubAtom),
 	sub_atom(D, _, 1, 0, N),
-	( (atom_concat('/dev/nvme', _, D); atom_concat('/dev/mmcblk', _, D)) ->
+	( (sub_atom(D, _, _, _, 'nvme'); sub_atom(D, _, _, _, 'mmcblk')) ->
 	  sub_atom(D, 0, _, 2, PD) % p + N
 	; sub_atom(D, 0, _, 1, PD) % N
 	).
 
 % N is digit.
 lx_part_name(D, N, PD) :-
-	(atom_concat('/dev/nvme', _, D); atom_concat('/dev/mmcblk', _, D)), !,
+	% sub_atom(Atom, Before, Length, After, SubAtom),
+	(sub_atom(D, _, _, _, 'nvme'); sub_atom(D, _, _, _, 'mmcblk')), !,
 	format_to_atom(PD, '~wp~d', [D, N]).
 lx_part_name(D, N, PD) :-
 	format_to_atom(PD, '~w~d', [D, N]).
